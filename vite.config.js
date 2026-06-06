@@ -16,7 +16,7 @@ export default defineConfig({
       transformIndexHtml(html) {
         return html.replace(
           '<script type="module" src="/analytics.js"></script>',
-          '<script type="module">\nimport { inject } from "@vercel/analytics";\ninject();\n</script>'
+          '<script type="module">\nimport { inject } from "@vercel/analytics";\nimport { injectSpeedInsights } from "@vercel/speed-insights";\ninject();\ninjectSpeedInsights();\n</script>'
         );
       },
     },
