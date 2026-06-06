@@ -1,0 +1,17 @@
+{
+  "name": "rakezly",
+  "version": "1.0.0",
+  "description": "Rakezly - Pomodoro Timer",
+  "type": "module",
+  "scripts": {
+    "dev": "npx vite",
+    "build": "npx vite build",
+    "preview": "npx vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
