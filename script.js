@@ -1730,7 +1730,7 @@ window.Room = (function(){
 
   function join(c){
     const cl = sb();
-    if (!cl){ toast('// realtime indisponible'); return; }
+    if (!cl){ toast('// realtime unavailable'); return; }
     if (channel) leave(true);
     code = c; status = 'connecting'; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
@@ -1745,9 +1745,9 @@ window.Room = (function(){
         status = 'joined';
         try { channel.track({ at: Date.now() }); } catch(e){}
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
-        setUrl(c); toast('// salon '+c+' rejoint'); updateUI();
+        setUrl(c); toast('// joined room '+c); updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
-        status = 'error'; updateUI(); toast('// connexion salon échouée');
+        status = 'error'; updateUI(); toast('// room connection failed');
       }
     });
   }
@@ -1757,7 +1757,7 @@ window.Room = (function(){
   function leave(silent){
     if (channel && client){ try { client.removeChannel(channel); } catch(e){} }
     channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
-    if (!silent) toast('// salon quitté');
+    if (!silent) toast('// left room');
     updateUI();
   }
 
@@ -1767,7 +1767,7 @@ window.Room = (function(){
 
   function copyLink(){
     const url = link(code);
-    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('// lien copié'); }); }
+    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('// link copied'); }); }
   }
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -1781,29 +1781,38 @@ window.Room = (function(){
     if (!body) return;
     if (status === 'joined'){
       body.innerHTML =
-        '<div class="room-code-label">code du salon</div>' +
+        '<div class="room-code-label">room code</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
-        '<div class="room-peers"><span class="room-dot"></span>'+peers+' connecté'+(peers>1?'s':'')+'</div>' +
-        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">copier</button></div>' +
-        '<div class="room-hint">partage le lien ou le code — tout le monde contrôle le timer</div>' +
-        '<button class="room-btn room-btn-leave" onclick="Room.leave()">quitter le salon</button>';
+        '<div class="room-peers"><span class="room-dot"></span>'+peers+' online</div>' +
+        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">copy</button></div>' +
+        '<div class="room-hint">share the link or code — everyone controls the timer</div>' +
+        '<button class="room-btn room-btn-leave" onclick="Room.leave()">leave room</button>';
     } else {
       const connecting = (status === 'connecting');
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'connexion…':'créer un salon')+'</button>' +
-        '<div class="room-or">ou rejoindre avec un code</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="ex. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">rejoindre</button></div>' +
-        (status === 'error' ? '<div class="room-err">connexion échouée — réessaie</div>' : '');
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'connecting…':'create a room')+'</button>' +
+        '<div class="room-or">or join with a code</div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">join</button></div>' +
+        (status === 'error' ? '<div class="room-err">connection failed — try again</div>' : '');
     }
   }
 
   function joinFromInput(){
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
-    if (v.length >= 4) join(v); else toast('// code trop court');
+    if (v.length >= 4) join(v); else toast('// code too short');
   }
 
-  function togglePanel(){ panelOpen = !panelOpen; updateUI(); }
+  function closeOtherPanels(){
+    ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('open'); });
+    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('active'); });
+    const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
+  }
+  function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
+  // close the room panel whenever another fixed panel button is clicked
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+    const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
+  });
 
   // auto-join from ?room=CODE once the Supabase lib is ready
   (function autoJoin(){

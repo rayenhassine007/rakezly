@@ -2749,51 +2749,55 @@ body.theme-moonlight .mode-tab.lt.active {
   background: rgba(100,100,100,0.06) !important;
 }
 
-/* ── SHARED ROOM ── */
+/* ── SHARED ROOM ── (uses theme vars so it follows themes + glass sliders) */
 .btn-room-fixed {
   position: fixed; top: 234px; left: 14px; z-index: 50;
-  background: rgba(20,10,35,0.7); border: 1px solid var(--glass-border);
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
   color: var(--muted); border-radius: 8px;
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s; font-size: 15px;
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
 }
 .btn-room-fixed:hover,
-.btn-room-fixed.active { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px rgba(192,132,252,0.3); }
+.btn-room-fixed.active { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
 
 .room-panel {
-  position: fixed; top: 14px; left: 58px; z-index: 49;
-  width: 260px; padding: 16px;
-  background: rgba(13,10,20,0.94);
+  position: fixed; top: 122px; left: 58px; z-index: 49;
+  width: 250px; padding: 16px;
+  background: var(--glass-bg);
   border: 1px solid var(--glass-border); border-radius: 12px;
-  box-shadow: 0 0 28px rgba(192,132,252,0.08);
-  opacity: 0; visibility: hidden; transform: translateX(-6px);
-  transition: opacity .18s, transform .18s, visibility .18s;
-  font-family: 'Space Mono', monospace;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 0 30px rgba(0,0,0,0.35);
+  opacity: 0; pointer-events: none; transform: translateX(-8px);
+  transition: opacity .22s ease, transform .22s ease;
+  font-family: 'Share Tech Mono', monospace;
+  max-height: calc(100vh - 28px); overflow-y: auto;
 }
-.room-panel.open { opacity: 1; visibility: visible; transform: translateX(0); }
-.room-panel-title { color: var(--cyan); font-size: 12px; letter-spacing: 1px; margin-bottom: 12px; text-shadow: 0 0 8px rgba(192,132,252,0.3); }
+.room-panel.open { opacity: 1; pointer-events: all; transform: translateX(0); }
+.room-panel-title { color: var(--cyan); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; }
 .room-btn {
   width: 100%; padding: 9px 10px; margin-top: 8px;
-  background: rgba(192,132,252,0.08); color: var(--cyan);
+  background: transparent; color: var(--cyan);
   border: 1px solid var(--glass-border); border-radius: 10px;
   cursor: pointer; font-family: inherit; font-size: 12px; transition: all .2s;
 }
-.room-btn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(192,132,252,0.25); }
+.room-btn:hover { border-color: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
 .room-btn[disabled] { opacity: .55; cursor: default; }
-.room-btn-primary { background: rgba(192,132,252,0.16); }
-.room-btn-leave { color: #ff6b9d; background: rgba(255,107,157,0.08); margin-top: 12px; }
-.room-btn-leave:hover { border-color: #ff6b9d; box-shadow: 0 0 10px rgba(255,107,157,0.25); }
+.room-btn-primary { border-color: var(--cyan); }
+.room-btn-leave { margin-top: 12px; color: var(--muted); }
+.room-btn-leave:hover { color: var(--cyan); }
 .room-or, .room-code-label { color: var(--muted); font-size: 10px; text-align: center; margin: 12px 0 4px; letter-spacing: 1px; }
 .room-code { color: var(--text); font-size: 26px; font-weight: 700; text-align: center; letter-spacing: 4px; }
 .room-peers { color: var(--muted); font-size: 11px; text-align: center; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
-.room-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.6); display: inline-block; }
+.room-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); display: inline-block; }
 .room-linkrow, .room-joinrow { display: flex; gap: 6px; margin-top: 10px; }
 .room-link, .room-input {
   flex: 1; min-width: 0; padding: 8px; font-size: 11px;
-  background: rgba(192,132,252,0.04); border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
   border-radius: 8px; color: var(--text); font-family: inherit;
 }
+.room-link:focus, .room-input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 .room-linkrow .room-btn, .room-joinrow .room-btn { width: auto; margin-top: 0; white-space: nowrap; }
 .room-hint { color: var(--muted); font-size: 10px; text-align: center; margin-top: 10px; line-height: 1.4; }
 .room-err { color: #ff6b9d; font-size: 11px; text-align: center; margin-top: 8px; }
