@@ -2749,26 +2749,24 @@ body.theme-moonlight .mode-tab.lt.active {
   background: rgba(100,100,100,0.06) !important;
 }
 
-/* ── SHARED ROOM ── (all borders/glows key off --cyan, which every theme
-   redefines, so it follows every theme incl. moonlight without per-theme rules) */
+/* ── SHARED ROOM ── (base identical to the other fixed buttons; per-theme
+   overrides below mirror them exactly so it matches every theme) */
 .btn-room-fixed {
   position: fixed; top: 234px; left: 14px; z-index: 50;
-  background: var(--glass-bg);
-  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent);
+  background: rgba(20,10,35,0.7); border: 1px solid var(--glass-border);
   color: var(--muted); border-radius: 8px;
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s; font-size: 15px;
-  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
 }
 .btn-room-fixed:hover,
-.btn-room-fixed.active { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 40%, transparent); }
+.btn-room-fixed.active { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px rgba(192,132,252,0.3); }
 
 .room-panel {
   position: fixed; top: 122px; left: 58px; z-index: 49;
   width: 250px; padding: 16px;
-  background: var(--glass-bg);
-  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent); border-radius: 12px;
+  background: rgba(13,10,20,0.92);
+  border: 1px solid var(--glass-border); border-radius: 12px;
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 0 30px rgba(0,0,0,0.35);
   opacity: 0; pointer-events: none; transform: translateX(-8px);
@@ -2781,13 +2779,13 @@ body.theme-moonlight .mode-tab.lt.active {
 .room-btn {
   width: 100%; padding: 9px 10px; margin-top: 8px;
   background: transparent; color: var(--cyan);
-  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent); border-radius: 10px;
+  border: 1px solid var(--glass-border); border-radius: 10px;
   cursor: pointer; font-family: inherit; font-size: 12px; transition: all .2s;
 }
-.room-btn:hover { border-color: var(--cyan); box-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 35%, transparent); }
+.room-btn:hover { border-color: var(--cyan); }
 .room-btn[disabled] { opacity: .55; cursor: default; }
 .room-btn-primary { border-color: var(--cyan); }
-.room-btn-leave { margin-top: 12px; color: var(--muted); border-color: color-mix(in srgb, var(--muted) 30%, transparent); }
+.room-btn-leave { margin-top: 12px; color: var(--muted); }
 .room-btn-leave:hover { color: var(--cyan); border-color: var(--cyan); }
 .room-or, .room-code-label { color: var(--muted); font-size: 10px; text-align: center; margin: 12px 0 4px; letter-spacing: 1px; }
 .room-code { color: var(--text); font-size: 26px; font-weight: 700; text-align: center; letter-spacing: 4px; }
@@ -2796,10 +2794,27 @@ body.theme-moonlight .mode-tab.lt.active {
 .room-linkrow, .room-joinrow { display: flex; gap: 6px; margin-top: 10px; }
 .room-link, .room-input {
   flex: 1; min-width: 0; padding: 8px; font-size: 11px;
-  background: rgba(255,255,255,0.03); border: 1px solid color-mix(in srgb, var(--cyan) 25%, transparent);
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
   border-radius: 8px; color: var(--text); font-family: inherit;
 }
-.room-link:focus, .room-input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 8px color-mix(in srgb, var(--cyan) 35%, transparent); }
+.room-link:focus, .room-input:focus { outline: none; border-color: var(--cyan); }
 .room-linkrow .room-btn, .room-joinrow .room-btn { width: auto; margin-top: 0; white-space: nowrap; }
 .room-hint { color: var(--muted); font-size: 10px; text-align: center; margin-top: 10px; line-height: 1.4; }
 .room-err { color: #ff6b9d; font-size: 11px; text-align: center; margin-top: 8px; }
+
+/* Room button + panel: per-theme, mirroring the other fixed buttons exactly */
+body.theme-lofi .btn-room-fixed { background: rgba(30,10,40,0.7); border-color: rgba(249,168,212,0.18); }
+body.theme-lofi .btn-room-fixed:hover, body.theme-lofi .btn-room-fixed.active { border-color:#f9a8d4; color:#f9a8d4; box-shadow:0 0 10px rgba(249,168,212,0.3); }
+body.theme-lofi .room-panel { background: rgba(22,8,32,0.96); border-color: rgba(249,168,212,0.18); }
+body.theme-greens .btn-room-fixed { background: rgba(5,20,8,0.75); border-color: rgba(74,222,128,0.2); }
+body.theme-greens .btn-room-fixed:hover, body.theme-greens .btn-room-fixed.active { border-color:#4ade80; color:#4ade80; box-shadow:0 0 10px rgba(74,222,128,0.3); }
+body.theme-greens .room-panel { background: rgba(5,18,8,0.97); border-color: rgba(74,222,128,0.18); }
+body.theme-cherry-blues .btn-room-fixed { border-color: rgba(143,211,255,0.22); color: rgba(194,222,255,0.58); border-radius: 12px; }
+body.theme-cherry-blues .btn-room-fixed:hover, body.theme-cherry-blues .btn-room-fixed.active { border-color:#ff6b9d; color:#ffd6e7; box-shadow:0 0 14px rgba(255,107,157,0.28); }
+body.theme-cherry-blues .room-panel { border-color: rgba(143,211,255,0.20); }
+body.theme-edo-gold .btn-room-fixed { background: rgba(12,7,1,0.75); border-color: rgba(232,197,106,0.22); color: rgba(232,197,106,0.55); }
+body.theme-edo-gold .btn-room-fixed:hover, body.theme-edo-gold .btn-room-fixed.active { border-color:#e8c56a; color:#e8c56a; box-shadow:0 0 10px rgba(232,197,106,0.3); }
+body.theme-edo-gold .room-panel { background: rgba(12,7,1,0.95); border-color: rgba(232,197,106,0.2); }
+body.theme-moonlight .btn-room-fixed { background: rgba(8,8,8,0.7); border-color: rgba(220,220,220,0.18); border-radius: 2px; }
+body.theme-moonlight .btn-room-fixed:hover, body.theme-moonlight .btn-room-fixed.active { border-color: rgba(240,240,240,0.6); color:#f0f0f0; box-shadow:0 0 12px rgba(255,255,255,0.15); }
+body.theme-moonlight .room-panel { background: rgba(8,8,8,0.95); border-color: rgba(220,220,220,0.18); }
