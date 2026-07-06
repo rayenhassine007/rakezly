@@ -415,6 +415,7 @@ function addMins(m) {
   // also grow totalSecs so the bar doesn't go over 100%
   if (remainSecs > totalSecs) totalSecs = remainSecs;
   updateDisplay(); updateBar();
+  if(window.Room)Room.onLocalChange();
 }
 let TOTAL_CYCLES = parseInt(localStorage.getItem('sf_cycles')) || 4, pendingCycles = parseInt(localStorage.getItem('sf_cycles')) || 4;
 
@@ -556,6 +557,7 @@ function startTimer(){
   document.getElementById('timerDisplay').classList.remove('blink');
   saveTimerState(); // capture running=true + savedAt timestamp immediately
   ticker=setInterval(()=>{remainSecs--;updateDisplay();updateBar();saveTimerState();if(remainSecs<=0){clearInterval(ticker);onDone();}},1000);
+  if(window.Room)Room.onLocalChange();
 }
 function pauseTimer(){
   running=false; clearInterval(ticker);
@@ -563,6 +565,7 @@ function pauseTimer(){
   btn.textContent='Resume'; btn.classList.remove('running');
   document.getElementById('timerDisplay').classList.add('blink');
   saveTimerState();
+  if(window.Room)Room.onLocalChange();
 }
 function stopTimer(){
   running=false; clearInterval(ticker);
@@ -575,6 +578,7 @@ function resetTimer(){
   // mode is already a MODES key ('work','break','long') since initTimer normalizes it
   const safeMode = (mode==='brk'||mode==='break') ? 'break' : (mode==='lng'||mode==='long') ? 'long' : 'work';
   initTimer(safeMode);
+  if(window.Room)Room.onLocalChange();
 }
 function skipSession(){
   stopTimer();
@@ -587,6 +591,7 @@ function skipSession(){
     updateStats();
   }
   advance();
+  if(window.Room)Room.onLocalChange();
 }
 function onDone(){
   stopTimer();
@@ -613,7 +618,7 @@ function advance(){
   saveTimerState();
 }
 function setTab(m){m=m==='brk'?'break':m==='lng'?'long':m;document.querySelectorAll('.mode-tab').forEach((t,i)=>t.classList.toggle('active',['work','break','long'][i]===m));}
-function switchMode(m){stopTimer();setTab(m);initTimer(m);renderCycles();saveTimerState();}
+function switchMode(m){stopTimer();setTab(m);initTimer(m);renderCycles();saveTimerState();if(window.Room)Room.onLocalChange();}
 function updateStats(){
   document.getElementById('s1').textContent=completedPomodoros;
   document.getElementById('s2').textContent=totalFocusMins+'m';
@@ -1664,3 +1669,155 @@ setInterval(updateClock, 1000);
 })();
 
 init();
+
+// ── SHARED ROOM (Supabase Realtime) ───────────────────────────
+// Real-time synced timer. Every local timer action broadcasts a full
+// snapshot; receivers apply it (guarded against re-broadcast loops).
+// Fully non-blocking: if Supabase is unavailable, the timer keeps working.
+window.Room = (function(){
+  const SB_URL = 'https://kucqirnkgrtebmowzwlw.supabase.co';
+  const SB_KEY = 'sb_publishable_JR6QoT02BlyKUok-EHjPMw_TH-dBT9P';
+  const myId = Math.random().toString(36).slice(2, 10);
+
+  let client = null, channel = null, code = null;
+  let applying = false, panelOpen = false, status = 'idle', peers = 1;
+
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+
+  function sb(){
+    if (!client && window.supabase && window.supabase.createClient) {
+      client = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 10 } } });
+    }
+    return client;
+  }
+
+  function genCode(){
+    const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let s = ''; for (let i=0;i<6;i++) s += A[Math.floor(Math.random()*A.length)];
+    return s;
+  }
+
+  function snapshot(){ return { mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running }; }
+
+  function apply(s){
+    if (!s) return;
+    applying = true;
+    try {
+      if (typeof setTab === 'function') setTab(s.mode);
+      mode = s.mode; totalSecs = s.totalSecs; remainSecs = s.remainSecs;
+      const cc = mode==='work'?'wc':mode==='break'?'bc':'lc';
+      const td = document.getElementById('timerDisplay'); if (td) td.className = 'timer-display '+cc;
+      const pb = document.getElementById('progressBar'); if (pb) pb.className = 'timer-progress-bar '+cc;
+      updateDisplay(); updateBar();
+      const b = document.getElementById('startBtn');
+      if (s.running){
+        if (!running) startTimer();               // sets label 'Pause' + starts ticker
+      } else {
+        if (running){ running = false; clearInterval(ticker); }   // stop ticker, no label churn
+        if (b){ b.textContent = (remainSecs >= totalSecs) ? 'Start' : 'Resume'; b.classList.remove('running'); }
+        if (td) td.classList.toggle('blink', remainSecs < totalSecs);
+      }
+    } catch(e){ console.warn('room apply', e); }
+    applying = false;
+  }
+
+  function push(){
+    if (channel && !applying && status === 'joined') {
+      try { channel.send({ type:'broadcast', event:'sync', payload: snapshot() }); } catch(e){}
+    }
+  }
+  function onLocalChange(){ push(); }
+
+  function join(c){
+    const cl = sb();
+    if (!cl){ toast('// realtime indisponible'); return; }
+    if (channel) leave(true);
+    code = c; status = 'connecting'; updateUI();
+    channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
+    channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
+    channel.on('broadcast', { event:'hello' }, function(){ push(); });   // reply to newcomers
+    channel.on('presence',  { event:'sync'  }, function(){
+      try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
+      updateUI();
+    });
+    channel.subscribe(function(st){
+      if (st === 'SUBSCRIBED'){
+        status = 'joined';
+        try { channel.track({ at: Date.now() }); } catch(e){}
+        try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
+        setUrl(c); toast('// salon '+c+' rejoint'); updateUI();
+      } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
+        status = 'error'; updateUI(); toast('// connexion salon échouée');
+      }
+    });
+  }
+
+  function create(){ join(genCode()); }
+
+  function leave(silent){
+    if (channel && client){ try { client.removeChannel(channel); } catch(e){} }
+    channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
+    if (!silent) toast('// salon quitté');
+    updateUI();
+  }
+
+  function link(c){ return location.origin + '/?room=' + c; }
+  function setUrl(c){ try { history.replaceState(null, '', '?room='+c); } catch(e){} }
+  function clearUrl(){ try { history.replaceState(null, '', location.pathname); } catch(e){} }
+
+  function copyLink(){
+    const url = link(code);
+    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('// lien copié'); }); }
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function updateUI(){
+    const btn = document.getElementById('roomFixedBtn');
+    if (btn) btn.classList.toggle('active', status === 'joined');
+    const panel = document.getElementById('roomPanel');
+    if (panel) panel.classList.toggle('open', panelOpen);
+    const body = document.getElementById('roomBody');
+    if (!body) return;
+    if (status === 'joined'){
+      body.innerHTML =
+        '<div class="room-code-label">code du salon</div>' +
+        '<div class="room-code">'+esc(code)+'</div>' +
+        '<div class="room-peers"><span class="room-dot"></span>'+peers+' connecté'+(peers>1?'s':'')+'</div>' +
+        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">copier</button></div>' +
+        '<div class="room-hint">partage le lien ou le code — tout le monde contrôle le timer</div>' +
+        '<button class="room-btn room-btn-leave" onclick="Room.leave()">quitter le salon</button>';
+    } else {
+      const connecting = (status === 'connecting');
+      body.innerHTML =
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'connexion…':'créer un salon')+'</button>' +
+        '<div class="room-or">ou rejoindre avec un code</div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="ex. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">rejoindre</button></div>' +
+        (status === 'error' ? '<div class="room-err">connexion échouée — réessaie</div>' : '');
+    }
+  }
+
+  function joinFromInput(){
+    const el = document.getElementById('roomJoinInput');
+    const v = ((el && el.value) || '').trim().toUpperCase();
+    if (v.length >= 4) join(v); else toast('// code trop court');
+  }
+
+  function togglePanel(){ panelOpen = !panelOpen; updateUI(); }
+
+  // auto-join from ?room=CODE once the Supabase lib is ready
+  (function autoJoin(){
+    const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
+    if (!m) { updateUI(); return; }
+    const c = m[1].toUpperCase();
+    let tries = 0;
+    (function wait(){
+      if (window.supabase && window.supabase.createClient){ panelOpen = true; join(c); }
+      else if (tries++ < 40){ setTimeout(wait, 150); }
+    })();
+  })();
+
+  return { onLocalChange: onLocalChange, create: create, join: join,
+           joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
+           togglePanel: togglePanel };
+})();
