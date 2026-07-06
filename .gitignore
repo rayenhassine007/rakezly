@@ -1,0 +1,13 @@
+# Dependencies (Vercel reinstalls these automatically)
+node_modules/
+
+# Build output (Vercel rebuilds this)
+dist/
+
+# Vite temp files
+vite.config.js.timestamp-*.mjs
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
