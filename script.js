@@ -598,6 +598,10 @@ function onDone(){
   if(mode==='work'){
     completedPomodoros++; totalFocusMins+=MODES.work;
     streak++; localStorage.setItem('sf_streak',streak);
+    // Credit the actual session length, which +1/+5 buttons may have grown.
+    const focusMins = Math.max(1, Math.round(totalSecs/60));
+    if(window.Goals) Goals.onPomodoro();
+    if(window.Study) Study.logSession(focusMins);
     showToast('// pomodoro complete — take a break');
     tryNotify('Pomodoro complete!','Time for a break.');
     playAlarm();
@@ -1344,8 +1348,9 @@ function init(){
   // Restore Last.fm
   const lfmU=localStorage.getItem('sf_lfm_user'),lfmK=localStorage.getItem('sf_lfm_key');
   if(lfmU&&lfmK){lfmUser=lfmU;lfmUserKey=lfmK;onLFMOn();}
-  // Restore Spotify
-  const spCode=new URLSearchParams(window.location.search).get('code');
+  // Restore Spotify — skip when the ?code= belongs to a Supabase sign-in.
+  const _q=new URLSearchParams(window.location.search);
+  const spCode=_q.get('auth')==='supabase'?null:_q.get('code');
   if(spCode)exToken(spCode);
   const spSaved=localStorage.getItem('sf_sp');if(spSaved){spToken=spSaved;onSpOn();}
   if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();
@@ -1674,22 +1679,55 @@ init();
 // Real-time synced timer. Every local timer action broadcasts a full
 // snapshot; receivers apply it (guarded against re-broadcast loops).
 // Fully non-blocking: if Supabase is unavailable, the timer keeps working.
-window.Room = (function(){
+// ── SHARED SUPABASE CLIENT ────────────────────────────────────
+// One client for realtime rooms, auth, study sessions and goals — creating
+// several would give each its own auth/realtime state.
+window.SB = (function(){
   const SB_URL = 'https://kucqirnkgrtebmowzwlw.supabase.co';
   const SB_KEY = 'sb_publishable_JR6QoT02BlyKUok-EHjPMw_TH-dBT9P';
+
+  let client = null;
+
+  function get(){
+    if (!client && window.supabase && window.supabase.createClient) {
+      client = window.supabase.createClient(SB_URL, SB_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          // Handled manually in Auth.init(): Spotify's OAuth callback also
+          // lands on this page with ?code=, so letting Supabase grab any
+          // ?code= it sees would make the two flows fight over it.
+          detectSessionInUrl: false,
+          flowType: 'pkce'
+        },
+        realtime: { params: { eventsPerSecond: 10 } }
+      });
+    }
+    return client;
+  }
+
+  // The Supabase CDN script is async — run cb once the library shows up.
+  function ready(cb){
+    let tries = 0;
+    (function wait(){
+      const cl = get();
+      if (cl) cb(cl);
+      else if (tries++ < 60) setTimeout(wait, 150);
+    })();
+  }
+
+  return { get: get, ready: ready };
+})();
+
+window.Room = (function(){
   const myId = Math.random().toString(36).slice(2, 10);
 
-  let client = null, channel = null, code = null;
+  let channel = null, code = null;
   let applying = false, panelOpen = false, status = 'idle', peers = 1;
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
-  function sb(){
-    if (!client && window.supabase && window.supabase.createClient) {
-      client = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 10 } } });
-    }
-    return client;
-  }
+  function sb(){ return window.SB.get(); }
 
   function genCode(){
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -1755,7 +1793,8 @@ window.Room = (function(){
   function create(){ join(genCode()); }
 
   function leave(silent){
-    if (channel && client){ try { client.removeChannel(channel); } catch(e){} }
+    const cl = sb();
+    if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
     channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
     if (!silent) toast('// left room');
     updateUI();
@@ -1830,3 +1869,757 @@ window.Room = (function(){
            joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
            togglePanel: togglePanel };
 })();
+
+// ── AUTH ──────────────────────────────────────────────────────
+// Signing in is optional. Guests keep the full pomodoro + goals + local
+// study log, and can read the leaderboard — they just can't appear on it.
+window.Auth = (function(){
+  let user = null, profile = null, settled = false;
+  const listeners = [];
+
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+  function onChange(fn){ listeners.push(fn); if (settled) fn(user); }
+  function emit(){ listeners.forEach(function(f){ try { f(user); } catch(e){ console.warn('auth listener', e); } }); }
+
+  function signedIn(){ return !!user; }
+  function id(){ return user ? user.id : null; }
+  function name(){
+    if (profile && profile.display_name) return profile.display_name;
+    if (user && user.email) return user.email.split('@')[0];
+    return 'student';
+  }
+
+  function cleanUrl(){
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('auth');
+      u.searchParams.delete('code');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    } catch(e){}
+  }
+
+  async function loadProfile(){
+    const cl = window.SB.get();
+    if (!cl || !user){ profile = null; return; }
+    try {
+      const r = await cl.from('profiles').select('display_name, section').eq('id', user.id).maybeSingle();
+      profile = r.data || null;
+    } catch(e){ profile = null; }
+  }
+
+  async function setSession(session){
+    const before = user && user.id;
+    user = (session && session.user) || null;
+    if (user) await loadProfile(); else profile = null;
+    settled = true;
+    emit();
+    // Newly signed in — push everything that was captured as a guest.
+    if (user && user.id !== before){
+      if (window.Study) window.Study.flush();
+      if (window.Goals) window.Goals.pull();
+    }
+  }
+
+  function init(){
+    window.SB.ready(async function(cl){
+      try {
+        const q = new URLSearchParams(location.search);
+        if (q.get('auth') === 'supabase' && q.get('code')){
+          const r = await cl.auth.exchangeCodeForSession(q.get('code'));
+          if (r.error) toast('// sign-in failed: ' + r.error.message);
+          cleanUrl();
+        }
+        const s = await cl.auth.getSession();
+        await setSession(s.data && s.data.session);
+        cl.auth.onAuthStateChange(function(_evt, session){ setSession(session); });
+      } catch(e){
+        console.warn('auth init', e);
+        settled = true; emit();
+      }
+    });
+  }
+
+  async function google(){
+    const cl = window.SB.get();
+    if (!cl) return toast('// auth unavailable');
+    const r = await cl.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
+    });
+    if (r.error) toast('// ' + r.error.message);
+  }
+
+  async function signUp(email, password, displayName){
+    const cl = window.SB.get();
+    if (!cl) return { ok:false, msg:'auth unavailable' };
+    const r = await cl.auth.signUp({
+      email: email, password: password,
+      options: { data: { display_name: displayName } }
+    });
+    if (r.error) return { ok:false, msg:r.error.message };
+    if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'check your inbox to confirm your email' };
+    return { ok:true, msg:'welcome, ' + displayName };
+  }
+
+  async function signIn(email, password){
+    const cl = window.SB.get();
+    if (!cl) return { ok:false, msg:'auth unavailable' };
+    const r = await cl.auth.signInWithPassword({ email: email, password: password });
+    if (r.error) return { ok:false, msg:r.error.message };
+    return { ok:true, msg:'signed in' };
+  }
+
+  async function signOut(){
+    const cl = window.SB.get();
+    if (!cl) return;
+    await cl.auth.signOut();
+    toast('// signed out — your local stats stay on this device');
+  }
+
+  async function rename(newName){
+    const cl = window.SB.get();
+    if (!cl || !user) return { ok:false, msg:'not signed in' };
+    const n = String(newName || '').trim();
+    if (n.length < 2 || n.length > 24) return { ok:false, msg:'name must be 2–24 characters' };
+    const r = await cl.from('profiles').update({ display_name: n }).eq('id', user.id);
+    if (r.error) return { ok:false, msg:r.error.message };
+    profile = profile || {}; profile.display_name = n;
+    emit();
+    return { ok:true, msg:'name updated' };
+  }
+
+  return { init:init, onChange:onChange, signedIn:signedIn, id:id, name:name,
+           google:google, signUp:signUp, signIn:signIn, signOut:signOut, rename:rename };
+})();
+
+
+// ── STUDY TIME TRACKER + LEADERBOARD ──────────────────────────
+window.Study = (function(){
+  // Preset subjects are the rankable ones — custom subjects are tracked and
+  // counted in a student's totals, but a per-subject board only makes sense
+  // when everyone is filling the same bucket.
+  const PRESETS = [
+    'Mathématiques','Physique-Chimie','SVT','Sciences techniques','Informatique',
+    'Arabe','Français','Anglais','Allemand','Espagnol','Italien',
+    'Philosophie','Histoire-Géo','Économie','Gestion'
+  ];
+
+  const K_CUR = 'sf_subject', K_CUSTOM = 'sf_subjects_custom', K_LOG = 'sf_study_log';
+  const MAX_LOG_DAYS = 120;   // local history we keep
+  const SYNC_WINDOW_DAYS = 14; // matches the insert policy in schema.sql
+
+  let panelOpen = false;
+  let board = [], standing = null, boardSubject = '', boardLoading = false, boardErr = '';
+  let authMode = 'none'; // none | signin | signup
+
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function uuid(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+      const r = Math.random()*16|0, v = (c === 'x') ? r : ((r&0x3)|0x8);
+      return v.toString(16);
+    });
+  }
+
+  function readJSON(k, fallback){
+    try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? fallback : v; }
+    catch(e){ return fallback; }
+  }
+  function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+  function customs(){ const c = readJSON(K_CUSTOM, []); return Array.isArray(c) ? c : []; }
+  function isPreset(s){ return PRESETS.indexOf(s) !== -1; }
+  function all(){ return PRESETS.concat(customs()); }
+
+  function current(){
+    const s = localStorage.getItem(K_CUR);
+    return (s && all().indexOf(s) !== -1) ? s : PRESETS[0];
+  }
+  function setCurrent(s){
+    if (all().indexOf(s) === -1) return;
+    localStorage.setItem(K_CUR, s);
+    renderSelect();
+  }
+
+  function addCustom(raw){
+    const n = String(raw || '').trim().slice(0, 40);
+    if (!n) return false;
+    if (all().some(function(s){ return s.toLowerCase() === n.toLowerCase(); })){
+      toast('// "' + n + '" already exists'); return false;
+    }
+    const c = customs(); c.push(n); writeJSON(K_CUSTOM, c);
+    setCurrent(n);
+    toast('// added subject: ' + n);
+    return true;
+  }
+  function removeCustom(n){
+    writeJSON(K_CUSTOM, customs().filter(function(s){ return s !== n; }));
+    if (current() === n) localStorage.setItem(K_CUR, PRESETS[0]);
+    renderSelect(); render();
+  }
+
+  // ── local ledger ──
+  // entry: { i:id, s:subject, m:minutes, t:epoch ms, p:preset, u:1 when unsynced }
+  function log(){ const l = readJSON(K_LOG, []); return Array.isArray(l) ? l : []; }
+  function saveLog(l){
+    const cutoff = Date.now() - MAX_LOG_DAYS*86400000;
+    writeJSON(K_LOG, l.filter(function(e){ return e && e.t > cutoff; }));
+  }
+
+  function weekStart(){
+    const d = new Date();
+    const dow = (d.getDay() + 6) % 7;      // Monday = 0, matches date_trunc('week')
+    d.setHours(0,0,0,0); d.setDate(d.getDate() - dow);
+    return d.getTime();
+  }
+  function dayStart(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+
+  function sumSince(ts){
+    return log().reduce(function(a, e){ return e.t >= ts ? a + e.m : a; }, 0);
+  }
+  function bySubjectSince(ts){
+    const out = {};
+    log().forEach(function(e){ if (e.t >= ts) out[e.s] = (out[e.s] || 0) + e.m; });
+    return out;
+  }
+
+  function fmt(mins){
+    const m = Math.max(0, Math.round(mins));
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m/60), r = m % 60;
+    return r ? (h + 'h ' + r + 'm') : (h + 'h');
+  }
+
+  // Called when a focus session completes.
+  function logSession(minutes, subjectOverride){
+    const mins = Math.max(1, Math.min(300, Math.round(minutes)));
+    const subj = subjectOverride ||
+      (window.Goals && window.Goals.activeSubject()) ||
+      current();
+    const l = log();
+    l.push({ i: uuid(), s: subj, m: mins, t: Date.now(), p: isPreset(subj), u: 1 });
+    saveLog(l);
+    render();
+    flush();
+  }
+
+  // Push guest-captured and offline sessions once a student is signed in.
+  async function flush(){
+    const cl = window.SB.get();
+    if (!cl || !window.Auth || !window.Auth.signedIn()) return;
+    const uid = window.Auth.id();
+    const cutoff = Date.now() - SYNC_WINDOW_DAYS*86400000;
+    const l = log();
+    const pending = l.filter(function(e){ return e.u && e.t >= cutoff; });
+    if (!pending.length) return;
+
+    const rows = pending.map(function(e){
+      return { id: e.i, user_id: uid, subject: e.s, preset: !!e.p,
+               minutes: e.m, started_at: new Date(e.t).toISOString() };
+    });
+    try {
+      const r = await cl.from('study_sessions').upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+      if (r.error){ console.warn('study flush', r.error); return; }
+      const done = {};
+      pending.forEach(function(e){ done[e.i] = 1; });
+      saveLog(log().map(function(e){ if (done[e.i]) delete e.u; return e; }));
+      // Anything older than the sync window can never be uploaded — stop retrying.
+      saveLog(log().map(function(e){ if (e.u && e.t < cutoff) delete e.u; return e; }));
+      render();
+    } catch(e){ console.warn('study flush', e); }
+  }
+
+  // ── leaderboard ──
+  async function loadBoard(){
+    const cl = window.SB.get();
+    if (!cl){ boardErr = 'leaderboard unavailable'; render(); return; }
+    boardLoading = true; boardErr = ''; render();
+    const subj = boardSubject || null;
+    try {
+      const r = await cl.rpc('leaderboard_week', { p_subject: subj, p_limit: 25 });
+      if (r.error) throw r.error;
+      board = r.data || [];
+      standing = null;
+      if (window.Auth && window.Auth.signedIn()){
+        const s = await cl.rpc('my_week_standing', { p_subject: subj });
+        if (!s.error && s.data && s.data.length) standing = s.data[0];
+      }
+    } catch(e){
+      board = []; boardErr = (e && e.message) ? e.message : 'could not load the board';
+    }
+    boardLoading = false; render();
+  }
+
+  function setBoardSubject(s){ boardSubject = s; loadBoard(); }
+
+  // ── subject <select> next to the timer ──
+  function renderSelect(){
+    const sel = document.getElementById('subjectSelect');
+    if (!sel) return;
+    const cur = current(), cs = customs();
+    let h = '<optgroup label="subjects">';
+    PRESETS.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
+    h += '</optgroup>';
+    if (cs.length){
+      h += '<optgroup label="my subjects">';
+      cs.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
+      h += '</optgroup>';
+    }
+    h += '<option value="__add">＋ add a subject…</option>';
+    sel.innerHTML = h;
+    sel.value = cur;
+  }
+
+  // Changing the dropdown must also retag the active goal, otherwise the
+  // picker would claim one subject while sessions are logged under the
+  // goal's older one.
+  function onSelect(el){
+    if (el.value === '__add'){
+      const n = window.prompt('New subject name');
+      if (!n || !addCustom(n)) renderSelect();
+      if (window.Goals) window.Goals.retagActive(current());
+      render();
+      return;
+    }
+    setCurrent(el.value);
+    if (window.Goals) window.Goals.retagActive(el.value);
+    render();
+  }
+
+  // ── mini card in the left column ──
+  function renderMini(){
+    const t = document.getElementById('studyToday');
+    const w = document.getElementById('studyWeek');
+    if (t) t.textContent = fmt(sumSince(dayStart()));
+    if (w) w.textContent = fmt(sumSince(weekStart()));
+
+    const bars = document.getElementById('studyMiniBars');
+    if (!bars) return;
+    const bs = bySubjectSince(weekStart());
+    const rows = Object.keys(bs).map(function(k){ return { s:k, m:bs[k] }; })
+                       .sort(function(a,b){ return b.m - a.m; }).slice(0, 4);
+    if (!rows.length){
+      bars.innerHTML = '<div class="study-mini-empty">no sessions yet this week</div>';
+      return;
+    }
+    const max = rows[0].m || 1;
+    bars.innerHTML = rows.map(function(r){
+      return '<div class="study-bar-row">' +
+               '<span class="study-bar-name" title="'+esc(r.s)+'">'+esc(r.s)+'</span>' +
+               '<span class="study-bar-track"><span class="study-bar-fill" style="width:'+Math.max(4, Math.round(r.m/max*100))+'%"></span></span>' +
+               '<span class="study-bar-val">'+esc(fmt(r.m))+'</span>' +
+             '</div>';
+    }).join('');
+  }
+
+  // ── panel ──
+  function authBlock(){
+    const inHtml = window.Auth && window.Auth.signedIn();
+    if (inHtml){
+      return '<div class="study-acct">' +
+               '<div class="study-acct-who"><span class="study-dot"></span>'+esc(window.Auth.name())+'</div>' +
+               '<button class="study-link" onclick="Study.doRename()">rename</button>' +
+               '<button class="study-link" onclick="Study.doSignOut()">sign out</button>' +
+             '</div>';
+    }
+    let h = '<div class="study-guest">' +
+              '<div class="study-guest-msg">you\'re browsing as a guest — your time is saved on this device. sign in to appear on the board.</div>' +
+              '<button class="study-btn study-btn-google" onclick="Auth.google()">continue with Google</button>';
+    if (authMode === 'none'){
+      h += '<div class="study-or">or</div>' +
+           '<div class="study-authrow">' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">sign in</button>' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">create account</button>' +
+           '</div>';
+    } else {
+      const up = (authMode === 'signup');
+      h += '<div class="study-form">' +
+             (up ? '<input class="study-input" id="authName" type="text" placeholder="display name" maxlength="24">' : '') +
+             '<input class="study-input" id="authEmail" type="email" placeholder="email" autocomplete="email">' +
+             '<input class="study-input" id="authPass" type="password" placeholder="password" autocomplete="'+(up?'new-password':'current-password')+'">' +
+             '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'create account':'sign in')+'</button>' +
+             '<button class="study-link" onclick="Study.setAuthMode(\'none\')">back</button>' +
+           '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function standingBlock(){
+    if (!window.Auth || !window.Auth.signedIn()) return '';
+    if (!standing) return '<div class="study-standing-empty">log a focus session to get your rank</div>';
+    const pct = standing.percentile;
+    return '<div class="study-standing">' +
+             '<div class="study-rank">#'+standing.rank+'<span class="study-rank-of"> of '+standing.participants+'</span></div>' +
+             '<div class="study-pct-bar"><span style="width:'+Math.max(2, Math.min(100, pct))+'%"></span></div>' +
+             '<div class="study-pct-txt">you studied more than <b>'+pct+'%</b> of candidates this week</div>' +
+           '</div>';
+  }
+
+  function boardBlock(){
+    if (boardLoading) return '<div class="study-board-msg">loading…</div>';
+    if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
+    if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
+    return '<div class="study-board">' + board.map(function(r){
+      return '<div class="study-row'+(r.is_me?' me':'')+'">' +
+               '<span class="study-row-rank">'+r.rank+'</span>' +
+               '<span class="study-row-name">'+esc(r.display_name)+'</span>' +
+               '<span class="study-row-mins">'+esc(fmt(r.minutes))+'</span>' +
+             '</div>';
+    }).join('') + '</div>';
+  }
+
+  function render(){
+    renderMini();
+    const btn = document.getElementById('studyFixedBtn');
+    if (btn) btn.classList.toggle('active', panelOpen);
+    const panel = document.getElementById('studyPanel');
+    if (panel) panel.classList.toggle('open', panelOpen);
+    const body = document.getElementById('studyBody');
+    if (!body || !panelOpen) return;
+
+    let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
+                 '<option value=""'+(boardSubject===''?' selected':'')+'>all subjects</option>';
+    PRESETS.forEach(function(s){
+      filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
+    });
+    filter += '</select>';
+
+    body.innerHTML =
+      authBlock() +
+      '<div class="study-sec-label">// my week</div>' +
+      '<div class="study-mine">' +
+        '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
+        '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
+      '</div>' +
+      standingBlock() +
+      '<div class="study-sec-label">// this week\'s board</div>' +
+      filter +
+      boardBlock() +
+      '<div class="study-hint">the board resets every Monday</div>';
+  }
+
+  function closeOtherPanels(){
+    ['bgPanel','settingsSlidePanel','themePanel','playerPanel','roomPanel'].forEach(function(id){
+      const e = document.getElementById(id); if (e) e.classList.remove('open');
+    });
+    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn','roomFixedBtn'].forEach(function(id){
+      const e = document.getElementById(id); if (e) e.classList.remove('active');
+    });
+    const bg = document.querySelector('.btn-bg-toggle'); if (bg) bg.classList.remove('active');
+  }
+
+  function togglePanel(){
+    panelOpen = !panelOpen;
+    if (panelOpen){ closeOtherPanels(); loadBoard(); }
+    render();
+  }
+
+  // ── panel actions ──
+  function setAuthMode(m){ authMode = m; render(); }
+
+  async function doAuth(){
+    const em = (document.getElementById('authEmail')||{}).value || '';
+    const pw = (document.getElementById('authPass')||{}).value || '';
+    const nm = (document.getElementById('authName')||{}).value || '';
+    if (!em.trim() || !pw){ toast('// email and password required'); return; }
+    const r = (authMode === 'signup')
+      ? await window.Auth.signUp(em.trim(), pw, (nm.trim() || em.split('@')[0]).slice(0,24))
+      : await window.Auth.signIn(em.trim(), pw);
+    toast('// ' + r.msg);
+    if (r.ok){ authMode = 'none'; loadBoard(); }
+    render();
+  }
+
+  async function doSignOut(){ await window.Auth.signOut(); loadBoard(); render(); }
+
+  async function doRename(){
+    const n = window.prompt('Display name (shown on the leaderboard)', window.Auth.name());
+    if (n == null) return;
+    const r = await window.Auth.rename(n);
+    toast('// ' + r.msg);
+    if (r.ok) loadBoard();
+    render();
+  }
+
+  function init(){
+    renderSelect();
+    render();
+    if (window.Auth) window.Auth.onChange(function(){ render(); });
+    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+      const b = document.querySelector(sel);
+      if (b) b.addEventListener('click', function(){ if (panelOpen){ panelOpen = false; render(); } });
+    });
+  }
+
+  return { init:init, PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
+           isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
+           onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
+           togglePanel:togglePanel, setBoardSubject:setBoardSubject,
+           setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
+           render:render };
+})();
+
+
+// ── DAILY GOALS ───────────────────────────────────────────────
+// Local-first: works signed out, mirrored to Supabase when signed in.
+// One goal is "active"; every completed focus session ticks it up.
+window.Goals = (function(){
+  const K_ITEMS = 'sf_goals', K_DAY = 'sf_goals_day', K_ACTIVE = 'sf_goal_active';
+
+  let items = [], activeId = null;
+
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+  function uuid(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+      const r = Math.random()*16|0, v = (c === 'x') ? r : ((r&0x3)|0x8);
+      return v.toString(16);
+    });
+  }
+  function today(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function load(){
+    try { const v = JSON.parse(localStorage.getItem(K_ITEMS)); items = Array.isArray(v) ? v : []; }
+    catch(e){ items = []; }
+    activeId = localStorage.getItem(K_ACTIVE) || null;
+
+    // New day: finished goals are archived away, unfinished ones roll over
+    // with their progress intact.
+    const stored = localStorage.getItem(K_DAY);
+    const t = today();
+    if (stored !== t){
+      const carried = items.filter(function(g){ return !g.done; })
+                           .map(function(g){ g.day = t; g.updated = Date.now(); return g; });
+      const dropped = items.length - carried.length;
+      items = carried;
+      localStorage.setItem(K_DAY, t);
+      save();
+      if (dropped > 0) setTimeout(function(){ toast('// new day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
+    }
+    if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
+  }
+
+  function save(){
+    try {
+      localStorage.setItem(K_ITEMS, JSON.stringify(items));
+      localStorage.setItem(K_DAY, today());
+      if (activeId) localStorage.setItem(K_ACTIVE, activeId); else localStorage.removeItem(K_ACTIVE);
+    } catch(e){}
+  }
+
+  function find(id){ return items.filter(function(g){ return g.id === id; })[0] || null; }
+  function active(){ return activeId ? find(activeId) : null; }
+  function activeSubject(){ const a = active(); return (a && a.subject) || null; }
+
+  function add(title, est, subject){
+    const t = String(title || '').trim().slice(0, 120);
+    if (!t) return;
+    const g = {
+      id: uuid(), day: today(), title: t,
+      subject: subject || (window.Study ? window.Study.current() : null),
+      est: Math.max(1, Math.min(20, parseInt(est) || 1)),
+      progress: 0, done: false,
+      pos: items.length, updated: Date.now()
+    };
+    items.push(g);
+    if (!activeId) activeId = g.id;
+    save(); render(); push([g]);
+  }
+
+  function addFromInput(){
+    const inp = document.getElementById('goalInput');
+    const est = document.getElementById('goalEst');
+    if (!inp) return;
+    const v = inp.value;
+    if (!v.trim()) return;
+    add(v, est ? est.value : 1);
+    inp.value = '';
+    if (est) est.value = 1;
+  }
+
+  function toggle(id){
+    const g = find(id); if (!g) return;
+    g.done = !g.done;
+    if (g.done && g.progress < g.est) g.progress = g.est;
+    if (!g.done && g.progress >= g.est) g.progress = Math.max(0, g.est - 1);
+    g.updated = Date.now();
+    if (g.done && activeId === id){
+      const next = items.filter(function(x){ return !x.done; })[0];
+      activeId = next ? next.id : null;
+    }
+    save(); render(); push([g]);
+  }
+
+  function setActive(id){
+    const g = find(id); if (!g || g.done) return;
+    activeId = (activeId === id) ? null : id;
+    // Point the subject picker at whatever the newly focused goal is tagged
+    // with, so it always shows where the next session will be logged.
+    if (activeId && g.subject && window.Study) window.Study.setCurrent(g.subject);
+    save(); render();
+  }
+
+  // Retag the focused goal when the subject picker changes.
+  function retagActive(subject){
+    const g = active();
+    if (!g || !subject || g.subject === subject) return;
+    g.subject = subject; g.updated = Date.now();
+    save(); render(); push([g]);
+  }
+
+  function remove(id){
+    const g = find(id);
+    items = items.filter(function(x){ return x.id !== id; });
+    if (activeId === id) activeId = null;
+    save(); render();
+    if (g) del(g.id);
+  }
+
+  // Called by onDone() when a focus session finishes.
+  function onPomodoro(){
+    const g = active();
+    if (!g) return;
+    g.progress = (g.progress || 0) + 1;
+    g.updated = Date.now();
+    if (g.progress >= g.est && !g.done){
+      g.done = true;
+      toast('// goal complete: ' + g.title);
+      const next = items.filter(function(x){ return !x.done; })[0];
+      activeId = next ? next.id : null;
+    }
+    save(); render(); push([g]);
+  }
+
+  // ── cloud mirror ──
+  function row(g, uid){
+    return { id: g.id, user_id: uid, day: g.day || today(), title: g.title,
+             subject: g.subject || null, est_pomos: g.est, done_pomos: g.progress || 0,
+             done: !!g.done, position: g.pos || 0, updated_at: new Date(g.updated || Date.now()).toISOString() };
+  }
+
+  async function push(subset){
+    const cl = window.SB.get();
+    if (!cl || !window.Auth || !window.Auth.signedIn()) return;
+    const uid = window.Auth.id();
+    const rows = (subset || items).map(function(g){ return row(g, uid); });
+    if (!rows.length) return;
+    try {
+      const r = await cl.from('goals').upsert(rows, { onConflict: 'id' });
+      if (r.error) console.warn('goals push', r.error);
+    } catch(e){ console.warn('goals push', e); }
+  }
+
+  async function del(id){
+    const cl = window.SB.get();
+    if (!cl || !window.Auth || !window.Auth.signedIn()) return;
+    try { await cl.from('goals').delete().eq('id', id); } catch(e){ console.warn('goals delete', e); }
+  }
+
+  // On sign-in: merge today's remote goals in, newest edit wins, then push back.
+  async function pull(){
+    const cl = window.SB.get();
+    if (!cl || !window.Auth || !window.Auth.signedIn()) return;
+    try {
+      const r = await cl.from('goals').select('*').eq('day', today());
+      if (r.error){ console.warn('goals pull', r.error); return; }
+      (r.data || []).forEach(function(rr){
+        const local = find(rr.id);
+        const remote = { id: rr.id, day: rr.day, title: rr.title, subject: rr.subject,
+                         est: rr.est_pomos, progress: rr.done_pomos, done: rr.done,
+                         pos: rr.position, updated: new Date(rr.updated_at).getTime() };
+        if (!local) items.push(remote);
+        else if (remote.updated > (local.updated || 0)) Object.assign(local, remote);
+      });
+      items.sort(function(a,b){ return (a.pos||0) - (b.pos||0); });
+      save(); render(); push();
+    } catch(e){ console.warn('goals pull', e); }
+  }
+
+  // ── render ──
+  function render(){
+    const list = document.getElementById('goalsList');
+    const count = document.getElementById('goalsCount');
+    const doneN = items.filter(function(g){ return g.done; }).length;
+    if (count) count.textContent = doneN + '/' + items.length;
+
+    if (list){
+      if (!items.length){
+        list.innerHTML = '<div class="goals-empty">no goals yet — add what you want to finish today</div>';
+      } else {
+        list.innerHTML = items.map(function(g){
+          const isActive = (g.id === activeId);
+          const dots = Array.from({length: Math.min(g.est, 8)}, function(_, i){
+            return '<span class="goal-dot'+(i < g.progress ? ' filled' : '')+'"></span>';
+          }).join('');
+          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+'">' +
+                   '<button class="goal-check" onclick="Goals.toggle(\''+g.id+'\')" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
+                   '<div class="goal-main" onclick="Goals.setActive(\''+g.id+'\')" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
+                     '<div class="goal-title">'+esc(g.title)+'</div>' +
+                     '<div class="goal-meta">' +
+                       (g.subject ? '<span class="goal-subj">'+esc(g.subject)+'</span>' : '') +
+                       '<span class="goal-dots">'+dots+'</span>' +
+                       '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
+                     '</div>' +
+                   '</div>' +
+                   '<button class="goal-del" onclick="Goals.remove(\''+g.id+'\')" title="remove">×</button>' +
+                 '</div>';
+        }).join('');
+      }
+    }
+
+    // Mirror the active goal into the existing task input.
+    const ti = document.getElementById('taskInput');
+    if (ti){
+      const a = active();
+      if (a){ ti.value = a.title; ti.classList.add('has-goal'); }
+      else { ti.classList.remove('has-goal'); }
+    }
+  }
+
+  function init(){
+    load();
+    render();
+
+    // Restore the picker to the focused goal's subject on page load.
+    const a0 = active();
+    if (a0 && a0.subject && window.Study) window.Study.setCurrent(a0.subject);
+
+    const inp = document.getElementById('goalInput');
+    if (inp) inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); addFromInput(); } });
+
+    // Typing a task and hitting Enter turns it into today's active goal.
+    const ti = document.getElementById('taskInput');
+    if (ti) ti.addEventListener('keydown', function(e){
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const v = ti.value.trim();
+      if (!v) return;
+      const a = active();
+      if (a && a.title === v) return;
+      add(v, 1);
+      toast('// added to today\'s goals');
+    });
+
+    if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });
+  }
+
+  return { init:init, add:add, addFromInput:addFromInput, toggle:toggle, setActive:setActive,
+           retagActive:retagActive, remove:remove, onPomodoro:onPomodoro,
+           activeSubject:activeSubject, active:active, pull:pull, render:render };
+})();
+
+
+// ── BOOTSTRAP ─────────────────────────────────────────────────
+// init() runs earlier in this file, before the modules above exist, so the
+// study/goals/auth bootstrap has to happen down here instead.
+// Study and Goals register their Auth.onChange listeners before Auth resolves
+// a session, so a restored login still triggers their sync.
+Study.init();
+Goals.init();
+Auth.init();

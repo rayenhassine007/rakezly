@@ -49,6 +49,15 @@
 <!-- Shared Room button -->
 <button class="btn-room-fixed" onclick="Room.togglePanel()" id="roomFixedBtn" title="Shared room (synced timer)">👥</button>
 
+<!-- Study leaderboard button -->
+<button class="btn-study-fixed" onclick="Study.togglePanel()" id="studyFixedBtn" title="Study time &amp; leaderboard">📊</button>
+
+<!-- Study / leaderboard panel -->
+<div id="studyPanel" class="study-panel">
+  <div class="study-panel-title">// study time</div>
+  <div id="studyBody"></div>
+</div>
+
 <!-- Shared Room panel -->
 <div id="roomPanel" class="room-panel">
   <div class="room-panel-title">// shared room</div>
@@ -236,6 +245,35 @@
 
   <!-- ── LEFT COLUMN ── -->
   <div class="col-left">
+
+    <!-- Daily Goals -->
+    <div class="card goals-card">
+      <div class="goals-head">
+        <div class="cycles-label">// Daily Goals</div>
+        <div class="goals-count" id="goalsCount">0/0</div>
+      </div>
+      <div class="goals-list" id="goalsList"></div>
+      <div class="goal-add-row">
+        <input class="goal-input" id="goalInput" type="text" placeholder="+ add a goal..." maxlength="120">
+        <input class="goal-est" id="goalEst" type="number" min="1" max="20" value="1" title="estimated pomodoros">
+        <button class="goal-add-btn" onclick="Goals.addFromInput()" title="add goal">+</button>
+      </div>
+      <div class="goals-hint">click a goal to focus it — finished sessions count toward it</div>
+    </div>
+
+    <!-- Study time summary -->
+    <div class="card study-mini-card">
+      <div class="goals-head">
+        <div class="cycles-label">// Study Time</div>
+        <button class="study-mini-btn" onclick="Study.togglePanel()">board</button>
+      </div>
+      <div class="study-mini-nums">
+        <div class="study-mini-item"><span class="study-mini-val" id="studyToday">0m</span><div class="stat-label">Today</div></div>
+        <div class="study-mini-item"><span class="study-mini-val" id="studyWeek">0m</span><div class="stat-label">This_Week</div></div>
+      </div>
+      <div class="study-mini-bars" id="studyMiniBars"></div>
+    </div>
+
   </div>
 
   <!-- ── CENTER COLUMN ── -->
@@ -278,6 +316,10 @@
       </div>
       <div class="task-input-row">
         <input class="task-input" id="taskInput" type="text" placeholder="// what are you working on?">
+      </div>
+      <div class="subject-row">
+        <span class="subject-label">// subject</span>
+        <select class="subject-select" id="subjectSelect" onchange="Study.onSelect(this)"></select>
       </div>
     </div>
 

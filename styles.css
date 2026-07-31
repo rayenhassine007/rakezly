@@ -2818,3 +2818,226 @@ body.theme-edo-gold .room-panel { background: rgba(12,7,1,0.95); border-color: r
 body.theme-moonlight .btn-room-fixed { background: rgba(8,8,8,0.7); border-color: rgba(220,220,220,0.18); border-radius: 2px; }
 body.theme-moonlight .btn-room-fixed:hover, body.theme-moonlight .btn-room-fixed.active { border-color: rgba(240,240,240,0.6); color:#f0f0f0; box-shadow:0 0 12px rgba(255,255,255,0.15); }
 body.theme-moonlight .room-panel { background: rgba(8,8,8,0.95); border-color: rgba(220,220,220,0.18); }
+
+/* ══════════════════════════════════════════════════════════════
+   STUDY TIME TRACKER, LEADERBOARD & DAILY GOALS
+   Everything below leans on the per-theme custom properties
+   (--cyan / --text / --muted / --glass-*) so all six themes work
+   without theme-specific overrides.
+   ══════════════════════════════════════════════════════════════ */
+
+/* The fixed button rail runs down the left edge; give the left column
+   room so its cards never sit underneath it. */
+.col-left { padding-left: 44px; }
+
+/* ── Study button + panel ── */
+.btn-study-fixed {
+  position: fixed; top: 278px; left: 14px; z-index: 50;
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  color: var(--muted); border-radius: 8px;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; font-size: 15px;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.btn-study-fixed:hover,
+.btn-study-fixed.active { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px var(--glass-border); }
+
+.study-panel {
+  position: fixed; top: 122px; left: 58px; z-index: 49;
+  width: 272px; padding: 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
+  backdrop-filter: blur(26px); -webkit-backdrop-filter: blur(26px);
+  box-shadow: 0 0 30px rgba(0,0,0,0.45);
+  opacity: 0; pointer-events: none; transform: translateX(-8px);
+  transition: opacity .22s ease, transform .22s ease;
+  font-family: 'Share Tech Mono', monospace;
+  max-height: calc(100vh - 28px); overflow-y: auto;
+}
+.study-panel.open { opacity: 1; pointer-events: all; transform: translateX(0); }
+.study-panel-title { color: var(--cyan); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; }
+.study-sec-label { color: var(--muted); font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; margin: 16px 0 8px; }
+
+/* account block */
+.study-acct { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--glass-border); }
+.study-acct-who { flex: 1; min-width: 0; color: var(--text); font-size: 12px; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); flex: none; }
+.study-guest { padding-bottom: 12px; border-bottom: 1px solid var(--glass-border); }
+.study-guest-msg { color: var(--muted); font-size: 10px; line-height: 1.5; margin-bottom: 10px; }
+.study-or { color: var(--muted); font-size: 9px; text-align: center; margin: 8px 0 4px; letter-spacing: 1px; }
+.study-authrow { display: flex; gap: 6px; }
+.study-authrow .study-btn { margin-top: 0; }
+.study-form { display: flex; flex-direction: column; gap: 6px; }
+
+.study-btn {
+  width: 100%; padding: 8px 10px;
+  background: transparent; color: var(--cyan);
+  border: 1px solid var(--glass-border); border-radius: 8px;
+  cursor: pointer; font-family: inherit; font-size: 11px; transition: all .2s;
+}
+.study-btn:hover { border-color: var(--cyan); }
+.study-btn-primary, .study-btn-google { border-color: var(--cyan); }
+.study-link {
+  background: transparent; border: none; color: var(--muted);
+  font-family: inherit; font-size: 10px; cursor: pointer; padding: 2px 4px;
+  text-decoration: underline; transition: color .2s;
+}
+.study-link:hover { color: var(--cyan); }
+.study-input {
+  width: 100%; padding: 8px; font-size: 11px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 8px; color: var(--text); font-family: inherit; outline: none;
+}
+.study-input:focus { border-color: var(--cyan); }
+
+/* my week */
+.study-mine { display: flex; align-items: baseline; gap: 8px; }
+.study-mine-val { color: var(--cyan); font-size: 26px; font-weight: 700; line-height: 1; }
+.study-mine-sub { color: var(--muted); font-size: 11px; }
+
+/* rank + percentile */
+.study-standing { margin-top: 10px; }
+.study-rank { color: var(--text); font-size: 15px; }
+.study-rank-of { color: var(--muted); font-size: 11px; }
+.study-pct-bar {
+  height: 5px; border-radius: 3px; margin: 8px 0 6px;
+  background: rgba(255,255,255,0.07); overflow: hidden;
+}
+.study-pct-bar span { display: block; height: 100%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width .5s ease; }
+.study-pct-txt { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.study-pct-txt b { color: var(--cyan); }
+.study-standing-empty { color: var(--muted); font-size: 10px; margin-top: 8px; }
+
+/* board */
+.study-select {
+  width: 100%; margin-bottom: 8px; padding: 6px 8px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 8px; color: var(--text);
+  font-family: inherit; font-size: 11px; outline: none; cursor: pointer;
+}
+.study-select:focus { border-color: var(--cyan); }
+.study-select option, .subject-select option { background: #0d0a14; color: #f0e8ff; }
+.study-board { display: flex; flex-direction: column; gap: 2px; }
+.study-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 7px; font-size: 11px;
+  border: 1px solid transparent;
+}
+.study-row:nth-child(odd) { background: rgba(255,255,255,0.025); }
+.study-row.me { border-color: var(--cyan); background: var(--glass-border); }
+.study-row-rank { color: var(--muted); width: 22px; flex: none; }
+.study-row.me .study-row-rank { color: var(--cyan); }
+.study-row-name { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-row-mins { color: var(--cyan); flex: none; }
+.study-board-msg { color: var(--muted); font-size: 10px; line-height: 1.5; padding: 6px 0; }
+.study-board-err { color: #ff6b9d; }
+.study-hint { color: var(--muted); font-size: 9px; text-align: center; margin-top: 12px; letter-spacing: .5px; }
+
+/* ── Study mini card (left column) ── */
+.study-mini-btn {
+  background: transparent; border: 1px solid var(--glass-border);
+  color: var(--muted); border-radius: 6px; padding: 3px 10px;
+  font-size: 9px; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+  letter-spacing: .5px; transition: all .2s;
+}
+.study-mini-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.study-mini-nums { display: flex; gap: 18px; margin-bottom: 12px; }
+.study-mini-item { text-align: left; }
+.study-mini-val { color: var(--cyan); font-size: 20px; font-weight: 700; line-height: 1.2; display: block; }
+.study-mini-bars { display: flex; flex-direction: column; gap: 6px; }
+.study-mini-empty { color: var(--muted); font-size: 10px; font-family: 'Share Tech Mono', monospace; }
+.study-bar-row { display: flex; align-items: center; gap: 7px; font-family: 'Share Tech Mono', monospace; font-size: 9px; }
+.study-bar-name { width: 62px; flex: none; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-bar-track { flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.study-bar-fill { display: block; height: 100%; background: var(--cyan); border-radius: 2px; }
+.study-bar-val { flex: none; color: var(--text); width: 38px; text-align: right; }
+
+/* ── Subject picker under the timer ── */
+.subject-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.subject-label { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; flex: none; }
+.subject-select {
+  flex: 1; min-width: 0; padding: 7px 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 6px; color: var(--text);
+  font-family: 'Share Tech Mono', monospace; font-size: 12px;
+  outline: none; cursor: pointer; transition: all .2s;
+}
+.subject-select:focus, .subject-select:hover { border-color: var(--cyan); }
+
+/* ── Daily goals card ── */
+.goals-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.goals-count { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--cyan); letter-spacing: 1px; }
+.goals-list { display: flex; flex-direction: column; gap: 5px; max-height: 300px; overflow-y: auto; }
+.goals-empty { color: var(--muted); font-family: 'Share Tech Mono', monospace; font-size: 10px; line-height: 1.5; padding: 4px 0; }
+
+.goal-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 8px; border-radius: 8px;
+  border: 1px solid transparent; transition: all .2s;
+}
+.goal-item:hover { background: rgba(255,255,255,0.03); }
+.goal-item.active { border-color: var(--cyan); background: var(--glass-border); }
+.goal-item.done { opacity: .45; }
+.goal-item.done .goal-title { text-decoration: line-through; }
+
+.goal-check {
+  flex: none; width: 16px; height: 16px; margin-top: 2px;
+  border: 1px solid var(--glass-border); border-radius: 4px;
+  background: transparent; color: var(--cyan);
+  font-size: 10px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s; padding: 0;
+}
+.goal-check:hover { border-color: var(--cyan); }
+.goal-main { flex: 1; min-width: 0; cursor: pointer; }
+.goal-title {
+  font-family: 'Share Tech Mono', monospace; font-size: 12px;
+  color: var(--text); line-height: 1.35; word-break: break-word;
+}
+.goal-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.goal-subj {
+  font-family: 'Share Tech Mono', monospace; font-size: 8px;
+  color: var(--muted); border: 1px solid var(--glass-border);
+  border-radius: 4px; padding: 1px 5px; letter-spacing: .3px;
+}
+.goal-dots { display: flex; gap: 3px; }
+.goal-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+.goal-dot.filled { background: var(--cyan); box-shadow: 0 0 5px var(--cyan); }
+.goal-prog { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--muted); }
+.goal-del {
+  flex: none; background: transparent; border: none; color: var(--muted);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px;
+  opacity: 0; transition: all .2s;
+}
+.goal-item:hover .goal-del { opacity: 1; }
+.goal-del:hover { color: #ff6b9d; }
+
+.goal-add-row { display: flex; gap: 6px; margin-top: 10px; }
+.goal-input, .goal-est {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+  border-radius: 6px; color: var(--text);
+  font-family: 'Share Tech Mono', monospace; font-size: 11px;
+  padding: 8px 10px; outline: none; transition: all .2s;
+}
+.goal-input { flex: 1; min-width: 0; }
+.goal-est { width: 46px; flex: none; text-align: center; }
+.goal-input:focus, .goal-est:focus { border-color: var(--cyan); }
+.goal-input::placeholder { color: var(--muted); }
+.goal-add-btn {
+  flex: none; width: 32px;
+  background: transparent; border: 1px solid var(--glass-border);
+  border-radius: 6px; color: var(--cyan);
+  font-size: 15px; line-height: 1; cursor: pointer; transition: all .2s;
+}
+.goal-add-btn:hover { border-color: var(--cyan); }
+.goals-hint { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--muted); line-height: 1.45; margin-top: 9px; }
+
+/* The task input echoes the active goal */
+.task-input.has-goal { border-color: var(--cyan) !important; }
+
+@media (max-width: 900px) {
+  .col-left { padding-left: 0; }
+  .study-panel { left: 50%; transform: translate(-50%, -8px); width: min(320px, calc(100vw - 28px)); }
+  .study-panel.open { transform: translate(-50%, 0); }
+}
