@@ -175,7 +175,7 @@ function applyBgFromRecord(rec, theme) {
     video.classList.remove('ready'); video.src = ''; video.style.display = 'none';
     frame.classList.remove('ready'); frame.src = '';
     document.body.style.backgroundImage = '';
-    document.getElementById('uploadText').textContent = 'click to upload video, image, or html';
+    document.getElementById('uploadText').textContent = 'Upload a video, image or HTML';
     document.getElementById('mediaUpload').value = '';
     return;
   }
@@ -1066,7 +1066,7 @@ function applyDefaultThemeBg(t) {
   video.load();
   video.play().catch(() => {});
   video.oncanplay = () => video.classList.add('ready');
-  document.getElementById('uploadText').textContent = 'click to upload video, image, or html';
+  document.getElementById('uploadText').textContent = 'Upload a video, image or HTML';
   document.getElementById('mediaUpload').value = '';
 }
 
