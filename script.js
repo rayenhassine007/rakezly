@@ -22,14 +22,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── RESET STATS ───────────────────────────────────────────────
-function resetStats() {
-  completedPomodoros = 0; totalFocusMins = 0; streak = 0;
-  localStorage.setItem('sf_streak', '0');
-  updateStats();
-  showToast('// session stats reset');
-}
-
 // ── FULLSCREEN ────────────────────────────────────────────────
 function toggleFS() {
   if (!document.fullscreenElement) {
@@ -131,7 +123,7 @@ async function loadBgForTheme(theme) {
 
 // Preload all theme bgs into cache on startup so first switch is also instant
 async function preloadAllBgs() {
-  await Promise.all(['cyber', 'lofi', 'greens', 'cherry-blues'].map(t => loadBgForTheme(t)));
+  await Promise.all(['lofi', 'greens', 'cherry-blues', 'moonlight'].map(t => loadBgForTheme(t)));
 }
 
 async function clearBgForTheme(theme) {
@@ -148,12 +140,12 @@ async function clearBgForTheme(theme) {
 function updateBgBadge(theme) {
   const badge = document.getElementById('bgThemeBadge');
   const names = {
-    cyber: '// cyber bg',
     lofi: '✿ lofi bg',
     greens: '⬡ greens bg',
-    'cherry-blues': '✦ cherry blues bg'
+    'cherry-blues': '✦ cherry blues bg',
+    moonlight: '☽ moonlight bg'
   };
-  if (badge) badge.textContent = (names[theme] || '// theme bg') + ' — assigned to this theme';
+  if (badge) badge.textContent = (names[theme] || 'theme bg') + ' — assigned to this theme';
 }
 
 // Cache Object URLs per theme — avoids recreating them on every switch
@@ -257,11 +249,11 @@ document.addEventListener('click', (e) => {
 
 function themeLabel(theme) {
   return ({
-    cyber: '// cyber',
     lofi: '✿ lofi',
     greens: '⬡ greens',
-    'cherry-blues': '✦ cherry blues'
-  })[theme] || '// theme';
+    'cherry-blues': '✦ cherry blues',
+    moonlight: '☽ moonlight'
+  })[theme] || 'theme';
 }
 
 async function loadMedia(event) {
@@ -271,7 +263,7 @@ async function loadMedia(event) {
   await saveBgForTheme(currentTheme, file);
   // applyBgFromRecord will create and cache a fresh URL
   applyBgFromRecord(_bgCache[currentTheme], currentTheme);
-  showToast('// bg saved for ' + themeLabel(currentTheme));
+  showToast('bg saved for ' + themeLabel(currentTheme));
 }
 
 function setDim(v) {
@@ -301,7 +293,7 @@ function setGlass(v) {
 async function clearMedia() {
   await clearBgForTheme(currentTheme);
   applyBgFromRecord(null);
-  showToast('// bg cleared for ' + themeLabel(currentTheme));
+  showToast('bg cleared for ' + themeLabel(currentTheme));
 }
 
 function setGlassOpac(v) {
@@ -309,10 +301,8 @@ function setGlassOpac(v) {
 
   const baseColor = currentTheme === 'cherry-blues' ? '9, 18, 42' :
                     currentTheme === 'greens'       ? '5, 20, 8' :
-                    currentTheme === 'lofi'         ? '30, 15, 35' :
-                    currentTheme === 'edo-gold'     ? '18, 11, 2' :
                     currentTheme === 'moonlight'    ? '8, 8, 8' :
-                                                       '20, 10, 35';
+                                                       '30, 15, 35';
 
   const glassBg = `rgba(${baseColor}, ${alpha})`;
 
@@ -337,10 +327,8 @@ function setGlassBorder(v) {
 
   const borderColor = currentTheme === 'cherry-blues' ? '143, 211, 255' :
                       currentTheme === 'greens'       ? '74, 222, 128' :
-                      currentTheme === 'lofi'         ? '249, 168, 212' :
-                      currentTheme === 'edo-gold'     ? '232, 197, 106' :
                       currentTheme === 'moonlight'    ? '220, 220, 220' :
-                                                         '192, 132, 252';
+                                                         '249, 168, 212';
 
   const glassBorder = `rgba(${borderColor}, ${alpha})`;
 
@@ -422,8 +410,6 @@ let TOTAL_CYCLES = parseInt(localStorage.getItem('sf_cycles')) || 4, pendingCycl
 // ── STATE ─────────────────────────────────────────────────────
 let mode='work', totalSecs, remainSecs;
 let running=false, ticker=null, cycleIndex=0;
-let completedPomodoros=0, totalFocusMins=0;
-let streak = parseInt(localStorage.getItem('sf_streak')||'0');
 
 // ── SESSION PERSISTENCE ───────────────────────────────────────
 // How long before a closed session expires and resets (ms). Default: 1 hour.
@@ -434,8 +420,6 @@ function saveTimerState() {
     mode, totalSecs, remainSecs,
     running,
     cycleIndex,
-    completedPomodoros,
-    totalFocusMins,
     savedAt: Date.now()   // always stamp so expiry works whether paused or running
   }));
 }
@@ -452,8 +436,6 @@ function restoreTimerState() {
     }
     mode               = s.mode || 'work';
     totalSecs          = s.totalSecs;
-    completedPomodoros = s.completedPomodoros || 0;
-    totalFocusMins     = s.totalFocusMins || 0;
     cycleIndex         = s.cycleIndex || 0;
     // If it was running, subtract elapsed time since page closed
     let restored = s.remainSecs;
@@ -520,7 +502,7 @@ function applySettings(){
   localStorage.setItem('sf_long', MODES.long);
   localStorage.setItem('sf_cycles', TOTAL_CYCLES);
   stopTimer(); clearTimerState(); initTimer('work'); renderCycles(); setTab('work');
-  showToast('// settings applied'); toggleSettings();
+  showToast('settings applied'); toggleSettings();
 }
 
 // ── TIMER ─────────────────────────────────────────────────────
@@ -583,12 +565,10 @@ function resetTimer(){
 function skipSession(){
   stopTimer();
   if(mode==='work'){
-    completedPomodoros++;
-    // count partial minutes (at least 1 if any time passed)
-    const minsPassed = Math.max(0, Math.floor((totalSecs - remainSecs) / 60));
-    totalFocusMins += minsPassed;
-    streak++; localStorage.setItem('sf_streak', streak);
-    updateStats();
+    // Credit the minutes actually focused before skipping. Goal progress is
+    // deliberately not ticked — a partial session isn't a finished pomodoro.
+    const minsPassed = Math.floor((totalSecs - remainSecs) / 60);
+    if(minsPassed >= 1 && window.Study) Study.logSession(minsPassed);
   }
   advance();
   if(window.Room)Room.onLocalChange();
@@ -596,388 +576,30 @@ function skipSession(){
 function onDone(){
   stopTimer();
   if(mode==='work'){
-    completedPomodoros++; totalFocusMins+=MODES.work;
-    streak++; localStorage.setItem('sf_streak',streak);
     // Credit the actual session length, which +1/+5 buttons may have grown.
     const focusMins = Math.max(1, Math.round(totalSecs/60));
     if(window.Goals) Goals.onPomodoro();
     if(window.Study) Study.logSession(focusMins);
-    showToast('// pomodoro complete — take a break');
+    showToast('pomodoro complete — take a break');
     tryNotify('Pomodoro complete!','Time for a break.');
     playAlarm();
   }else{
-    showToast('// break over — back to focus');
+    showToast('break over — back to focus');
     tryNotify('Break over!','Back to work.');
     playAlarm();
   }
-  updateStats();
   if(mode==='work' && autoStartBreak) setTimeout(()=>{ advance(); setTimeout(startTimer,400); }, 600);
   else if(mode!=='work' && autoStartWork) setTimeout(()=>{ advance(); setTimeout(startTimer,400); }, 600);
   else advance();
 }
 function advance(){
   cycleIndex++;
-  if(cycleIndex>=seq.length){cycleIndex=0;showToast('// full round complete — restarting');}
+  if(cycleIndex>=seq.length){cycleIndex=0;showToast('full round complete — restarting');}
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
 function setTab(m){m=m==='brk'?'break':m==='lng'?'long':m;document.querySelectorAll('.mode-tab').forEach((t,i)=>t.classList.toggle('active',['work','break','long'][i]===m));}
 function switchMode(m){stopTimer();setTab(m);initTimer(m);renderCycles();saveTimerState();if(window.Room)Room.onLocalChange();}
-function updateStats(){
-  document.getElementById('s1').textContent=completedPomodoros;
-  document.getElementById('s2').textContent=totalFocusMins+'m';
-  document.getElementById('s3').textContent=streak;
-}
-
-// ── LAST.FM ───────────────────────────────────────────────────
-const LFM_API = 'https://ws.audioscrobbler.com/2.0/';
-// Public API key — read-only, safe to embed for now-playing lookups
-const LFM_KEY = ''; // user must provide their own free key
-let lfmUser = null, lfmPoll = null, lfmUserKey = null;
-let lfmCurrentTrackKey = null, lfmTrackStartTime = null, lfmTrackDuration = null, lfmProgressTicker = null;
-
-function handleLFM() {
-  if (lfmUser) {
-    lfmUser = null; lfmUserKey = null;
-    clearInterval(lfmPoll);
-    clearInterval(lfmProgressTicker); lfmProgressTicker = null;
-    lfmCurrentTrackKey = null; lfmTrackStartTime = null; lfmTrackDuration = null;
-    localStorage.removeItem('sf_lfm_user');
-    localStorage.removeItem('sf_lfm_key');
-    document.getElementById('lfmDot').className = 'lfm-dot';
-    document.getElementById('lfmBtn').textContent = 'Connect';
-    document.getElementById('lfmBtn').className = 'btn-lfm';
-    document.getElementById('lfmNowPlaying').classList.remove('vis');
-    document.getElementById('lfmIdle').style.display = '';
-    document.getElementById('lfmIdle').textContent = '// enter your Last.fm username to see what\'s playing';
-    return;
-  }
-  const apiKey = prompt(
-    'Last.fm API Key (free):\n\n' +
-    '1. Go to https://www.last.fm/api/account/create\n' +
-    '2. Create an app (any name), copy the API key\n' +
-    '3. Paste it here:'
-  );
-  if (!apiKey || apiKey.trim().length < 10) { showToast('// invalid api key'); return; }
-  const user = prompt('Your Last.fm username:');
-  if (!user || !user.trim()) { showToast('// no username entered'); return; }
-  lfmUserKey = apiKey.trim();
-  lfmUser = user.trim();
-  localStorage.setItem('sf_lfm_user', lfmUser);
-  localStorage.setItem('sf_lfm_key', lfmUserKey);
-  onLFMOn();
-}
-
-function onLFMOn() {
-  document.getElementById('lfmDot').className = 'lfm-dot on';
-  document.getElementById('lfmBtn').textContent = 'Disconnect';
-  document.getElementById('lfmBtn').className = 'btn-lfm dc';
-  showToast('// last.fm connected as @' + lfmUser);
-  fetchLFM();
-  lfmPoll = setInterval(fetchLFM, 10000);
-}
-
-function fmtSecs(s) {
-  s = Math.max(0, Math.floor(s));
-  return Math.floor(s / 60) + ':' + (s % 60).toString().padStart(2, '0');
-}
-
-async function fetchLFM() {
-  if (!lfmUser || !lfmUserKey) return;
-  try {
-    const url = `${LFM_API}?method=user.getrecenttracks&user=${encodeURIComponent(lfmUser)}&api_key=${lfmUserKey}&format=json&limit=1`;
-    const r = await fetch(url);
-    if (!r.ok) { showToast('// last.fm fetch error'); return; }
-    const d = await r.json();
-    if (d.error) { showToast('// last.fm: ' + d.message); return; }
-    const tracks = d.recenttracks?.track;
-    if (!tracks || tracks.length === 0) {
-      document.getElementById('lfmNowPlaying').classList.remove('vis');
-      document.getElementById('lfmIdle').style.display = '';
-      document.getElementById('lfmIdle').textContent = '// nothing scrobbled recently';
-      return;
-    }
-    const track = Array.isArray(tracks) ? tracks[0] : tracks;
-    const isNow = track['@attr']?.nowplaying === 'true';
-    document.getElementById('lfmNowPlaying').classList.add('vis');
-    document.getElementById('lfmIdle').style.display = 'none';
-    document.getElementById('lfmTrackName').textContent = track.name || '—';
-    document.getElementById('lfmTrackArtist').textContent = track.artist?.['#text'] || track.artist || '—';
-    document.getElementById('lfmSourceBadge').textContent = isNow ? '▶ now playing' : '◷ last played';
-    // Album art — try to get largest image
-    const imgs = track.image;
-    const art = imgs ? (imgs[2]?.['#text'] || imgs[1]?.['#text'] || imgs[0]?.['#text'] || '') : '';
-    if (art) { document.getElementById('lfmAlbumArt').src = art; }
-    // Progress bar — use elapsed time vs track duration
-    const fill = document.getElementById('lfmTrackFill');
-    const trackKey = (track.name || '') + '|' + (track.artist?.['#text'] || '');
-
-    if (!isNow) {
-      // Not currently playing — static full bar
-      clearInterval(lfmProgressTicker); lfmProgressTicker = null;
-      fill.style.animation = 'none';
-      fill.style.transition = 'none';
-      fill.style.width = '100%';
-      document.getElementById('lfmElapsed').textContent = '';
-      document.getElementById('lfmDuration').textContent = '';
-    } else {
-      // New song detected — fetch its duration and reset
-      if (trackKey !== lfmCurrentTrackKey) {
-        lfmCurrentTrackKey = trackKey;
-        lfmTrackStartTime = Date.now();
-        lfmTrackDuration = null;
-        clearInterval(lfmProgressTicker); lfmProgressTicker = null;
-        document.getElementById('lfmElapsed').textContent = '0:00';
-        document.getElementById('lfmDuration').textContent = '—';
-
-        // Fetch real duration via track.getInfo
-        const artist = encodeURIComponent(track.artist?.['#text'] || track.artist || '');
-        const tname  = encodeURIComponent(track.name || '');
-        fetch(`${LFM_API}?method=track.getInfo&artist=${artist}&track=${tname}&api_key=${lfmUserKey}&format=json`)
-          .then(r => r.json())
-          .then(info => {
-            const dur = parseInt(info?.track?.duration);
-            if (dur > 0) {
-              lfmTrackDuration = dur / 1000;
-              document.getElementById('lfmDuration').textContent = fmtSecs(lfmTrackDuration);
-            }
-          })
-          .catch(() => {});
-      }
-
-      // Animate bar every second based on elapsed time
-      const tickBar = () => {
-        const elapsed = (Date.now() - lfmTrackStartTime) / 1000;
-        document.getElementById('lfmElapsed').textContent = fmtSecs(elapsed);
-        if (lfmTrackDuration && lfmTrackDuration > 0) {
-          const pct = Math.min(elapsed / lfmTrackDuration * 100, 100);
-          fill.style.animation = 'none';
-          fill.style.transition = 'width 1s linear';
-          fill.style.width = pct + '%';
-          if (pct >= 100) { clearInterval(lfmProgressTicker); lfmProgressTicker = null; }
-        } else {
-          // Duration not yet loaded — show pulsing partial bar
-          fill.style.transition = 'none';
-          fill.style.width = '60%';
-          fill.style.animation = 'lfmPulse 1.5s ease-in-out infinite alternate';
-        }
-      };
-
-      if (!lfmProgressTicker) {
-        tickBar(); // run immediately
-        lfmProgressTicker = setInterval(tickBar, 1000);
-      }
-    }
-  } catch(e) { console.warn('lfm error', e); }
-}
-
-// ── MUSIC TABS ────────────────────────────────────────────────
-function switchMusicTab(tab) {
-  document.getElementById('panelSpotify').style.display = tab === 'spotify' ? '' : 'none';
-  document.getElementById('panelLastfm').style.display  = tab === 'lastfm'  ? '' : 'none';
-  document.getElementById('tabSpotify').classList.toggle('active', tab === 'spotify');
-  document.getElementById('tabLastfm').classList.toggle('active',  tab === 'lastfm');
-}
-
-// ── API SETTINGS (hidden, unlock by clicking "// Spotify" 5×) ─
-const SP_DEFAULTS = {
-  npUrl:    'https://api.spotify.com/v1/me/player/currently-playing',
-  tokenUrl: 'https://accounts.spotify.com/api/token',
-  authUrl:  'https://accounts.spotify.com/authorize',
-  scopes:   'user-read-currently-playing user-read-playback-state'
-};
-function getApiCfg(key) {
-  return localStorage.getItem('sf_api_' + key) || SP_DEFAULTS[key];
-}
-let spBtnClicks = 0, spBtnTO = null;
-function spTabClick() {
-  spBtnClicks++;
-  clearTimeout(spBtnTO);
-  spBtnTO = setTimeout(() => { spBtnClicks = 0; }, 2000);
-  if (spBtnClicks >= 5) {
-    spBtnClicks = 0;
-    const panel = document.getElementById('apiSettingsPanel');
-    const isOpen = panel.classList.contains('open');
-    if (!isOpen) document.getElementById('apiClientId').value = localStorage.getItem('sf_cid') || '';
-    panel.classList.toggle('open', !isOpen);
-    showToast(isOpen ? '// hidden' : '// client id ⚙');
-  }
-}
-let lfmTabClicks = 0, lfmTabTO = null;
-function lfmTabClick() {
-  lfmTabClicks++;
-  clearTimeout(lfmTabTO);
-  lfmTabTO = setTimeout(() => { lfmTabClicks = 0; }, 2000);
-  if (lfmTabClicks >= 5) {
-    lfmTabClicks = 0;
-    const panel = document.getElementById('lfmApiPanel');
-    const isOpen = panel.classList.contains('open');
-    if (!isOpen) {
-      document.getElementById('lfmApiKey').value  = localStorage.getItem('sf_lfm_key') || '';
-      document.getElementById('lfmApiUser').value = localStorage.getItem('sf_lfm_user') || '';
-    }
-    panel.classList.toggle('open', !isOpen);
-    showToast(isOpen ? '// hidden' : '// last.fm settings ⚙');
-  }
-}
-function saveLfmSettings() {
-  const key  = document.getElementById('lfmApiKey').value.trim();
-  const user = document.getElementById('lfmApiUser').value.trim();
-  if (!key)  { showToast('// api key cannot be empty'); return; }
-  if (!user) { showToast('// username cannot be empty'); return; }
-  localStorage.setItem('sf_lfm_key', key);
-  localStorage.setItem('sf_lfm_user', user);
-  lfmUserKey = key;
-  lfmUser = user;
-  document.getElementById('lfmApiPanel').classList.remove('open');
-  showToast('// last.fm settings saved ✓');
-  onLFMOn();
-}
-function saveApiSettings() {
-  const cid = document.getElementById('apiClientId').value.trim();
-  if (!cid) { showToast('// client id cannot be empty'); return; }
-  localStorage.setItem('sf_cid', cid);
-  document.getElementById('apiSettingsPanel').classList.remove('open');
-  showToast('// client id saved ✓');
-}
-
-// ── SPOTIFY ──────────────────────────────────────────────────
-const REDIR='https://rakezly.vercel.app';
-let spToken=null,spRefresh=null,spPoll=null;
-let spCurrentTrackKey=null, spTrackStartTime=null, spTrackDuration=null, spProgressTicker=null, spIsPlaying=false;
-function gv(n=128){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';const a=new Uint8Array(n);crypto.getRandomValues(a);return[...a].map(b=>c[b%c.length]).join('');}
-async function gc(v){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
-async function handleSP(){
-  if(spToken){
-    // Disconnect: clear token but keep refresh token and client id so reconnect is seamless
-    spToken=null; clearInterval(spPoll); spPoll=null; clearInterval(spProgressTicker); spProgressTicker=null;
-    spCurrentTrackKey=null; spTrackStartTime=null; spTrackDuration=null; spIsPlaying=false;
-    document.getElementById('spDot').className='spotify-dot';
-    document.getElementById('spBtn').textContent='Connect';
-    document.getElementById('spBtn').className='btn-sp';
-    document.getElementById('nowPlaying').classList.remove('vis');
-    document.getElementById('spIdle').style.display='';
-    document.getElementById('trackFill').style.width='0%';
-    document.getElementById('tPos').textContent='0:00';
-    document.getElementById('tDur').textContent='0:00';
-    localStorage.removeItem('sf_sp');
-    return;
-  }
-  // If we already have a refresh token saved, silently get a new access token — no redirect, no page reset
-  const savedRefresh = spRefresh || localStorage.getItem('sf_spr');
-  const savedCid = localStorage.getItem('sf_cid');
-  if(savedRefresh && savedCid){
-    showToast('// reconnecting spotify...');
-    const ok = await refSP();
-    if(spToken){ onSpOn(); return; }
-    // Refresh failed — fall through to full OAuth below
-  }
-  const cid=prompt('Spotify Client ID\n\n1. developer.spotify.com/dashboard\n2. Create app\n3. Add Redirect URI:\n'+REDIR+'\n4. Paste Client ID:');
-  if(!cid||cid.trim().length<10){showToast('// invalid client id');return;}
-  const c=cid.trim();sessionStorage.setItem('sf_cid',c);localStorage.setItem('sf_cid',c);
-  const v=gv();sessionStorage.setItem('sf_v',v);
-  const p=new URLSearchParams({response_type:'code',client_id:c,scope:getApiCfg('scopes'),redirect_uri:REDIR,code_challenge_method:'S256',code_challenge:await gc(v)});
-  window.location.href=getApiCfg('authUrl')+'?'+p;
-}
-async function exToken(code){
-  const v=sessionStorage.getItem('sf_v'),c=sessionStorage.getItem('sf_cid');if(!v||!c)return;
-  const r=await fetch(getApiCfg('tokenUrl'),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:REDIR,client_id:c,code_verifier:v})});
-  const d=await r.json();
-  if(d.access_token){spToken=d.access_token;localStorage.setItem('sf_sp',d.access_token);if(d.refresh_token){spRefresh=d.refresh_token;localStorage.setItem('sf_spr',d.refresh_token);localStorage.setItem('sf_cid',c);}onSpOn();window.history.replaceState({},'',REDIR);}
-  else showToast('// spotify auth failed: '+(d.error||'unknown'));
-}
-function onSpOn(){
-  document.getElementById('spDot').className='spotify-dot on';
-  document.getElementById('spBtn').textContent='Disconnect';
-  document.getElementById('spBtn').className='btn-sp dc';
-  document.getElementById('lfmIdle').style.display='none';
-  document.getElementById('spIdle').style.display='';
-  showToast('// spotify connected');fetchNP();spPoll=setInterval(fetchNP,5000);
-}
-function stopSpotifyProgress(reset=false){
-  clearInterval(spProgressTicker); spProgressTicker=null;
-  if(reset){
-    spCurrentTrackKey=null; spTrackStartTime=null; spTrackDuration=null; spIsPlaying=false;
-    document.getElementById('trackFill').style.transition='none';
-    document.getElementById('trackFill').style.width='0%';
-    document.getElementById('tPos').textContent='0:00';
-    document.getElementById('tDur').textContent='0:00';
-  }
-}
-function renderSpotifyProgress(pos, dur, animate=true){
-  const safeDur = dur || 1;
-  const elapsed = Math.max(0, Math.min(pos || 0, safeDur));
-  const pct = Math.min(elapsed / safeDur * 100, 100);
-  const fill = document.getElementById('trackFill');
-  fill.style.animation = 'none';
-  fill.style.transition = animate ? 'width 1s linear' : 'none';
-  fill.style.width = pct + '%';
-  document.getElementById('tPos').textContent = ms2t(elapsed);
-  document.getElementById('tDur').textContent = ms2t(safeDur);
-}
-function tickSpotifyProgress(){
-  if(!spIsPlaying || !spTrackStartTime || !spTrackDuration) return;
-  const elapsed = Math.min(Date.now() - spTrackStartTime, spTrackDuration);
-  renderSpotifyProgress(elapsed, spTrackDuration, true);
-  if(elapsed >= spTrackDuration) stopSpotifyProgress(false);
-}
-async function fetchNP(){
-  if(!spToken)return;
-  try{
-    const r=await fetch(getApiCfg('npUrl'),{headers:{Authorization:'Bearer '+spToken}});
-    if(r.status===204){
-      stopSpotifyProgress(true);
-      document.getElementById('nowPlaying').classList.remove('vis');
-      document.getElementById('spIdle').style.display='';
-      document.getElementById('spIdle').textContent='// nothing playing right now';
-      return;
-    }
-    if(r.status===401){const ok=await refSP();if(ok)fetchNP();return;}if(!r.ok)return;
-    const d=await r.json();if(!d?.item)return;
-    document.getElementById('nowPlaying').classList.add('vis');
-    document.getElementById('spIdle').style.display='none';
-    document.getElementById('trackName').textContent=d.item.name;
-    document.getElementById('trackArtist').textContent=d.item.artists.map(a=>a.name).join(', ');
-    const art=d.item.album?.images?.[1]?.url||d.item.album?.images?.[0]?.url;
-    if(art)document.getElementById('albumArt').src=art;
-
-    const pos=d.progress_ms||0, dur=d.item.duration_ms||1;
-    const trackKey = (d.item.id || d.item.uri || d.item.name) + '|' + dur;
-
-    // Spotify sends is_playing=false when the song is paused.
-    // In that case, freeze the bar at Spotify's current progress instead of local-ticking.
-    if(!d.is_playing){
-      spCurrentTrackKey = trackKey;
-      spTrackDuration = dur;
-      spTrackStartTime = null;
-      spIsPlaying = false;
-      stopSpotifyProgress(false);
-      renderSpotifyProgress(pos, dur, false);
-      return;
-    }
-
-    // Store the song start time, then animate locally every second like Last.fm.
-    if(trackKey !== spCurrentTrackKey || !spIsPlaying || !spTrackStartTime){
-      spCurrentTrackKey = trackKey;
-      spTrackDuration = dur;
-      spTrackStartTime = Date.now() - pos;
-      spIsPlaying = true;
-      stopSpotifyProgress(false);
-      spIsPlaying = true;
-      tickSpotifyProgress();
-      spProgressTicker = setInterval(tickSpotifyProgress, 1000);
-    }else{
-      // Re-sync silently on each poll without making the bar jump.
-      const expected = Date.now() - spTrackStartTime;
-      if(Math.abs(expected - pos) > 2500) spTrackStartTime = Date.now() - pos;
-      spIsPlaying = true;
-      if(!spProgressTicker) spProgressTicker = setInterval(tickSpotifyProgress, 1000);
-      tickSpotifyProgress();
-    }
-  }catch(e){console.warn(e);}
-}
-async function refSP(){const rt=spRefresh||localStorage.getItem('sf_spr'),c=localStorage.getItem('sf_cid');if(!rt||!c)return false;try{const r=await fetch(getApiCfg('tokenUrl'),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:rt,client_id:c})});const d=await r.json();if(d.access_token){spToken=d.access_token;localStorage.setItem('sf_sp',d.access_token);if(d.refresh_token){spRefresh=d.refresh_token;localStorage.setItem('sf_spr',d.refresh_token);}return true;}}catch(e){}return false;}
-function ms2t(ms){const s=Math.floor(ms/1000);const m=Math.floor(s/60);return m+':'+(s%60).toString().padStart(2,'0');}
 
 function tryNotify(t,b){if('Notification'in window&&Notification.permission==='granted')new Notification(t,{body:b});else if('Notification'in window&&Notification.permission!=='denied')Notification.requestPermission();}
 
@@ -1004,7 +626,7 @@ function loadPlayerUrl() {
   const raw = document.getElementById('playerUrlInput').value.trim();
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
-  if (!embedUrl) { showToast('// unsupported link'); return; }
+  if (!embedUrl) { showToast('unsupported link'); return; }
   const iframe   = document.getElementById('playerIframe');
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
@@ -1041,7 +663,7 @@ function loadPlayerUrl() {
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
-  showToast('// player loaded');
+  showToast('player loaded');
   localStorage.setItem('sf_player_url', raw);
 }
 
@@ -1099,7 +721,7 @@ function clearPlayer() {
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   document.getElementById('playerUrlInput').value = '';
   localStorage.removeItem('sf_player_url');
-  showToast('// player cleared');
+  showToast('player cleared');
 }
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
@@ -1178,17 +800,17 @@ function ctrlPlayPause() {
 }
 function ctrlPrev() {
   const src = getActiveSrc();
-  if (src === 'youtube') { ytSkipBackward(); showToast('// −10s'); }
+  if (src === 'youtube') { ytSkipBackward(); showToast('−10s'); }
   else if (src === 'soundcloud') scPrev();
 }
 function ctrlNext() {
   const src = getActiveSrc();
-  if (src === 'youtube') { ytSkipForward(); showToast('// +10s'); }
+  if (src === 'youtube') { ytSkipForward(); showToast('+10s'); }
   else if (src === 'soundcloud') scNext();
 }
 function ctrlLeft() {
   const src = getActiveSrc();
-  if (src === 'youtube') { ytPrevVideo(); showToast('// prev video'); }
+  if (src === 'youtube') { ytPrevVideo(); showToast('prev video'); }
   else if (src === 'soundcloud') scShuffle();
 }
 
@@ -1276,12 +898,12 @@ function scPlayRandom() {
 function scShuffle() {
   scShuffleOn = !scShuffleOn;
   document.getElementById('ctrlShuffle').classList.toggle('active', scShuffleOn);
-  showToast(scShuffleOn ? '// shuffle on' : '// shuffle off');
+  showToast(scShuffleOn ? 'shuffle on' : 'shuffle off');
 }
 function scToggleRepeat() {
   scRepeatOn = !scRepeatOn;
   document.getElementById('ctrlRepeat').classList.toggle('active', scRepeatOn);
-  showToast(scRepeatOn ? '// repeat on' : '// repeat off');
+  showToast(scRepeatOn ? 'repeat on' : 'repeat off');
 }
 
 // Click badge to set placeholder example and highlight selection
@@ -1311,8 +933,6 @@ document.querySelectorAll('.player-badge').forEach(badge => {
 
 // ── INIT ──────────────────────────────────────────────────────
 function init(){
-  const today=new Date().toDateString(),ld=localStorage.getItem('sf_sd');
-  if(ld!==today){localStorage.setItem('sf_sd',today);if(ld!==new Date(Date.now()-86400000).toDateString()){streak=0;localStorage.setItem('sf_streak','0');}}
   // Hide video element initially
   document.getElementById('bgVideo').style.display='none';
   // Preload both theme bgs into memory cache, then apply current theme
@@ -1340,19 +960,10 @@ function init(){
     btn.textContent = 'Start';
     if (remainSecs <= 0) { clearTimerState(); initTimer(mode); }
     renderCycles();
-    updateStats();
-    showToast('// session restored ✓');
+    showToast('session restored ✓');
   } else {
-    updateStats(); renderCycles(); initTimer('work');
+    renderCycles(); initTimer('work');
   }
-  // Restore Last.fm
-  const lfmU=localStorage.getItem('sf_lfm_user'),lfmK=localStorage.getItem('sf_lfm_key');
-  if(lfmU&&lfmK){lfmUser=lfmU;lfmUserKey=lfmK;onLFMOn();}
-  // Restore Spotify — skip when the ?code= belongs to a Supabase sign-in.
-  const _q=new URLSearchParams(window.location.search);
-  const spCode=_q.get('auth')==='supabase'?null:_q.get('code');
-  if(spCode)exToken(spCode);
-  const spSaved=localStorage.getItem('sf_sp');if(spSaved){spToken=spSaved;onSpOn();}
   if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();
 
   // ── Restore BG & Glass slider settings ──────────────────────
@@ -1391,22 +1002,26 @@ function loadQuote(){
 // ── THEME ─────────────────────────────────────────────────────
 // Default theme backgrounds (Cloudinary URLs)
 const THEME_DEFAULT_BG = {
-  cyber:   'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779360397/cyber_lcuwfu.mp4',
   lofi:    'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779389584/Video_Project_oqt9aw.mp4',
   greens:  'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779365046/river_mmya3j.mp4',
   'cherry-blues': 'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779371239/blues_2_onb2j0.mp4',
-  'edo-gold': 'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779476639/sunrays-in-the-japanese-living-room.1920x1080_ikc5ue.mp4',
   moonlight: 'https://res.cloudinary.com/dsmqfgweb/video/upload/v1779706166/1768922296_radpl7.mp4'
 };
 
-let currentTheme = localStorage.getItem('sf_theme') || 'cyber';
+// Lofi is the default: it carries the cosy study-room look best.
+// 'cyber' and 'edo-gold' were retired — migrate anyone still stored on them.
+const RETIRED_THEMES = ['cyber', 'edo-gold'];
+let currentTheme = localStorage.getItem('sf_theme') || 'lofi';
+if (RETIRED_THEMES.indexOf(currentTheme) !== -1) {
+  currentTheme = 'lofi';
+  try { localStorage.setItem('sf_theme', currentTheme); } catch(e) {}
+}
 
 async function applyTheme(t) {
   currentTheme = t;
   document.body.classList.toggle('theme-lofi',   t === 'lofi');
   document.body.classList.toggle('theme-greens', t === 'greens');
   document.body.classList.toggle('theme-cherry-blues', t === 'cherry-blues');
-  document.body.classList.toggle('theme-edo-gold', t === 'edo-gold');
   document.body.classList.toggle('theme-moonlight', t === 'moonlight');
   document.querySelectorAll('.theme-option').forEach(el => {
     el.classList.toggle('selected', el.id === 'theme-' + t);
@@ -1460,14 +1075,14 @@ function removeDefaultBg() {
   // Also clear any cached/saved bg so it doesn't override the removal
   clearBgForTheme(currentTheme);
   applyBgFromRecord(null, currentTheme);
-  showToast('// default bg removed');
+  showToast('default bg removed');
   updateRemoveDefaultBtnVisibility();
 }
 
 function restoreDefaultBg() {
   localStorage.removeItem('sf_defbg_removed_' + currentTheme);
   applyDefaultThemeBg(currentTheme);
-  showToast('// default bg restored');
+  showToast('default bg restored');
   updateRemoveDefaultBtnVisibility();
 }
 
@@ -1482,8 +1097,8 @@ function updateRemoveDefaultBtnVisibility() {
 
 function setTheme(t) {
   applyTheme(t);
-  const msgs = { lofi: '✿ lofi theme', cyber: '// cyber theme', greens: '⬡ greens theme', 'cherry-blues': '✦ cherry blues theme', 'edo-gold': '⛩ edo gold theme', moonlight: '☽ moonlight theme' };
-  showToast(msgs[t] || '// theme applied');
+  const msgs = { lofi: '✿ lofi theme', greens: '⬡ greens theme', 'cherry-blues': '✦ cherry blues theme', moonlight: '☽ moonlight theme' };
+  showToast(msgs[t] || 'theme applied');
   updateRemoveDefaultBtnVisibility();
 }
 
@@ -1503,20 +1118,6 @@ function toggleThemePanel() {
 
 // ── PROGRESS ANIMALS ─────────────────────────────────────────
 const THEME_ANIMALS = {
-  cyber: `<svg viewBox="0 0 24 26" xmlns="http://www.w3.org/2000/svg">
-    <line x1="12" y1="0" x2="12" y2="4" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round"/>
-    <circle cx="12" cy="0" r="1.8" fill="#c084fc" opacity="0.9"/>
-    <rect x="5" y="4" width="14" height="11" rx="2.5" fill="rgba(192,132,252,0.12)" stroke="#c084fc" stroke-width="1.3"/>
-    <rect x="7.5" y="7.5" width="3.5" height="3.5" rx="1" fill="#c084fc" class="robot-eye"/>
-    <rect x="13" y="7.5" width="3.5" height="3.5" rx="1" fill="#c084fc" class="robot-eye"/>
-    <line x1="9.5" y1="14" x2="9.5" y2="15" stroke="#c084fc" stroke-width="1.5"/>
-    <rect x="8" y="15" width="8" height="6" rx="1.5" fill="rgba(192,132,252,0.1)" stroke="#c084fc" stroke-width="1.3"/>
-    <line x1="9.5" y1="21" x2="8.5" y2="26" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="14.5" y1="21" x2="15.5" y2="26" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="4.5" y1="8" x2="5" y2="11" stroke="#c084fc" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
-    <line x1="19.5" y1="8" x2="19" y2="11" stroke="#c084fc" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
-  </svg>`,
-
   lofi: `<svg viewBox="0 0 24 28" xmlns="http://www.w3.org/2000/svg">
     <!-- Tail (behind body, drawn first) -->
     <path d="M16 23 Q22 21 22 14 Q22 9 17 11.5" stroke="#f9a8d4" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1595,37 +1196,13 @@ const THEME_ANIMALS = {
     <circle cx="3" cy="5" r="0.5" fill="#f0e890" opacity="0.8"/>
     <line x1="3" y1="3.6" x2="3" y2="4.4" stroke="#f0e890" stroke-width="0.4" opacity="0.6"/>
     <line x1="1.6" y1="5" x2="2.4" y2="5" stroke="#f0e890" stroke-width="0.4" opacity="0.6"/>
-  </svg>`,
-  'edo-gold': `<svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-    <!-- Stem -->
-    <line x1="14" y1="26" x2="14" y2="17" stroke="#c8a84b" stroke-width="1.4" stroke-linecap="round"/>
-    <!-- Leaves -->
-    <path d="M14 22 Q10 20 9 17 Q12 18 14 22Z" fill="rgba(232,197,106,0.35)" stroke="#e8c56a" stroke-width="0.9"/>
-    <path d="M14 20 Q18 18 19 15 Q16 17 14 20Z" fill="rgba(232,197,106,0.25)" stroke="#e8c56a" stroke-width="0.9"/>
-    <!-- Petals — 8 around center -->
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.9" transform="rotate(0 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.85" transform="rotate(45 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.9" transform="rotate(90 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.85" transform="rotate(135 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.9" transform="rotate(180 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.85" transform="rotate(225 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.9" transform="rotate(270 14 13)"/>
-    <ellipse cx="14" cy="7.2" rx="1.6" ry="3.2" fill="#e8c56a" opacity="0.85" transform="rotate(315 14 13)"/>
-    <!-- Center disk -->
-    <circle cx="14" cy="13" r="3.8" fill="rgba(90,50,5,0.85)" stroke="#e8c56a" stroke-width="1.1"/>
-    <!-- Seed pattern dots -->
-    <circle cx="13" cy="12.2" r="0.5" fill="rgba(232,197,106,0.7)"/>
-    <circle cx="15" cy="12.2" r="0.5" fill="rgba(232,197,106,0.7)"/>
-    <circle cx="14" cy="13.8" r="0.5" fill="rgba(232,197,106,0.7)"/>
-    <circle cx="12.3" cy="13.6" r="0.4" fill="rgba(232,197,106,0.5)"/>
-    <circle cx="15.7" cy="13.6" r="0.4" fill="rgba(232,197,106,0.5)"/>
   </svg>`
 };
 
 function updateAnimalSVG(theme) {
   const animal = document.getElementById('progressAnimal');
   if (!animal) return;
-  const svg = THEME_ANIMALS[theme] || THEME_ANIMALS.cyber;
+  const svg = THEME_ANIMALS[theme] || THEME_ANIMALS.lofi;
   animal.innerHTML = svg;
 }
 
@@ -1644,34 +1221,6 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 1000);
-
-// ── API KEY TOOLTIP ────────────────────────────────────────
-(function() {
-  const tip  = document.getElementById('apiKeyTooltip');
-  let timer  = null;
-
-  function show(el) {
-    const r = el.getBoundingClientRect();
-    tip.style.left = (r.left + r.width / 2) + 'px';
-    tip.style.top  = (r.top - 10) + 'px';           /* sits above the tab */
-    tip.classList.add('visible');
-  }
-
-  function hide() {
-    clearTimeout(timer);
-    tip.classList.remove('visible');
-  }
-
-  ['tabSpotify', 'tabLastfm'].forEach(function(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('mouseenter', function() {
-      timer = setTimeout(function() { show(el); }, 350);
-    });
-    el.addEventListener('mouseleave', hide);
-    el.addEventListener('click', hide);           /* hide immediately on click */
-  });
-})();
 
 init();
 
@@ -1768,7 +1317,7 @@ window.Room = (function(){
 
   function join(c){
     const cl = sb();
-    if (!cl){ toast('// realtime unavailable'); return; }
+    if (!cl){ toast('realtime unavailable'); return; }
     if (channel) leave(true);
     code = c; status = 'connecting'; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
@@ -1783,9 +1332,9 @@ window.Room = (function(){
         status = 'joined';
         try { channel.track({ at: Date.now() }); } catch(e){}
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
-        setUrl(c); toast('// joined room '+c); updateUI();
+        setUrl(c); toast('joined room '+c); updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
-        status = 'error'; updateUI(); toast('// room connection failed');
+        status = 'error'; updateUI(); toast('room connection failed');
       }
     });
   }
@@ -1796,7 +1345,7 @@ window.Room = (function(){
     const cl = sb();
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
     channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
-    if (!silent) toast('// left room');
+    if (!silent) toast('left room');
     updateUI();
   }
 
@@ -1806,7 +1355,7 @@ window.Room = (function(){
 
   function copyLink(){
     const url = link(code);
-    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('// link copied'); }); }
+    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('link copied'); }); }
   }
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -1839,7 +1388,7 @@ window.Room = (function(){
   function joinFromInput(){
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
-    if (v.length >= 4) join(v); else toast('// code too short');
+    if (v.length >= 4) join(v); else toast('code too short');
   }
 
   function closeOtherPanels(){
@@ -1926,7 +1475,7 @@ window.Auth = (function(){
         const q = new URLSearchParams(location.search);
         if (q.get('auth') === 'supabase' && q.get('code')){
           const r = await cl.auth.exchangeCodeForSession(q.get('code'));
-          if (r.error) toast('// sign-in failed: ' + r.error.message);
+          if (r.error) toast('sign-in failed: ' + r.error.message);
           cleanUrl();
         }
         const s = await cl.auth.getSession();
@@ -1941,12 +1490,12 @@ window.Auth = (function(){
 
   async function google(){
     const cl = window.SB.get();
-    if (!cl) return toast('// auth unavailable');
+    if (!cl) return toast('auth unavailable');
     const r = await cl.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
     });
-    if (r.error) toast('// ' + r.error.message);
+    if (r.error) toast(r.error.message);
   }
 
   async function signUp(email, password, displayName){
@@ -1973,7 +1522,7 @@ window.Auth = (function(){
     const cl = window.SB.get();
     if (!cl) return;
     await cl.auth.signOut();
-    toast('// signed out — your local stats stay on this device');
+    toast('signed out — your local stats stay on this device');
   }
 
   async function rename(newName){
@@ -2047,11 +1596,11 @@ window.Study = (function(){
     const n = String(raw || '').trim().slice(0, 40);
     if (!n) return false;
     if (all().some(function(s){ return s.toLowerCase() === n.toLowerCase(); })){
-      toast('// "' + n + '" already exists'); return false;
+      toast('"' + n + '" already exists'); return false;
     }
     const c = customs(); c.push(n); writeJSON(K_CUSTOM, c);
     setCurrent(n);
-    toast('// added subject: ' + n);
+    toast('added subject: ' + n);
     return true;
   }
   function removeCustom(n){
@@ -2288,13 +1837,13 @@ window.Study = (function(){
 
     body.innerHTML =
       authBlock() +
-      '<div class="study-sec-label">// my week</div>' +
+      '<div class="study-sec-label">my week</div>' +
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
         '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
       '</div>' +
       standingBlock() +
-      '<div class="study-sec-label">// this week\'s board</div>' +
+      '<div class="study-sec-label">this week\'s board</div>' +
       filter +
       boardBlock() +
       '<div class="study-hint">the board resets every Monday</div>';
@@ -2323,11 +1872,11 @@ window.Study = (function(){
     const em = (document.getElementById('authEmail')||{}).value || '';
     const pw = (document.getElementById('authPass')||{}).value || '';
     const nm = (document.getElementById('authName')||{}).value || '';
-    if (!em.trim() || !pw){ toast('// email and password required'); return; }
+    if (!em.trim() || !pw){ toast('email and password required'); return; }
     const r = (authMode === 'signup')
       ? await window.Auth.signUp(em.trim(), pw, (nm.trim() || em.split('@')[0]).slice(0,24))
       : await window.Auth.signIn(em.trim(), pw);
-    toast('// ' + r.msg);
+    toast(r.msg);
     if (r.ok){ authMode = 'none'; loadBoard(); }
     render();
   }
@@ -2338,7 +1887,7 @@ window.Study = (function(){
     const n = window.prompt('Display name (shown on the leaderboard)', window.Auth.name());
     if (n == null) return;
     const r = await window.Auth.rename(n);
-    toast('// ' + r.msg);
+    toast(r.msg);
     if (r.ok) loadBoard();
     render();
   }
@@ -2400,7 +1949,7 @@ window.Goals = (function(){
       items = carried;
       localStorage.setItem(K_DAY, t);
       save();
-      if (dropped > 0) setTimeout(function(){ toast('// new day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
+      if (dropped > 0) setTimeout(function(){ toast('new day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
     }
     if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
   }
@@ -2489,7 +2038,7 @@ window.Goals = (function(){
     g.updated = Date.now();
     if (g.progress >= g.est && !g.done){
       g.done = true;
-      toast('// goal complete: ' + g.title);
+      toast('goal complete: ' + g.title);
       const next = items.filter(function(x){ return !x.done; })[0];
       activeId = next ? next.id : null;
     }
@@ -2603,7 +2152,7 @@ window.Goals = (function(){
       const a = active();
       if (a && a.title === v) return;
       add(v, 1);
-      toast('// added to today\'s goals');
+      toast('added to today\'s goals');
     });
 
     if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });

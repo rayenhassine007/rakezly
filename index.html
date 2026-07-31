@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="google-site-verification" content="pROm9li1Swu3KFEX_KdQjbNA8KvtEBbxRanenVgUUa4" />
 <title>Rakezly</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0a14'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23c084fc' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23c084fc'/%3E%3Cline x1='16' y1='7' x2='16' y2='4' stroke='%23c084fc' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='16' y1='28' x2='16' y2='25' stroke='%23c084fc' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='7' y1='16' x2='4' y2='16' stroke='%23c084fc' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='16' x2='25' y2='16' stroke='%23c084fc' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1520'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23f9a8d4' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23f9a8d4'/%3E%3Cline x1='16' y1='7' x2='16' y2='4' stroke='%23f9a8d4' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='16' y1='28' x2='16' y2='25' stroke='%23f9a8d4' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='7' y1='16' x2='4' y2='16' stroke='%23f9a8d4' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='16' x2='25' y2='16' stroke='%23f9a8d4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <script src="https://w.soundcloud.com/player/api.js" async></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=DM+Sans:wght@300;400&family=Nunito:wght@300;400;600;700&family=Architects+Daughter&family=Zen+Kaku+Gothic+New:wght@300;400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&family=Lato:wght@300;400;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Manrope:wght@300;400;500;600;700&family=Cinzel:wght@400;600;700&family=Jost:wght@300;400;500;600&family=Josefin+Sans:wght@100;200;300;400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
+<body class="theme-lofi">
 
 <!-- Video background -->
 <div id="bgWrap">
@@ -28,7 +28,7 @@
 
 <!-- Fixed Clock at Bottom Left -->
 <div class="clock-fixed">
-  <div class="cycles-label">// current time</div>
+  <div class="cycles-label">Current time</div>
   <div class="live-clock" id="liveClock" style="margin:0;">
     <span id="clockHours">00</span><span class="clock-sep">:</span><span id="clockMins">00</span><span class="clock-sep">:</span><span id="clockSecs">00</span><span id="clockAmpm" class="clock-ampm"></span>
   </div>
@@ -54,19 +54,19 @@
 
 <!-- Study / leaderboard panel -->
 <div id="studyPanel" class="study-panel">
-  <div class="study-panel-title">// study time</div>
+  <div class="study-panel-title">Study time</div>
   <div id="studyBody"></div>
 </div>
 
 <!-- Shared Room panel -->
 <div id="roomPanel" class="room-panel">
-  <div class="room-panel-title">// shared room</div>
+  <div class="room-panel-title">Shared room</div>
   <div id="roomBody"></div>
 </div>
 
 <!-- Music Player Panel -->
 <div class="player-panel" id="playerPanel">
-  <div class="player-panel-title">// music player</div>
+  <div class="player-panel-title">Music player</div>
   <div class="player-source-badges">
     <span class="player-badge" data-src="youtube">▶ YouTube</span>
     <span class="player-badge" data-src="spotify">◉ Spotify</span>
@@ -95,7 +95,7 @@
 
 <!-- Theme Panel -->
 <div class="theme-panel" id="themePanel">
-  <div class="theme-panel-title">// theme</div>
+  <div class="theme-panel-title">Theme</div>
   <div class="theme-option" id="theme-moonlight" onclick="setTheme('moonlight')">
     <div class="theme-option-swatch" style="background: linear-gradient(135deg, #050505 0%, #181818 50%, rgba(220,220,220,0.15) 100%); border-color: rgba(220,220,220,0.35);"></div>
     <div class="theme-option-info">
@@ -103,47 +103,33 @@
       <div class="theme-option-desc" style="font-style:italic;">silver · ethereal · cinematic</div>
     </div>
   </div>
-  <div class="theme-option selected" id="theme-cyber" onclick="setTheme('cyber')">
-    <div class="theme-option-swatch" style="background: linear-gradient(135deg, #0d0a14 0%, #1a0a2e 50%, #c084fc22 100%); border-color: rgba(192,132,252,0.3);"></div>
-    <div class="theme-option-info">
-      <div class="theme-option-name">// Cyber</div>
-      <div class="theme-option-desc">purple neon · mono · glitch</div>
-    </div>
-  </div>
-  <div class="theme-option" id="theme-lofi" onclick="setTheme('lofi')">
+  <div class="theme-option selected" id="theme-lofi" onclick="setTheme('lofi')">
     <div class="theme-option-swatch" style="background: linear-gradient(135deg, #1a1520 0%, #2d1040 50%, #f9a8d422 100%); border-color: rgba(249,168,212,0.3);"></div>
     <div class="theme-option-info">
-      <div class="theme-option-name">✿ Lofi</div>
+      <div class="theme-option-name">Lofi</div>
       <div class="theme-option-desc">soft pink · warm · cozy</div>
     </div>
   </div>
   <div class="theme-option" id="theme-greens" onclick="setTheme('greens')">
     <div class="theme-option-swatch" style="background: linear-gradient(135deg, #0a140d 0%, #0d2b14 50%, #4ade8022 100%); border-color: rgba(74,222,128,0.3);"></div>
     <div class="theme-option-info">
-      <div class="theme-option-name">⬡ Greens</div>
+      <div class="theme-option-name">Greens</div>
       <div class="theme-option-desc">emerald · nature · serene</div>
     </div>
   </div>
   <div class="theme-option" id="theme-cherry-blues" onclick="setTheme('cherry-blues')">
     <div class="theme-option-swatch" style="background: linear-gradient(135deg, #080d1a 0%, #10254d 46%, #ff6b9d33 100%); border-color: rgba(255,107,157,0.35);"></div>
     <div class="theme-option-info">
-      <div class="theme-option-name">✦ Cherry Blues</div>
+      <div class="theme-option-name">Cherry Blues</div>
       <div class="theme-option-desc">deep blue · cherry glow · elegant</div>
-    </div>
-  </div>
-  <div class="theme-option" id="theme-edo-gold" onclick="setTheme('edo-gold')">
-    <div class="theme-option-swatch" style="background: linear-gradient(135deg, #120c02 0%, #2a1a04 50%, #e8c56a28 100%); border-color: rgba(232,197,106,0.4);"></div>
-    <div class="theme-option-info">
-      <div class="theme-option-name">⛩ Edo Gold</div>
-      <div class="theme-option-desc">warm gold · japanese · lantern glow</div>
     </div>
   </div>
 </div>
 
 <!-- BG Control Panel -->
 <div class="bg-panel" id="bgPanel">
-  <div class="bg-panel-title">// background</div>
-  <div class="bg-theme-badge" id="bgThemeBadge">// cyber bg</div>
+  <div class="bg-panel-title">Background</div>
+  <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
   <label class="bg-upload-area" id="uploadArea">
     <input type="file" id="mediaUpload" accept="video/*,image/*,text/html,.html" onchange="loadMedia(event)">
     <span class="upload-icon">⊕</span>
@@ -161,7 +147,7 @@
       <span class="bg-slider-val" id="blurVal">0px</span>
     </div>
     <div class="bg-panel-divider"></div>
-    <div class="bg-panel-section">// cards glass</div>
+    <div class="bg-panel-section">Card glass</div>
     <div class="bg-slider-row">
       <span class="bg-slider-label">opac</span>
       <input type="range" class="bg-slider" id="glassOpacSlider" min="0" max="80" value="28" oninput="setGlassOpac(this.value)">
@@ -185,7 +171,7 @@
 
 <!-- Settings Slide Panel -->
 <div class="settings-slide-panel" id="settingsSlidePanel">
-  <div class="bg-panel-title">// settings</div>
+  <div class="bg-panel-title">Settings</div>
   <div class="settings-row">
     <div class="setting-item">
       <label>Focus</label>
@@ -249,7 +235,7 @@
     <!-- Daily Goals -->
     <div class="card goals-card">
       <div class="goals-head">
-        <div class="cycles-label">// Daily Goals</div>
+        <div class="cycles-label">Daily goals</div>
         <div class="goals-count" id="goalsCount">0/0</div>
       </div>
       <div class="goals-list" id="goalsList"></div>
@@ -259,19 +245,6 @@
         <button class="goal-add-btn" onclick="Goals.addFromInput()" title="add goal">+</button>
       </div>
       <div class="goals-hint">click a goal to focus it — finished sessions count toward it</div>
-    </div>
-
-    <!-- Study time summary -->
-    <div class="card study-mini-card">
-      <div class="goals-head">
-        <div class="cycles-label">// Study Time</div>
-        <button class="study-mini-btn" onclick="Study.togglePanel()">board</button>
-      </div>
-      <div class="study-mini-nums">
-        <div class="study-mini-item"><span class="study-mini-val" id="studyToday">0m</span><div class="stat-label">Today</div></div>
-        <div class="study-mini-item"><span class="study-mini-val" id="studyWeek">0m</span><div class="stat-label">This_Week</div></div>
-      </div>
-      <div class="study-mini-bars" id="studyMiniBars"></div>
     </div>
 
   </div>
@@ -286,7 +259,7 @@
     <!-- Cycles -->
     <div class="card" style="width:100%;max-width:460px;">
       <div class="cycles-header">
-        <div class="cycles-label">// Pomodoro Cycles</div>
+        <div class="cycles-label">Pomodoro cycles</div>
       </div>
       <div class="cycles-row" id="cyclesRow"></div>
     </div>
@@ -296,7 +269,7 @@
       <div class="mode-tabs">
         <button class="mode-tab active" onclick="switchMode('work')">Focus</button>
         <button class="mode-tab bt" onclick="switchMode('break')">Break</button>
-        <button class="mode-tab lt" onclick="switchMode('long')">Long_Break</button>
+        <button class="mode-tab lt" onclick="switchMode('long')">Long break</button>
       </div>
       <div class="timer-display wc" id="timerDisplay">
         <span id="tMins">25</span><span class="colon">:</span><span id="tSecs">00</span>
@@ -315,10 +288,10 @@
         <button class="btn-qadd btn-qsub" onclick="addMins(-5)">-5</button>
       </div>
       <div class="task-input-row">
-        <input class="task-input" id="taskInput" type="text" placeholder="// what are you working on?">
+        <input class="task-input" id="taskInput" type="text" placeholder="What are you working on?">
       </div>
       <div class="subject-row">
-        <span class="subject-label">// subject</span>
+        <span class="subject-label">Subject</span>
         <select class="subject-select" id="subjectSelect" onchange="Study.onSelect(this)"></select>
       </div>
     </div>
@@ -328,95 +301,17 @@
   <!-- ── RIGHT COLUMN ── -->
   <div class="col-right">
 
-    <!-- Stats -->
-    <div class="card stats-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div class="cycles-label">// Session Stats</div>
-        <button onclick="resetStats()" style="background:transparent;border:1px solid var(--glass-border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:9px;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:0.5px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--cyan)';this.style.color='var(--cyan)';" onmouseout="this.style.borderColor='var(--glass-border)';this.style.color='var(--muted)';">[ reset ]</button>
+    <!-- Study time summary -->
+    <div class="card study-mini-card">
+      <div class="goals-head">
+        <div class="cycles-label">Study time</div>
+        <button class="study-mini-btn" onclick="Study.togglePanel()">board</button>
       </div>
-      <div class="stats-row">
-        <div class="stat-item"><span class="stat-value" id="s1">0</span><div class="stat-label">Pomodoros</div></div>
-        <div class="stat-item"><span class="stat-value" id="s2">0m</span><div class="stat-label">Focus_Time</div></div>
-        <div class="stat-item"><span class="stat-value" id="s3">0</span><div class="stat-label">Streak</div></div>
+      <div class="study-mini-nums">
+        <div class="study-mini-item"><span class="study-mini-val" id="studyToday">0m</span><div class="stat-label">Today</div></div>
+        <div class="study-mini-item"><span class="study-mini-val" id="studyWeek">0m</span><div class="stat-label">This week</div></div>
       </div>
-    </div>
-
-    <!-- Music Card (Last.fm + Spotify tabbed) -->
-    <div class="card spotify-card">
-      <!-- Tab buttons -->
-      <div class="music-tabs">
-        <button class="music-tab active" id="tabSpotify" onclick="switchMusicTab('spotify');spTabClick()">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-          Spotify
-          <span class="secret-badge"></span>
-        </button>
-        <button class="music-tab" id="tabLastfm" onclick="switchMusicTab('lastfm');lfmTabClick()">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M10.584 17.21l-.88-2.392s-1.43 1.596-3.573 1.596c-1.897 0-3.244-1.65-3.244-4.288 0-3.381 1.704-4.591 3.382-4.591 2.419 0 3.189 1.567 3.849 3.574l.88 2.722c.88 2.667 2.556 4.811 7.367 4.811 3.452 0 5.79-1.057 5.79-3.836 0-2.25-1.29-3.41-3.685-3.97l-1.782-.385c-1.234-.275-1.595-.77-1.595-1.595 0-.935.742-1.485 1.952-1.485 1.32 0 2.033.494 2.143 1.677l2.75-.33c-.22-2.474-1.925-3.491-4.729-3.491-2.474 0-4.894.935-4.894 3.932 0 1.87.907 3.051 3.189 3.63l1.897.467c1.402.33 1.952.908 1.952 1.842 0 1.1-.99 1.54-2.915 1.54-2.832 0-4.013-1.485-4.7-3.52l-.907-2.75C12.16 7.37 10.474 5.5 6.956 5.5 3.106 5.5.5 7.975.5 12.181c0 4.04 2.39 6.319 5.982 6.319 3.106 0 4.702-1.29 4.702-1.29z"/></svg>
-          Last.fm
-          <span class="secret-badge" style="animation-delay:0.7s"></span>
-        </button>
-      </div>
-      <!-- Spotify panel -->
-      <div class="music-panel" id="panelSpotify">
-        <div class="spotify-header">
-          <div class="spotify-label" id="spLabel"><div class="spotify-dot" id="spDot"></div>// Spotify</div>
-          <button class="btn-sp" id="spBtn" onclick="handleSP()">Connect</button>
-        </div>
-        <div class="now-playing" id="nowPlaying">
-          <div class="album-art"><img id="albumArt" src="" alt="art"></div>
-          <div class="track-info">
-            <div class="track-name" id="trackName">—</div>
-            <div class="track-artist" id="trackArtist">—</div>
-            <div class="sp-now-badge">▶ now playing</div>
-            <div class="track-bar-wrap"><div class="track-bar-fill sp" id="trackFill"></div></div>
-            <div class="track-times"><span id="tPos">0:00</span><span id="tDur">0:00</span></div>
-          </div>
-        </div>
-        <div class="sp-idle" id="spIdle">// connect your spotify to see what's playing</div>
-        <!-- Hidden API Settings — unlocked by clicking Spotify button 5x -->
-        <div class="api-settings-panel" id="apiSettingsPanel">
-          <div class="api-settings-title">⚙ Client ID</div>
-          <div class="api-field">
-            <input id="apiClientId" type="text" placeholder="paste your spotify client id here">
-          </div>
-          <div class="api-btn-row">
-            <button class="api-save-btn" onclick="saveApiSettings()">[ Save ]</button>
-          </div>
-        </div>
-      </div>
-      <!-- Last.fm panel -->
-      <div class="music-panel" id="panelLastfm" style="display:none">
-        <div class="spotify-header">
-          <div class="spotify-label"><div class="lfm-dot" id="lfmDot"></div>// Last.fm</div>
-          <button class="btn-lfm" id="lfmBtn" onclick="handleLFM()">Connect</button>
-        </div>
-        <div class="now-playing" id="lfmNowPlaying">
-          <div class="album-art"><img id="lfmAlbumArt" src="" alt="art"></div>
-          <div class="track-info">
-            <div class="track-name" id="lfmTrackName">—</div>
-            <div class="track-artist" id="lfmTrackArtist">—</div>
-            <div class="lfm-source-badge" id="lfmSourceBadge"></div>
-            <div class="track-bar-wrap"><div class="track-bar-fill lfm" id="lfmTrackFill" style="width:100%"></div></div>
-            <div class="lfm-time-row"><span id="lfmElapsed">0:00</span><span id="lfmDuration">—</span></div>
-          </div>
-        </div>
-        <div class="sp-idle" id="lfmIdle">// enter your Last.fm username to see what's playing</div>
-        <!-- Hidden API Settings — unlocked by clicking Last.fm tab 5x -->
-        <div class="api-settings-panel" id="lfmApiPanel">
-          <div class="api-settings-title" style="color:#e04040;text-shadow:0 0 8px rgba(224,64,64,0.5);">⚙ Last.fm Settings</div>
-          <div class="api-field">
-            <label>API Key</label>
-            <input id="lfmApiKey" type="text" placeholder="paste your last.fm api key here">
-          </div>
-          <div class="api-field">
-            <label>Username</label>
-            <input id="lfmApiUser" type="text" placeholder="your last.fm username">
-          </div>
-          <div class="api-btn-row">
-            <button class="api-save-btn" style="color:#e04040;border-color:#e04040;background:rgba(224,64,64,0.08);" onclick="saveLfmSettings()">[ Save ]</button>
-          </div>
-        </div>
-      </div>
+      <div class="study-mini-bars" id="studyMiniBars"></div>
     </div>
 
     <!-- Motivational quote -->
@@ -429,9 +324,6 @@
 
 </div>
 <div class="toast" id="toast"></div>
-
-<!-- API key tooltip (shown on 1s hover over Spotify / Last.fm tabs) -->
-<div id="apiKeyTooltip">click 5× to configure API key</div>
 
 <script src="/script.js"></script>
 <script type="module" src="/analytics.js"></script>
