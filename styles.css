@@ -54,6 +54,9 @@
   /* Type */
   --font-body:    'Nunito', system-ui, sans-serif;
   --font-display: 'Manrope', system-ui, sans-serif;
+
+  /* Fallback shown under the theme video */
+  --bg-grad: linear-gradient(155deg, #1a1520 0%, #2d1040 52%, #4d2140 100%);
 }
 
 html, body { height: 100%; }
@@ -101,6 +104,7 @@ body.theme-greens {
   --glass-bg:     rgba(16, 42, 26, 0.55);
   --glass-border: rgba(110, 231, 168, 0.16);
   --radius: 14px; --radius-sm: 9px;
+  --bg-grad: linear-gradient(155deg, #0d1a10 0%, #123524 52%, #174a31 100%);
   --font-body:    'Manrope', system-ui, sans-serif;
   --font-display: 'Manrope', system-ui, sans-serif;
 }
@@ -119,6 +123,7 @@ body.theme-cherry-blues {
   --glass-bg:     rgba(17, 32, 60, 0.58);
   --glass-border: rgba(143, 197, 255, 0.18);
   --radius: 20px; --radius-sm: 12px;
+  --bg-grad: linear-gradient(155deg, #0b1222 0%, #16294d 52%, #3d1f3a 100%);
   --font-body:    'Manrope', system-ui, sans-serif;
   --font-display: 'Manrope', system-ui, sans-serif;
 }
@@ -138,6 +143,7 @@ body.theme-moonlight {
   --glass-bg:     rgba(24, 24, 24, 0.62);
   --glass-border: rgba(220, 220, 220, 0.15);
   --radius: 6px; --radius-sm: 4px;
+  --bg-grad: linear-gradient(155deg, #070707 0%, #191919 52%, #2b2b2b 100%);
   --font-body:    'Josefin Sans', system-ui, sans-serif;
   --font-display: 'Cinzel', Georgia, serif;
 }
@@ -147,9 +153,13 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 
 /* ── 3. Background layers ────────────────────────────────────────────────── */
 
+/* The gradient is a permanent floor under the media layer. If a theme video
+   is slow, blocked or missing, the page still looks finished instead of
+   showing a flat colour — and the video simply fades in on top of it. */
 #bgWrap {
   position: fixed; inset: 0; z-index: -2;
   overflow: hidden; pointer-events: none;
+  background: var(--bg-grad);
 }
 
 /* Overshoots the viewport so the blur filter has material to sample at the
@@ -176,16 +186,14 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 }
 #bgWrap video.ready, #bgWrap iframe.ready { opacity: 1; }
 
+/* The ONLY darkening layer. An earlier revision stacked a vignette on top of
+   this, which meant up to 45% extra black over a dim value the student had
+   already chosen — backgrounds looked washed out and there was no way to turn
+   it off. The dim slider is the single control now. */
 #bgOverlay {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: rgba(0, 0, 0, 0.6);          /* the dim slider writes this */
   transition: background .3s var(--ease);
-}
-/* Vignette so cards always have something to sit against, whatever video
-   the student uploads. */
-#bgOverlay::after {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(120% 90% at 50% 0%, transparent 40%, rgba(0,0,0,.45) 100%);
 }
 
 

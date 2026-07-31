@@ -936,7 +936,12 @@ function init(){
   // Hide video element initially
   document.getElementById('bgVideo').style.display='none';
   // Preload both theme bgs into memory cache, then apply current theme
-  preloadAllBgs().then(() => applyTheme(currentTheme));
+  // Never let a storage failure block the background: if IndexedDB is
+  // unavailable (private mode, blocked storage, quota) the preload rejects,
+  // and without this catch applyTheme would never run at all.
+  preloadAllBgs()
+    .catch(e => console.warn('bg preload failed, continuing without cache', e))
+    .then(() => applyTheme(currentTheme));
   // Restore timer state from last session, or start fresh
   const restored = restoreTimerState();
   if (restored) {
@@ -1062,10 +1067,18 @@ function applyDefaultThemeBg(t) {
   frame.classList.remove('ready'); frame.src = '';
   document.body.style.backgroundImage = '';
   video.style.display = '';
+  video.classList.remove('ready');
   video.src = url;
   video.load();
   video.play().catch(() => {});
   video.oncanplay = () => video.classList.add('ready');
+  // If the video 404s or is blocked, say so instead of failing silently —
+  // the themed gradient behind #bgWrap stays visible either way.
+  video.onerror = () => {
+    video.classList.remove('ready');
+    console.warn('Theme background video failed to load:', url,
+                 '— falling back to the theme gradient.');
+  };
   document.getElementById('uploadText').textContent = 'Upload a video, image or HTML';
   document.getElementById('mediaUpload').value = '';
 }
