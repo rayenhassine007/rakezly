@@ -15,7 +15,7 @@ function toggleSettingsPanel() {
 document.addEventListener('click', (e) => {
   if (settingsPanelOpen &&
       !e.target.closest('#settingsSlidePanel') &&
-      !e.target.closest('.btn-settings-fixed')) {
+      !e.target.closest('#settingsFixedBtn')) {
     settingsPanelOpen = false;
     document.getElementById('settingsSlidePanel').classList.remove('open');
     document.getElementById('settingsFixedBtn').classList.remove('active');
@@ -140,12 +140,12 @@ async function clearBgForTheme(theme) {
 function updateBgBadge(theme) {
   const badge = document.getElementById('bgThemeBadge');
   const names = {
-    lofi: '✿ lofi bg',
-    greens: '⬡ greens bg',
-    'cherry-blues': '✦ cherry blues bg',
-    moonlight: '☽ moonlight bg'
+    lofi: 'Lofi',
+    greens: 'Greens',
+    'cherry-blues': 'Cherry Blues',
+    moonlight: 'Moonlight'
   };
-  if (badge) badge.textContent = (names[theme] || 'theme bg') + ' — assigned to this theme';
+  if (badge) badge.textContent = (names[theme] || 'This') + ' background';
 }
 
 // Cache Object URLs per theme — avoids recreating them on every switch
@@ -240,7 +240,7 @@ document.addEventListener('click', (e) => {
   const themePanel = document.getElementById('themePanel');
   if (themePanel.classList.contains('open') &&
       !e.target.closest('#themePanel') &&
-      !e.target.closest('.btn-theme-fixed')) {
+      !e.target.closest('#themeFixedBtn')) {
     themePanel.classList.remove('open');
     document.getElementById('themeFixedBtn').classList.remove('active');
   }
@@ -263,11 +263,11 @@ async function loadMedia(event) {
   await saveBgForTheme(currentTheme, file);
   // applyBgFromRecord will create and cache a fresh URL
   applyBgFromRecord(_bgCache[currentTheme], currentTheme);
-  showToast('bg saved for ' + themeLabel(currentTheme));
+  showToast('Background saved for ' + themeLabel(currentTheme));
 }
 
 function setDim(v) {
-  document.getElementById('bgOverlay').style.background = `rgba(13,10,20,${v/100})`;
+  document.getElementById('bgOverlay').style.background = `rgba(0,0,0,${v/100})`;
   document.getElementById('dimVal').textContent = v + '%';
   localStorage.setItem('sf_dim', v);
 }
@@ -293,7 +293,7 @@ function setGlass(v) {
 async function clearMedia() {
   await clearBgForTheme(currentTheme);
   applyBgFromRecord(null);
-  showToast('bg cleared for ' + themeLabel(currentTheme));
+  showToast('Background cleared for ' + themeLabel(currentTheme));
 }
 
 function setGlassOpac(v) {
@@ -502,7 +502,7 @@ function applySettings(){
   localStorage.setItem('sf_long', MODES.long);
   localStorage.setItem('sf_cycles', TOTAL_CYCLES);
   stopTimer(); clearTimerState(); initTimer('work'); renderCycles(); setTab('work');
-  showToast('settings applied'); toggleSettings();
+  showToast('Settings applied'); toggleSettings();
 }
 
 // ── TIMER ─────────────────────────────────────────────────────
@@ -580,11 +580,11 @@ function onDone(){
     const focusMins = Math.max(1, Math.round(totalSecs/60));
     if(window.Goals) Goals.onPomodoro();
     if(window.Study) Study.logSession(focusMins);
-    showToast('pomodoro complete — take a break');
+    showToast('Pomodoro complete — take a break');
     tryNotify('Pomodoro complete!','Time for a break.');
     playAlarm();
   }else{
-    showToast('break over — back to focus');
+    showToast('Break over — back to focus');
     tryNotify('Break over!','Back to work.');
     playAlarm();
   }
@@ -594,7 +594,7 @@ function onDone(){
 }
 function advance(){
   cycleIndex++;
-  if(cycleIndex>=seq.length){cycleIndex=0;showToast('full round complete — restarting');}
+  if(cycleIndex>=seq.length){cycleIndex=0;showToast('Round complete — starting over');}
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
@@ -626,7 +626,7 @@ function loadPlayerUrl() {
   const raw = document.getElementById('playerUrlInput').value.trim();
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
-  if (!embedUrl) { showToast('unsupported link'); return; }
+  if (!embedUrl) { showToast('That link is not supported'); return; }
   const iframe   = document.getElementById('playerIframe');
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
@@ -663,7 +663,7 @@ function loadPlayerUrl() {
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
-  showToast('player loaded');
+  showToast('Player loaded');
   localStorage.setItem('sf_player_url', raw);
 }
 
@@ -721,7 +721,7 @@ function clearPlayer() {
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   document.getElementById('playerUrlInput').value = '';
   localStorage.removeItem('sf_player_url');
-  showToast('player cleared');
+  showToast('Player cleared');
 }
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
@@ -810,7 +810,7 @@ function ctrlNext() {
 }
 function ctrlLeft() {
   const src = getActiveSrc();
-  if (src === 'youtube') { ytPrevVideo(); showToast('prev video'); }
+  if (src === 'youtube') { ytPrevVideo(); showToast('Previous video'); }
   else if (src === 'soundcloud') scShuffle();
 }
 
@@ -898,12 +898,12 @@ function scPlayRandom() {
 function scShuffle() {
   scShuffleOn = !scShuffleOn;
   document.getElementById('ctrlShuffle').classList.toggle('active', scShuffleOn);
-  showToast(scShuffleOn ? 'shuffle on' : 'shuffle off');
+  showToast(scShuffleOn ? 'Shuffle on' : 'Shuffle off');
 }
 function scToggleRepeat() {
   scRepeatOn = !scRepeatOn;
   document.getElementById('ctrlRepeat').classList.toggle('active', scRepeatOn);
-  showToast(scRepeatOn ? 'repeat on' : 'repeat off');
+  showToast(scRepeatOn ? 'Repeat on' : 'Repeat off');
 }
 
 // Click badge to set placeholder example and highlight selection
@@ -960,7 +960,7 @@ function init(){
     btn.textContent = 'Start';
     if (remainSecs <= 0) { clearTimerState(); initTimer(mode); }
     renderCycles();
-    showToast('session restored ✓');
+    showToast('Session restored');
   } else {
     renderCycles(); initTimer('work');
   }
@@ -1075,14 +1075,14 @@ function removeDefaultBg() {
   // Also clear any cached/saved bg so it doesn't override the removal
   clearBgForTheme(currentTheme);
   applyBgFromRecord(null, currentTheme);
-  showToast('default bg removed');
+  showToast('Default background removed');
   updateRemoveDefaultBtnVisibility();
 }
 
 function restoreDefaultBg() {
   localStorage.removeItem('sf_defbg_removed_' + currentTheme);
   applyDefaultThemeBg(currentTheme);
-  showToast('default bg restored');
+  showToast('Default background restored');
   updateRemoveDefaultBtnVisibility();
 }
 
@@ -1317,7 +1317,7 @@ window.Room = (function(){
 
   function join(c){
     const cl = sb();
-    if (!cl){ toast('realtime unavailable'); return; }
+    if (!cl){ toast('Shared rooms are unavailable right now'); return; }
     if (channel) leave(true);
     code = c; status = 'connecting'; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
@@ -1332,9 +1332,9 @@ window.Room = (function(){
         status = 'joined';
         try { channel.track({ at: Date.now() }); } catch(e){}
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
-        setUrl(c); toast('joined room '+c); updateUI();
+        setUrl(c); toast('Joined room '+c); updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
-        status = 'error'; updateUI(); toast('room connection failed');
+        status = 'error'; updateUI(); toast('Could not connect to the room');
       }
     });
   }
@@ -1345,7 +1345,7 @@ window.Room = (function(){
     const cl = sb();
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
     channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
-    if (!silent) toast('left room');
+    if (!silent) toast('Left the room');
     updateUI();
   }
 
@@ -1355,7 +1355,7 @@ window.Room = (function(){
 
   function copyLink(){
     const url = link(code);
-    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('link copied'); }); }
+    if (navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ toast('Link copied'); }); }
   }
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -1369,26 +1369,26 @@ window.Room = (function(){
     if (!body) return;
     if (status === 'joined'){
       body.innerHTML =
-        '<div class="room-code-label">room code</div>' +
+        '<div class="room-code-label">Room code</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
         '<div class="room-peers"><span class="room-dot"></span>'+peers+' online</div>' +
-        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">copy</button></div>' +
-        '<div class="room-hint">share the link or code — everyone controls the timer</div>' +
-        '<button class="room-btn room-btn-leave" onclick="Room.leave()">leave room</button>';
+        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">Copy</button></div>' +
+        '<div class="room-hint">Share the link or code — everyone controls the timer</div>' +
+        '<button class="room-btn room-btn-leave" onclick="Room.leave()">Leave room</button>';
     } else {
       const connecting = (status === 'connecting');
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'connecting…':'create a room')+'</button>' +
-        '<div class="room-or">or join with a code</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">join</button></div>' +
-        (status === 'error' ? '<div class="room-err">connection failed — try again</div>' : '');
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'Connecting…':'Create a room')+'</button>' +
+        '<div class="room-or">Or join with a code</div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">Join</button></div>' +
+        (status === 'error' ? '<div class="room-err">Connection failed — try again</div>' : '');
     }
   }
 
   function joinFromInput(){
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
-    if (v.length >= 4) join(v); else toast('code too short');
+    if (v.length >= 4) join(v); else toast('That code is too short');
   }
 
   function closeOtherPanels(){
@@ -1475,7 +1475,7 @@ window.Auth = (function(){
         const q = new URLSearchParams(location.search);
         if (q.get('auth') === 'supabase' && q.get('code')){
           const r = await cl.auth.exchangeCodeForSession(q.get('code'));
-          if (r.error) toast('sign-in failed: ' + r.error.message);
+          if (r.error) toast('Sign-in failed: ' + r.error.message);
           cleanUrl();
         }
         const s = await cl.auth.getSession();
@@ -1490,7 +1490,7 @@ window.Auth = (function(){
 
   async function google(){
     const cl = window.SB.get();
-    if (!cl) return toast('auth unavailable');
+    if (!cl) return toast('Sign-in is unavailable right now');
     const r = await cl.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
@@ -1500,41 +1500,41 @@ window.Auth = (function(){
 
   async function signUp(email, password, displayName){
     const cl = window.SB.get();
-    if (!cl) return { ok:false, msg:'auth unavailable' };
+    if (!cl) return { ok:false, msg:'Sign-in is unavailable right now' };
     const r = await cl.auth.signUp({
       email: email, password: password,
       options: { data: { display_name: displayName } }
     });
     if (r.error) return { ok:false, msg:r.error.message };
-    if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'check your inbox to confirm your email' };
-    return { ok:true, msg:'welcome, ' + displayName };
+    if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'Check your inbox to confirm your email' };
+    return { ok:true, msg:'Welcome, ' + displayName };
   }
 
   async function signIn(email, password){
     const cl = window.SB.get();
-    if (!cl) return { ok:false, msg:'auth unavailable' };
+    if (!cl) return { ok:false, msg:'Sign-in is unavailable right now' };
     const r = await cl.auth.signInWithPassword({ email: email, password: password });
     if (r.error) return { ok:false, msg:r.error.message };
-    return { ok:true, msg:'signed in' };
+    return { ok:true, msg:'Signed in' };
   }
 
   async function signOut(){
     const cl = window.SB.get();
     if (!cl) return;
     await cl.auth.signOut();
-    toast('signed out — your local stats stay on this device');
+    toast('Signed out — your study time stays on this device');
   }
 
   async function rename(newName){
     const cl = window.SB.get();
-    if (!cl || !user) return { ok:false, msg:'not signed in' };
+    if (!cl || !user) return { ok:false, msg:'Not signed in' };
     const n = String(newName || '').trim();
-    if (n.length < 2 || n.length > 24) return { ok:false, msg:'name must be 2–24 characters' };
+    if (n.length < 2 || n.length > 24) return { ok:false, msg:'Name must be 2–24 characters' };
     const r = await cl.from('profiles').update({ display_name: n }).eq('id', user.id);
     if (r.error) return { ok:false, msg:r.error.message };
     profile = profile || {}; profile.display_name = n;
     emit();
-    return { ok:true, msg:'name updated' };
+    return { ok:true, msg:'Name updated' };
   }
 
   return { init:init, onChange:onChange, signedIn:signedIn, id:id, name:name,
@@ -1600,7 +1600,7 @@ window.Study = (function(){
     }
     const c = customs(); c.push(n); writeJSON(K_CUSTOM, c);
     setCurrent(n);
-    toast('added subject: ' + n);
+    toast('Added subject: ' + n);
     return true;
   }
   function removeCustom(n){
@@ -1683,7 +1683,7 @@ window.Study = (function(){
   // ── leaderboard ──
   async function loadBoard(){
     const cl = window.SB.get();
-    if (!cl){ boardErr = 'leaderboard unavailable'; render(); return; }
+    if (!cl){ boardErr = 'Leaderboard unavailable'; render(); return; }
     boardLoading = true; boardErr = ''; render();
     const subj = boardSubject || null;
     try {
@@ -1696,7 +1696,7 @@ window.Study = (function(){
         if (!s.error && s.data && s.data.length) standing = s.data[0];
       }
     } catch(e){
-      board = []; boardErr = (e && e.message) ? e.message : 'could not load the board';
+      board = []; boardErr = (e && e.message) ? e.message : 'Could not load the board';
     }
     boardLoading = false; render();
   }
@@ -1750,7 +1750,7 @@ window.Study = (function(){
     const rows = Object.keys(bs).map(function(k){ return { s:k, m:bs[k] }; })
                        .sort(function(a,b){ return b.m - a.m; }).slice(0, 4);
     if (!rows.length){
-      bars.innerHTML = '<div class="study-mini-empty">no sessions yet this week</div>';
+      bars.innerHTML = '<div class="study-mini-empty">No sessions yet this week</div>';
       return;
     }
     const max = rows[0].m || 1;
@@ -1769,18 +1769,18 @@ window.Study = (function(){
     if (inHtml){
       return '<div class="study-acct">' +
                '<div class="study-acct-who"><span class="study-dot"></span>'+esc(window.Auth.name())+'</div>' +
-               '<button class="study-link" onclick="Study.doRename()">rename</button>' +
-               '<button class="study-link" onclick="Study.doSignOut()">sign out</button>' +
+               '<button class="study-link" onclick="Study.doRename()">Rename</button>' +
+               '<button class="study-link" onclick="Study.doSignOut()">Sign out</button>' +
              '</div>';
     }
     let h = '<div class="study-guest">' +
-              '<div class="study-guest-msg">you\'re browsing as a guest — your time is saved on this device. sign in to appear on the board.</div>' +
-              '<button class="study-btn study-btn-google" onclick="Auth.google()">continue with Google</button>';
+              '<div class="study-guest-msg">You\'re a guest — your time is saved on this device. Sign in to appear on the board.</div>' +
+              '<button class="study-btn study-btn-google" onclick="Auth.google()">Continue with Google</button>';
     if (authMode === 'none'){
       h += '<div class="study-or">or</div>' +
            '<div class="study-authrow">' +
-             '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">sign in</button>' +
-             '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">create account</button>' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">Sign in</button>' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">Create account</button>' +
            '</div>';
     } else {
       const up = (authMode === 'signup');
@@ -1788,8 +1788,8 @@ window.Study = (function(){
              (up ? '<input class="study-input" id="authName" type="text" placeholder="display name" maxlength="24">' : '') +
              '<input class="study-input" id="authEmail" type="email" placeholder="email" autocomplete="email">' +
              '<input class="study-input" id="authPass" type="password" placeholder="password" autocomplete="'+(up?'new-password':'current-password')+'">' +
-             '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'create account':'sign in')+'</button>' +
-             '<button class="study-link" onclick="Study.setAuthMode(\'none\')">back</button>' +
+             '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'Create account':'Sign in')+'</button>' +
+             '<button class="study-link" onclick="Study.setAuthMode(\'none\')">Back</button>' +
            '</div>';
     }
     return h + '</div>';
@@ -1797,7 +1797,7 @@ window.Study = (function(){
 
   function standingBlock(){
     if (!window.Auth || !window.Auth.signedIn()) return '';
-    if (!standing) return '<div class="study-standing-empty">log a focus session to get your rank</div>';
+    if (!standing) return '<div class="study-standing-empty">Log a focus session to get your rank</div>';
     const pct = standing.percentile;
     return '<div class="study-standing">' +
              '<div class="study-rank">#'+standing.rank+'<span class="study-rank-of"> of '+standing.participants+'</span></div>' +
@@ -1807,7 +1807,7 @@ window.Study = (function(){
   }
 
   function boardBlock(){
-    if (boardLoading) return '<div class="study-board-msg">loading…</div>';
+    if (boardLoading) return '<div class="study-board-msg">Loading…</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
     return '<div class="study-board">' + board.map(function(r){
@@ -1829,7 +1829,7 @@ window.Study = (function(){
     if (!body || !panelOpen) return;
 
     let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-                 '<option value=""'+(boardSubject===''?' selected':'')+'>all subjects</option>';
+                 '<option value=""'+(boardSubject===''?' selected':'')+'>All subjects</option>';
     PRESETS.forEach(function(s){
       filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
     });
@@ -1846,7 +1846,7 @@ window.Study = (function(){
       '<div class="study-sec-label">this week\'s board</div>' +
       filter +
       boardBlock() +
-      '<div class="study-hint">the board resets every Monday</div>';
+      '<div class="study-hint">The board resets every Monday</div>';
   }
 
   function closeOtherPanels(){
@@ -1872,7 +1872,7 @@ window.Study = (function(){
     const em = (document.getElementById('authEmail')||{}).value || '';
     const pw = (document.getElementById('authPass')||{}).value || '';
     const nm = (document.getElementById('authName')||{}).value || '';
-    if (!em.trim() || !pw){ toast('email and password required'); return; }
+    if (!em.trim() || !pw){ toast('Email and password are required'); return; }
     const r = (authMode === 'signup')
       ? await window.Auth.signUp(em.trim(), pw, (nm.trim() || em.split('@')[0]).slice(0,24))
       : await window.Auth.signIn(em.trim(), pw);
@@ -1949,7 +1949,7 @@ window.Goals = (function(){
       items = carried;
       localStorage.setItem(K_DAY, t);
       save();
-      if (dropped > 0) setTimeout(function(){ toast('new day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
+      if (dropped > 0) setTimeout(function(){ toast('New day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
     }
     if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
   }
@@ -2038,7 +2038,7 @@ window.Goals = (function(){
     g.updated = Date.now();
     if (g.progress >= g.est && !g.done){
       g.done = true;
-      toast('goal complete: ' + g.title);
+      toast('Goal complete: ' + g.title);
       const next = items.filter(function(x){ return !x.done; })[0];
       activeId = next ? next.id : null;
     }
@@ -2099,7 +2099,7 @@ window.Goals = (function(){
 
     if (list){
       if (!items.length){
-        list.innerHTML = '<div class="goals-empty">no goals yet — add what you want to finish today</div>';
+        list.innerHTML = '<div class="goals-empty">Nothing yet — add what you want to finish today</div>';
       } else {
         list.innerHTML = items.map(function(g){
           const isActive = (g.id === activeId);
@@ -2152,7 +2152,7 @@ window.Goals = (function(){
       const a = active();
       if (a && a.title === v) return;
       add(v, 1);
-      toast('added to today\'s goals');
+      toast('Added to today\'s goals');
     });
 
     if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });
