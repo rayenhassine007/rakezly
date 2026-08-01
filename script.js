@@ -1746,6 +1746,10 @@ window.Study = (function(){
       }
     } catch(e){
       board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
+      // Full object, not just the message: during setup the useful part is
+      // usually the Postgres hint/code (missing table, missing function,
+      // RLS refusal), which never makes it into .message.
+      console.warn('Leaderboard failed — see supabase/SETUP.md:', e);
     }
     boardLoading = false; render();
   }
