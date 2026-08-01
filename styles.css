@@ -1159,3 +1159,123 @@ body.view-planner .stage {
   .pl-slot { min-height: 26px; }
   .pl-day { min-height: 74px; }
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   19  LIFE & INTERACTION
+   Motion here is meant to carry information — a running timer
+   breathes, a filled planner slot is marked, a finished goal is
+   celebrated. Everything is disabled under prefers-reduced-motion
+   by the block in section 17.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Title icons ─────────────────────────────────────────────────────────── */
+.pane-titlewrap { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pane-icon {
+  width: 17px; height: 17px; flex: none;
+  fill: none; stroke: var(--accent);
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  opacity: .9;
+}
+
+/* ── Entrance: cards arrive rather than blink into place ─────────────────── */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.timer-block, .pane, .quote-card, .planner-card {
+  animation: riseIn .5s var(--ease) both;
+}
+.stage > *:nth-child(1) { animation-delay: .02s; }
+.stage > *:nth-child(2) { animation-delay: .09s; }
+.stage > *:nth-child(3) { animation-delay: .16s; }
+.panes > *:nth-child(2) { animation-delay: .13s; }
+.planner-card:nth-child(2) { animation-delay: .12s; }
+
+/* ── Cards lift slightly on hover ────────────────────────────────────────── */
+.pane, .planner-card {
+  transition: transform .25s var(--ease), border-color .25s var(--ease),
+              box-shadow .25s var(--ease);
+}
+.pane:hover, .planner-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-soft);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.38);
+}
+
+/* ── A running timer breathes ────────────────────────────────────────────── */
+@keyframes breathe {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: .88;  transform: scale(1.012); }
+}
+.timer-display.is-running,
+.chrono-display.is-running { animation: breathe 4.5s ease-in-out infinite; }
+
+/* The progress bar gets a travelling sheen while counting. */
+.timer-progress-bar { position: relative; overflow: hidden; }
+.timer-progress-bar.is-running::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: sheen 2.4s linear infinite;
+}
+@keyframes sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* ── Press feedback ──────────────────────────────────────────────────────── */
+.btn-qadd:active, .dock-btn:active, .pl-btn:active,
+.mode-tab:active, .switch-btn:active, .view-btn:active,
+.study-btn:active, .room-btn:active, .goal-add-btn:active { transform: scale(.94); }
+.btn-primary:active { transform: scale(.97); }
+
+/* ── Value pop when a number changes ─────────────────────────────────────── */
+@keyframes valuePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.study-mini-val.bump, .goals-count.bump { animation: valuePop .45s var(--ease); }
+.study-mini-val, .goals-count { display: inline-block; transform-origin: left center; }
+
+/* ── Cycle dots pop as the round advances ────────────────────────────────── */
+@keyframes dotPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.32); }
+  100% { transform: scale(1.1); }
+}
+.cycle-dot.active { animation: dotPop .4s var(--ease); }
+
+/* ── Goal checkbox tick ──────────────────────────────────────────────────── */
+@keyframes tickIn {
+  from { transform: scale(0) rotate(-25deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0); opacity: 1; }
+}
+.goal-item.done .goal-check { animation: tickIn .3s var(--ease); }
+
+/* ── Confetti burst when a goal is finished ──────────────────────────────── */
+.confetti-piece {
+  position: fixed; z-index: 70; pointer-events: none;
+  width: 8px; height: 8px; border-radius: 2px;
+  animation: confettiFly var(--dur, 1s) cubic-bezier(.15,.6,.4,1) forwards;
+}
+@keyframes confettiFly {
+  from { transform: translate(0, 0) rotate(0); opacity: 1; }
+  to   { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
+}
+
+/* ── Planner: a slot with something in it is visibly marked ──────────────── */
+.pl-slot.has-content,
+.pl-day .pl-note.has-content { background: var(--accent-soft); }
+.pl-slot.has-content { box-shadow: inset 2px 0 0 var(--accent); }
+.pl-day:has(.pl-note.has-content) { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Grids fade in when the week or month changes, so navigation feels moved
+   through rather than swapped. */
+@keyframes gridIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.pl-grid.swap { animation: gridIn .3s var(--ease); }
+
+/* ── Dock icons nudge on hover ───────────────────────────────────────────── */
+.dock-btn { transition: color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease); }
+.dock-btn:hover { transform: translateY(-1px); }
+
+/* ── Quote crossfades when it changes ────────────────────────────────────── */
+.quote-card .quote-text { transition: opacity .4s var(--ease); }
+.quote-card.fading .quote-text { opacity: 0; }

@@ -148,7 +148,7 @@
 
     <div class="pane goals-card">
       <div class="pane-head">
-        <h2 class="pane-title" data-i18n="goals.title">Today's goals</h2>
+        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M17.5 5.5l1.6 1.6 3-3.1"/><path d="M17.5 11.5l1.6 1.6 3-3.1"/></svg><h2 class="pane-title" data-i18n="goals.title">Today's goals</h2></span>
         <span class="goals-count" id="goalsCount">0/0</span>
       </div>
       <div class="goals-list" id="goalsList"></div>
@@ -162,7 +162,7 @@
 
     <div class="pane study-mini-card">
       <div class="pane-head">
-        <h2 class="pane-title" data-i18n="study.title">Study time</h2>
+        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2.5h6"/></svg><h2 class="pane-title" data-i18n="study.title">Study time</h2></span>
         <button class="study-mini-btn" onclick="Study.togglePanel()" data-i18n="study.board">Leaderboard</button>
       </div>
       <div class="study-mini-nums">
@@ -185,7 +185,7 @@
 
     <div class="pane planner-card">
       <div class="pane-head">
-        <h2 class="pane-title" data-i18n="plan.weekly">Weekly planner</h2>
+        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3M8 17.5h3M14 14h2.5"/></svg><h2 class="pane-title" data-i18n="plan.weekly">Weekly planner</h2></span>
         <div class="pl-nav">
           <button class="pl-btn" onclick="Planner.shiftWeek(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous week">‹</button>
           <span class="pl-label" id="weekLabel"></span>
@@ -209,7 +209,7 @@
 
     <div class="pane planner-card">
       <div class="pane-head">
-        <h2 class="pane-title" data-i18n="plan.monthly">Monthly planner</h2>
+        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="17.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg><h2 class="pane-title" data-i18n="plan.monthly">Monthly planner</h2></span>
         <div class="pl-nav">
           <button class="pl-btn" onclick="Planner.shiftMonth(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous month">‹</button>
           <span class="pl-label" id="monthLabel"></span>

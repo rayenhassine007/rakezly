@@ -517,7 +517,7 @@ function initTimer(m){
   document.getElementById('progressBar').className='timer-progress-bar '+cc;
   const btn=document.getElementById('startBtn');
   btn.className='btn btn-primary'+(m!=='work'?' bm':'');
-  btn.textContent='Start';
+  btn.textContent=t('timer.start');
 }
 function updateDisplay(){
   const m=Math.floor(remainSecs/60),s=remainSecs%60;
@@ -532,24 +532,34 @@ function updateBar(){
   if (animal) animal.style.left = pct + '%';
 }
 function toggleTimer(){running?pauseTimer():startTimer();}
+function setRunningVisual(on){
+  const d = document.getElementById('timerDisplay');
+  const bar = document.getElementById('progressBar');
+  if (d) d.classList.toggle('is-running', on);
+  if (bar) bar.classList.toggle('is-running', on);
+}
+
 function startTimer(){
   running=true;
+  setRunningVisual(true);
   const btn=document.getElementById('startBtn');
-  btn.textContent='Pause'; btn.classList.add('running');
+  btn.textContent=t('timer.pause'); btn.classList.add('running');
   document.getElementById('timerDisplay').classList.remove('blink');
   saveTimerState(); // capture running=true + savedAt timestamp immediately
   ticker=setInterval(()=>{remainSecs--;updateDisplay();updateBar();saveTimerState();if(remainSecs<=0){clearInterval(ticker);onDone();}},1000);
   if(window.Room)Room.onLocalChange();
 }
 function pauseTimer(){
+  setRunningVisual(false);
   running=false; clearInterval(ticker);
   const btn=document.getElementById('startBtn');
-  btn.textContent='Resume'; btn.classList.remove('running');
+  btn.textContent=t('timer.resume'); btn.classList.remove('running');
   document.getElementById('timerDisplay').classList.add('blink');
   saveTimerState();
   if(window.Room)Room.onLocalChange();
 }
 function stopTimer(){
+  setRunningVisual(false);
   running=false; clearInterval(ticker);
   document.getElementById('startBtn').classList.remove('running');
   document.getElementById('timerDisplay').classList.remove('blink');
@@ -969,7 +979,7 @@ function init(){
     setTab(mode);
     const btn = document.getElementById('startBtn');
     btn.className = 'btn btn-primary' + (mode!=='work'?' bm':'');
-    btn.textContent = 'Start';
+    btn.textContent = t('timer.start');
     if (remainSecs <= 0) { clearTimerState(); initTimer(mode); }
     renderCycles();
     showToast(t('msg.restored'));
@@ -1262,7 +1272,6 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
-init();
 
 // ── SHARED ROOM (Supabase Realtime) ───────────────────────────
 // Real-time synced timer. Every local timer action broadcasts a full
@@ -1341,7 +1350,7 @@ window.Room = (function(){
         if (!running) startTimer();               // sets label 'Pause' + starts ticker
       } else {
         if (running){ running = false; clearInterval(ticker); }   // stop ticker, no label churn
-        if (b){ b.textContent = (remainSecs >= totalSecs) ? 'Start' : 'Resume'; b.classList.remove('running'); }
+        if (b){ b.textContent = (remainSecs >= totalSecs) ? t('timer.start') : t('timer.resume'); b.classList.remove('running'); }
         if (td) td.classList.toggle('blink', remainSecs < totalSecs);
       }
     } catch(e){ console.warn('room apply', e); }
@@ -2034,7 +2043,11 @@ window.Goals = (function(){
 
   function toggle(id){
     const g = find(id); if (!g) return;
+    const wasDone = g.done;
     g.done = !g.done;
+    if (!wasDone && g.done && typeof burstConfetti === 'function'){
+      burstConfetti(document.querySelector('.goal-item') || null);
+    }
     if (g.done && g.progress < g.est) g.progress = g.est;
     if (!g.done && g.progress >= g.est) g.progress = Math.max(0, g.est - 1);
     g.updated = Date.now();
@@ -2079,6 +2092,11 @@ window.Goals = (function(){
     if (g.progress >= g.est && !g.done){
       g.done = true;
       toast(t('goals.complete', { title: g.title }));
+      if (typeof burstConfetti === 'function'){
+        const row = document.querySelector('.goal-item.active') ||
+                    document.querySelector('.goals-card');
+        burstConfetti(row);
+      }
       const next = items.filter(function(x){ return !x.done; })[0];
       activeId = next ? next.id : null;
     }
@@ -2670,8 +2688,14 @@ window.Planner = (function(){
     writeJSON(store, all);
   }
 
-  function onWeekInput(el){ stash(K_WEEK, weekKey(weekRef), el.dataset.cell, el.value); }
-  function onMonthInput(el){ stash(K_MONTH, monthKey(monthRef), el.dataset.cell, el.value); }
+  function onWeekInput(el){
+    stash(K_WEEK, weekKey(weekRef), el.dataset.cell, el.value);
+    el.classList.toggle('has-content', !!el.value.trim());
+  }
+  function onMonthInput(el){
+    stash(K_MONTH, monthKey(monthRef), el.dataset.cell, el.value);
+    el.classList.toggle('has-content', !!el.value.trim());
+  }
 
   // ── navigation ──
   function shiftWeek(n){ weekRef.setDate(weekRef.getDate() + n*7); render(); }
@@ -2725,14 +2749,15 @@ window.Planner = (function(){
         const d = new Date(start); d.setDate(d.getDate() + i);
         const cell = i + '-' + h;
         const isToday = sameDay(d, today);
-        body += '<textarea class="pl-cell pl-slot' + (isToday ? ' is-today' : '') + '" ' +
+        const filled = (data[cell] || '').trim() ? ' has-content' : '';
+        body += '<textarea class="pl-cell pl-slot' + (isToday ? ' is-today' : '') + filled + '" ' +
                   'data-cell="' + cell + '" rows="1" ' +
                   'oninput="Planner.onWeekInput(this)">' + esc(data[cell] || '') + '</textarea>';
       }
     }
 
-    host.style.setProperty('--pl-cols', '7');
     host.innerHTML = head + body;
+    host.classList.remove('swap'); void host.offsetWidth; host.classList.add('swap');
 
     const fromSel = document.getElementById('planFrom');
     const toSel = document.getElementById('planTo');
@@ -2780,12 +2805,14 @@ window.Planner = (function(){
       const isToday = sameDay(d, today);
       out += '<div class="pl-cell pl-day' + (isToday ? ' is-today' : '') + '">' +
                '<span class="pl-daynum">' + dayNum + '</span>' +
-               '<textarea class="pl-note" data-cell="' + dayNum + '" rows="1" ' +
+               '<textarea class="pl-note' + ((data[dayNum]||'').trim() ? ' has-content' : '') +
+                 '" data-cell="' + dayNum + '" rows="1" ' +
                  'placeholder="' + esc(t('plan.dayPlaceholder')) + '" ' +
                  'oninput="Planner.onMonthInput(this)">' + esc(data[dayNum] || '') + '</textarea>' +
              '</div>';
     }
     host.innerHTML = out;
+    host.classList.remove('swap'); void host.offsetWidth; host.classList.add('swap');
   }
 
   function render(){ renderWeek(); renderMonth(); }
@@ -2825,6 +2852,7 @@ function showView(name){
 // listeners before Auth resolves a session, so a restored login still
 // triggers their sync.
 I18N.init();
+init();          // must follow I18N.init(): it translates during startup
 Study.init();
 Goals.init();
 Auth.init();
@@ -2835,3 +2863,68 @@ Planner.init();
 I18N.apply();
 
 showView(localStorage.getItem('sf_view') === 'planner' ? 'planner' : 'focus');
+
+
+// ── CELEBRATION & MICRO-INTERACTIONS ──────────────────────────
+// Small, meaningful feedback: a burst when a goal is finished, a pop when a
+// tracked number changes. Both no-op under prefers-reduced-motion so the
+// calm setting stays genuinely calm.
+function prefersReducedMotion(){
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function burstConfetti(origin){
+  if (prefersReducedMotion()) return;
+  const styles = getComputedStyle(document.body);
+  const colours = ['--accent', '--break', '--long']
+    .map(v => styles.getPropertyValue(v).trim())
+    .filter(Boolean);
+  if (!colours.length) colours.push('#f2a8c4');
+
+  let x = window.innerWidth / 2, y = window.innerHeight / 2;
+  if (origin && origin.getBoundingClientRect){
+    const r = origin.getBoundingClientRect();
+    if (r.width) { x = r.left + r.width / 2; y = r.top + r.height / 2; }
+  }
+
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 18; i++){
+    const el = document.createElement('span');
+    el.className = 'confetti-piece';
+    const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.4;
+    const dist = 60 + Math.random() * 90;
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+    el.style.background = colours[i % colours.length];
+    el.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+    el.style.setProperty('--dy', (Math.sin(angle) * dist + 40) + 'px');
+    el.style.setProperty('--rot', (Math.random() * 540 - 270) + 'deg');
+    el.style.setProperty('--dur', (0.8 + Math.random() * 0.5) + 's');
+    frag.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 1400);
+  }
+  document.body.appendChild(frag);
+}
+
+// Re-triggers the CSS animation by forcing a reflow between class removals.
+function bump(el){
+  if (!el || prefersReducedMotion()) return;
+  el.classList.remove('bump');
+  void el.offsetWidth;
+  el.classList.add('bump');
+}
+
+// Watches the tracked figures and pops them whenever their text changes.
+(function watchValues(){
+  const ids = ['studyToday', 'studyWeek', 'goalsCount'];
+  const last = {};
+  setInterval(function(){
+    ids.forEach(function(id){
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = el.textContent;
+      if (last[id] !== undefined && last[id] !== v) bump(el);
+      last[id] = v;
+    });
+  }, 400);
+})();
