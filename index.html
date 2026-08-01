@@ -68,6 +68,14 @@
 
   <!-- Timer -->
   <section class="timer-block" aria-label="Timer">
+
+    <!-- Primary switch: two different kinds of timer, not two sessions -->
+    <div class="mode-switch" role="tablist" aria-label="Timer type">
+      <button class="switch-btn active" id="switchPomodoro" onclick="Chrono.exit()">Pomodoro</button>
+      <button class="switch-btn" id="switchChrono" onclick="Chrono.enter()"
+              title="Chronomètre d'étude — counts up instead of down">Chrono</button>
+    </div>
+
     <div class="cycles-row" id="cyclesRow"></div>
 
     <div class="timer-display wc" id="timerDisplay">
@@ -87,8 +95,6 @@
       <button class="mode-tab active" data-mode="work"  onclick="switchMode('work')">Focus</button>
       <button class="mode-tab bt"     data-mode="break" onclick="switchMode('break')">Break</button>
       <button class="mode-tab lt"     data-mode="long"  onclick="switchMode('long')">Long break</button>
-      <button class="mode-tab ct"     data-mode="chrono" onclick="Chrono.enter()"
-              title="Chronomètre d'étude — counts up instead of down">Chrono</button>
     </div>
 
     <div class="timer-controls">

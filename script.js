@@ -2218,6 +2218,14 @@ window.Chrono = (function(){
   let startedAt = 0, accum = 0, ticker = null;
 
   function block(){ return document.querySelector('.timer-block'); }
+
+  // Keep the Pomodoro/Chrono switch in step with the actual state.
+  function syncSwitch(){
+    const pom = document.getElementById('switchPomodoro');
+    const chr = document.getElementById('switchChrono');
+    if (pom) pom.classList.toggle('active', !active);
+    if (chr) chr.classList.toggle('active', active);
+  }
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
   function elapsedMs(){ return accum + (running ? Date.now() - startedAt : 0); }
@@ -2252,7 +2260,7 @@ window.Chrono = (function(){
     if (typeof stopTimer === 'function') stopTimer();   // never run both clocks
     active = true;
     const b = block(); if (b) b.classList.add('chrono-mode');
-    setTab('chrono');
+    syncSwitch();
     render(); save();
   }
 
@@ -2265,6 +2273,9 @@ window.Chrono = (function(){
     else { accum = 0; }
     active = false;
     const b = block(); if (b) b.classList.remove('chrono-mode');
+    // Put the Focus/Break/Long highlight back on whichever session is loaded.
+    if (typeof setTab === 'function' && typeof mode !== 'undefined') setTab(mode);
+    syncSwitch();
     render(); save();
   }
 
@@ -2321,7 +2332,6 @@ window.Chrono = (function(){
       active = true;
       accum = st.accum || 0;
       const b = block(); if (b) b.classList.add('chrono-mode');
-      setTab('chrono');
       if (st.running && st.startedAt){
         // Keep counting across a reload instead of losing the session.
         accum += Date.now() - st.startedAt;
@@ -2329,6 +2339,7 @@ window.Chrono = (function(){
         start();
       }
     }
+    syncSwitch();
     render();
   }
 
