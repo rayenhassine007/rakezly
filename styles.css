@@ -1279,3 +1279,17 @@ body.view-planner .stage {
 /* ── Quote crossfades when it changes ────────────────────────────────────── */
 .quote-card .quote-text { transition: opacity .4s var(--ease); }
 .quote-card.fading .quote-text { opacity: 0; }
+
+/* Account feedback, shown inside the study panel next to the form that
+   triggered it rather than as a toast on the far side of the screen. */
+.study-msg {
+  margin-top: 10px; padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px; line-height: 1.5;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  animation: riseIn .28s var(--ease) both;
+}
+.study-msg.is-ok    { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--text); }
+.study-msg.is-error { border-color: rgba(255,128,149,.4); background: rgba(255,128,149,.12); color: var(--danger); }

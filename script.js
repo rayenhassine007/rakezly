@@ -1539,12 +1539,12 @@ window.Auth = (function(){
 
   async function google(){
     const cl = window.SB.get();
-    if (!cl) return toast('Sign-in is unavailable right now');
+    if (!cl) return { error: { message: t('study.unavailableAuth') } };
     const r = await cl.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
     });
-    if (r.error) toast(r.error.message);
+    return r;
   }
 
   async function signUp(email, password, displayName){
@@ -1609,6 +1609,9 @@ window.Study = (function(){
   let panelOpen = false;
   let board = [], standing = null, boardSubject = '', boardLoading = false, boardErr = '';
   let authMode = 'none'; // none | signin | signup
+  // Account feedback belongs next to the form that caused it, not in a
+  // toast at the far side of the screen.
+  let authMsg = null;    // { kind: 'error' | 'ok', text }
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -1817,6 +1820,12 @@ window.Study = (function(){
   }
 
   // ── panel ──
+  function msgBlock(){
+    if (!authMsg) return '';
+    return '<div class="study-msg ' + (authMsg.kind === 'error' ? 'is-error' : 'is-ok') + '">' +
+             esc(authMsg.text) + '</div>';
+  }
+
   function authBlock(){
     const inHtml = window.Auth && window.Auth.signedIn();
     if (inHtml){
@@ -1824,11 +1833,11 @@ window.Study = (function(){
                '<div class="study-acct-who"><span class="study-dot"></span>'+esc(window.Auth.name())+'</div>' +
                '<button class="study-link" onclick="Study.doRename()">' + esc(t('study.rename')) + '</button>' +
                '<button class="study-link" onclick="Study.doSignOut()">' + esc(t('study.signout')) + '</button>' +
-             '</div>';
+             '</div>' + msgBlock();
     }
     let h = '<div class="study-guest">' +
               '<div class="study-guest-msg">' + esc(t('study.guest')) + '</div>' +
-              '<button class="study-btn study-btn-google" onclick="Auth.google()">' + esc(t('study.google')) + '</button>';
+              '<button class="study-btn study-btn-google" onclick="Study.doGoogle()">' + esc(t('study.google')) + '</button>';
     if (authMode === 'none'){
       h += '<div class="study-or">' + esc(t('study.or')) + '</div>' +
            '<div class="study-authrow">' +
@@ -1845,7 +1854,7 @@ window.Study = (function(){
              '<button class="study-link" onclick="Study.setAuthMode(\'none\')">' + esc(t('study.back')) + '</button>' +
            '</div>';
     }
-    return h + '</div>';
+    return h + msgBlock() + '</div>';
   }
 
   function standingBlock(){
@@ -1919,28 +1928,46 @@ window.Study = (function(){
   }
 
   // ── panel actions ──
-  function setAuthMode(m){ authMode = m; render(); }
+  function setAuthMode(m){ authMode = m; authMsg = null; render(); }
+  function setAuthMsg(kind, text){ authMsg = { kind: kind, text: text }; render(); }
 
   async function doAuth(){
     const em = (document.getElementById('authEmail')||{}).value || '';
     const pw = (document.getElementById('authPass')||{}).value || '';
     const nm = (document.getElementById('authName')||{}).value || '';
-    if (!em.trim() || !pw){ toast('Email and password are required'); return; }
+    if (!em.trim() || !pw){ setAuthMsg('error', t('study.needBoth')); return; }
+
+    authMsg = { kind: 'ok', text: t('study.working') };
+    render();
+
     const r = (authMode === 'signup')
       ? await window.Auth.signUp(em.trim(), pw, (nm.trim() || em.split('@')[0]).slice(0,24))
       : await window.Auth.signIn(em.trim(), pw);
-    toast(r.msg);
+
+    authMsg = { kind: r.ok ? 'ok' : 'error', text: r.msg };
     if (r.ok){ authMode = 'none'; loadBoard(); }
     render();
   }
 
-  async function doSignOut(){ await window.Auth.signOut(); loadBoard(); render(); }
+  async function doGoogle(){
+    setAuthMsg('ok', t('study.working'));
+    const r = await window.Auth.google();
+    // Only reached when the redirect never happened, i.e. it failed.
+    if (r && r.error) setAuthMsg('error', r.error.message);
+  }
+
+  async function doSignOut(){
+    await window.Auth.signOut();
+    authMode = 'none';
+    setAuthMsg('ok', t('study.signedOut'));
+    loadBoard(); render();
+  }
 
   async function doRename(){
-    const n = window.prompt('Display name (shown on the leaderboard)', window.Auth.name());
+    const n = window.prompt(t('study.renamePrompt'), window.Auth.name());
     if (n == null) return;
     const r = await window.Auth.rename(n);
-    toast(r.msg);
+    authMsg = { kind: r.ok ? 'ok' : 'error', text: r.msg };
     if (r.ok) loadBoard();
     render();
   }
@@ -1955,7 +1982,7 @@ window.Study = (function(){
     });
   }
 
-  return { init:init, PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
+  return { init:init, doGoogle:doGoogle, PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
            isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
            onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
@@ -2427,6 +2454,10 @@ window.I18N = (function(){
       'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet — be first',
       'study.unavailable': 'Leaderboard unavailable',
       'study.addSubject': '＋ add a subject…', 'study.newSubject': 'New subject name',
+      'study.needBoth': 'Enter an email and a password.',
+      'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
+      'study.renamePrompt': 'Display name (shown on the leaderboard)',
+      'study.unavailableAuth': 'Sign-in is unavailable right now.',
       'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
 
       'room.title': 'Shared room', 'room.create': 'Create a room',
@@ -2515,6 +2546,10 @@ window.I18N = (function(){
       'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine — sois le premier",
       'study.unavailable': 'Classement indisponible',
       'study.addSubject': '＋ ajouter une matière…', 'study.newSubject': 'Nom de la matière',
+      'study.needBoth': 'Saisis un e-mail et un mot de passe.',
+      'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
+      'study.renamePrompt': 'Nom affiché (visible au classement)',
+      'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
       'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
 
       'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
