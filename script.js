@@ -2932,3 +2932,47 @@ function bump(el){
     });
   }, 400);
 })();
+
+
+// ── SETUP DIAGNOSTIC ──────────────────────────────────────────
+// Run checkSupabase() in the browser console. Reports exactly which part of
+// supabase/SETUP.md is done, so a failure points at a step instead of a
+// generic "unavailable".
+async function checkSupabase(){
+  const out = {};
+  const cl = window.SB && window.SB.get();
+
+  if (!cl){
+    console.error('Supabase library did not load — check the CDN <script> tag in index.html.');
+    return { client: 'FAILED to load' };
+  }
+  out.client = 'OK loaded';
+
+  async function probe(label, run){
+    try {
+      const r = await run();
+      out[label] = r.error ? ('FAILED: ' + r.error.message + (r.error.hint ? ' | hint: ' + r.error.hint : ''))
+                           : 'OK';
+      if (r.error) console.warn(label, r.error);
+    } catch(e){ out[label] = 'FAILED: ' + (e && e.message); }
+  }
+
+  await probe('step1_leaderboard_fn', () => cl.rpc('leaderboard_week', { p_subject: null, p_limit: 5 }));
+  await probe('step1_table_profiles', () => cl.from('profiles').select('id').limit(1));
+  await probe('step1_table_sessions', () => cl.from('study_sessions').select('id').limit(1));
+  await probe('step1_table_goals',    () => cl.from('goals').select('id').limit(1));
+
+  try {
+    const s = await cl.auth.getSession();
+    out.step2_signed_in = (s.data && s.data.session)
+      ? ('OK as ' + s.data.session.user.email)
+      : 'not signed in (fine — sign in to test the board)';
+  } catch(e){ out.step2_signed_in = 'FAILED: ' + e.message; }
+
+  const bad = Object.keys(out).filter(k => String(out[k]).indexOf('FAILED') === 0);
+  console.table(out);
+  console.log(bad.length
+    ? 'Not ready yet. See supabase/SETUP.md for: ' + bad.join(', ')
+    : 'Supabase is set up correctly.');
+  return out;
+}
