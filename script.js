@@ -12,16 +12,6 @@ function toggleSettingsPanel() {
   document.getElementById('playerPanel').classList.remove('open');
   document.getElementById('playerFixedBtn').classList.remove('active');
 }
-document.addEventListener('click', (e) => {
-  if (settingsPanelOpen &&
-      !e.target.closest('#settingsSlidePanel') &&
-      !e.target.closest('#settingsFixedBtn')) {
-    settingsPanelOpen = false;
-    document.getElementById('settingsSlidePanel').classList.remove('open');
-    document.getElementById('settingsFixedBtn').classList.remove('active');
-  }
-});
-
 // ── FULLSCREEN ────────────────────────────────────────────────
 function toggleFS() {
   if (!document.fullscreenElement) {
@@ -226,25 +216,6 @@ function toggleBgPanel() {
   document.getElementById('playerPanel').classList.remove('open');
   document.getElementById('playerFixedBtn').classList.remove('active');
 }
-
-// Close panel when clicking outside
-document.addEventListener('click', (e) => {
-  if (bgPanelOpen &&
-      !e.target.closest('#bgPanel') &&
-      !e.target.closest('.btn-bg-toggle')) {
-    bgPanelOpen = false;
-    document.getElementById('bgPanel').classList.remove('open');
-    document.querySelector('.btn-bg-toggle').classList.remove('active');
-  }
-  // close theme panel when clicking outside
-  const themePanel = document.getElementById('themePanel');
-  if (themePanel.classList.contains('open') &&
-      !e.target.closest('#themePanel') &&
-      !e.target.closest('#themeFixedBtn')) {
-    themePanel.classList.remove('open');
-    document.getElementById('themeFixedBtn').classList.remove('active');
-  }
-});
 
 
 function themeLabel(theme) {
@@ -1464,6 +1435,7 @@ window.Room = (function(){
   })();
 
   return { onLocalChange: onLocalChange, create: create, join: join, refresh: updateUI,
+           close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
            joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
            togglePanel: togglePanel };
 })();
@@ -1982,7 +1954,9 @@ window.Study = (function(){
     });
   }
 
-  return { init:init, doGoogle:doGoogle, PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
+  return { init:init, doGoogle:doGoogle,
+           close: function(){ if (panelOpen){ panelOpen = false; render(); } },
+           PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
            isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
            onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
@@ -3011,3 +2985,54 @@ async function checkSupabase(){
     : 'Supabase is set up correctly.');
   return out;
 }
+
+
+// ── CLICK-AWAY DISMISS ────────────────────────────────────────
+// One handler for every popover. Study and Room own a panelOpen flag of
+// their own, so they are closed through close() rather than by stripping
+// the class — otherwise their state would drift from the DOM and the next
+// click on their button would need pressing twice.
+function closeAllPanels(){
+  const settings = document.getElementById('settingsSlidePanel');
+  if (settings){
+    settings.classList.remove('open');
+    const b = document.getElementById('settingsFixedBtn');
+    if (b) b.classList.remove('active');
+  }
+  if (typeof settingsPanelOpen !== 'undefined') settingsPanelOpen = false;
+
+  const bg = document.getElementById('bgPanel');
+  if (bg){
+    bg.classList.remove('open');
+    const b = document.querySelector('.btn-bg-toggle');
+    if (b) b.classList.remove('active');
+  }
+  if (typeof bgPanelOpen !== 'undefined') bgPanelOpen = false;
+
+  ['themePanel', 'playerPanel'].forEach(function(id){
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  });
+  ['themeFixedBtn', 'playerFixedBtn'].forEach(function(id){
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+
+  if (window.Study && Study.close) Study.close();
+  if (window.Room && Room.close) Room.close();
+}
+
+document.addEventListener('click', function(e){
+  // Inside a popover, or on the control that opens one — those manage
+  // themselves. The language pills are exempt so switching language does
+  // not shut the panel you are reading.
+  if (e.target.closest('.popover')) return;
+  if (e.target.closest('.dock-btn')) return;
+  if (e.target.closest('.lang-toggle')) return;
+  closeAllPanels();
+});
+
+// Escape is the other half of the same expectation.
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') closeAllPanels();
+});
