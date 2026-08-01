@@ -977,3 +977,185 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
     transition-duration: .01ms !important;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   18  VIEW SWITCH, LANGUAGE, PLANNER
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── View switch (Focus ⇄ Planner) ───────────────────────────────────────── */
+.viewswitch {
+  display: flex; gap: 3px; padding: 4px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+.view-btn {
+  padding: 6px 18px; border-radius: 999px;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-faint);
+  transition: all .18s var(--ease);
+}
+.view-btn:hover { color: var(--text); }
+.view-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+/* Only one view is on screen at a time. */
+.planner { display: none; }
+body.view-planner .stage > .timer-block,
+body.view-planner .stage > .panes,
+body.view-planner .stage > .quote-card { display: none; }
+body.view-planner .planner { display: flex; flex-direction: column; gap: 18px; }
+
+/* The planner needs width and is allowed to scroll — unlike the focus view,
+   a full week of hours cannot fit one screen and shouldn't try. */
+body.view-planner .stage {
+  max-width: 1180px;
+  display: block;
+  min-height: auto;
+  padding: 88px 20px 40px;
+}
+
+/* ── Language toggle ─────────────────────────────────────────────────────── */
+.lang-toggle {
+  display: inline-flex; gap: 2px; margin: 0 2px;
+  padding: 2px; border-radius: 999px;
+  background: var(--surface-2);
+}
+.lang-btn {
+  padding: 4px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  color: var(--text-faint);
+  transition: all .18s var(--ease);
+}
+.lang-btn:hover { color: var(--text); }
+.lang-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+/* ── Planner shell ───────────────────────────────────────────────────────── */
+.planner-card { padding: 18px 20px 20px; }
+
+.pl-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pl-label {
+  min-width: 148px; text-align: center;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  text-transform: capitalize;
+}
+.pl-btn {
+  min-width: 28px; height: 28px; padding: 0 9px;
+  border: 1px solid var(--border-soft); border-radius: 999px;
+  color: var(--text-dim); font-size: 13px; line-height: 1;
+  transition: all .18s var(--ease);
+}
+.pl-btn:hover { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.pl-btn-wide { font-size: 11.5px; padding: 0 12px; }
+
+.pl-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; margin-bottom: 14px;
+}
+.pl-spacer { flex: 1; }
+.pl-range-label { font-size: 12px; color: var(--text-faint); }
+.pl-select {
+  padding: 5px 10px; font-size: 12px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border-soft); border-radius: 999px;
+  outline: none; cursor: pointer;
+}
+.pl-select:focus { border-color: var(--accent); }
+.pl-select option { background: var(--bg); color: var(--text); }
+
+/* ── Grids ───────────────────────────────────────────────────────────────── */
+.pl-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.pl-week  { grid-template-columns: 62px repeat(7, minmax(0, 1fr)); }
+.pl-month { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+
+.pl-cell { background: var(--glass-bg); }
+
+.pl-head {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 4px;
+  font-size: 11.5px; font-weight: 600; color: var(--text-dim);
+  text-transform: capitalize;
+}
+.pl-head.is-today { color: var(--accent); background: var(--accent-soft); }
+.pl-head .pl-daynum { font-weight: 700; opacity: .75; }
+.pl-corner { background: var(--glass-bg); }
+
+.pl-hour {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 0 8px;
+  font-size: 10.5px; color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Slots and notes are plain textareas so typing needs no extra affordance. */
+.pl-slot, .pl-note {
+  width: 100%; border: 0; outline: none; resize: none;
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 12px; line-height: 1.35;
+  padding: 6px 7px;
+  transition: background .15s var(--ease);
+}
+.pl-slot { min-height: 34px; }
+.pl-slot:hover, .pl-note:hover { background: var(--surface-2); }
+.pl-slot:focus, .pl-note:focus { background: var(--accent-soft); }
+.pl-slot.is-today { background: rgba(255,255,255,0.03); }
+
+.pl-day {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 5px; min-height: 92px;
+}
+.pl-day.is-empty { background: transparent; }
+.pl-day.is-today { background: var(--accent-soft); }
+.pl-day .pl-daynum {
+  font-size: 11px; font-weight: 700; color: var(--text-dim);
+  padding-left: 3px;
+}
+.pl-day.is-today .pl-daynum { color: var(--accent); }
+.pl-note { flex: 1; padding: 3px; font-size: 11.5px; }
+
+@media (max-width: 900px) {
+  /* A 7-column hour grid is unusable on a phone; let it scroll sideways
+     inside its own card rather than squeezing the columns to nothing. */
+  .pl-week { min-width: 620px; }
+  .pl-grid.pl-week { display: grid; }
+  .planner-card:first-child { overflow-x: auto; }
+  .pl-day { min-height: 70px; }
+  .pl-label { min-width: 110px; font-size: 12px; }
+}
+
+/* ── Print ───────────────────────────────────────────────────────────────── */
+@media print {
+  /* Print the planner only, on white, with real borders. */
+  .topbar, .popover, .toast, .quote-card,
+  .stage > .timer-block, .stage > .panes,
+  .pl-toolbar, .pl-nav .pl-btn { display: none !important; }
+
+  #bgWrap, #bgOverlay { display: none !important; }
+
+  body { background: #fff !important; color: #000 !important; }
+  body.view-planner .stage { padding: 0 !important; max-width: none !important; }
+  .planner { display: flex !important; flex-direction: column; gap: 22px; }
+
+  .planner-card {
+    background: #fff !important; border: none !important;
+    box-shadow: none !important; padding: 0 !important;
+    break-inside: avoid;
+  }
+  .pane-title, .pl-label { color: #000 !important; }
+  .pl-grid { background: #999 !important; border-color: #999 !important; }
+  .pl-cell { background: #fff !important; }
+  .pl-head, .pl-hour, .pl-daynum { color: #000 !important; }
+  .pl-head.is-today, .pl-day.is-today, .pl-slot.is-today { background: #f0f0f0 !important; }
+  .pl-slot, .pl-note { color: #000 !important; }
+  .pl-slot { min-height: 26px; }
+  .pl-day { min-height: 74px; }
+}

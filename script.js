@@ -502,7 +502,7 @@ function applySettings(){
   localStorage.setItem('sf_long', MODES.long);
   localStorage.setItem('sf_cycles', TOTAL_CYCLES);
   stopTimer(); clearTimerState(); initTimer('work'); renderCycles(); setTab('work');
-  showToast('Settings applied'); toggleSettings();
+  showToast(t('msg.settings')); toggleSettings();
 }
 
 // ── TIMER ─────────────────────────────────────────────────────
@@ -580,11 +580,11 @@ function onDone(){
     const focusMins = Math.max(1, Math.round(totalSecs/60));
     if(window.Goals) Goals.onPomodoro();
     if(window.Study) Study.logSession(focusMins);
-    showToast('Pomodoro complete — take a break');
+    showToast(t('msg.pomodoroDone'));
     tryNotify('Pomodoro complete!','Time for a break.');
     playAlarm();
   }else{
-    showToast('Break over — back to focus');
+    showToast(t('msg.breakOver'));
     tryNotify('Break over!','Back to work.');
     playAlarm();
   }
@@ -594,7 +594,7 @@ function onDone(){
 }
 function advance(){
   cycleIndex++;
-  if(cycleIndex>=seq.length){cycleIndex=0;showToast('Round complete — starting over');}
+  if(cycleIndex>=seq.length){cycleIndex=0;showToast(t('msg.roundDone'));}
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
@@ -972,7 +972,7 @@ function init(){
     btn.textContent = 'Start';
     if (remainSecs <= 0) { clearTimerState(); initTimer(mode); }
     renderCycles();
-    showToast('Session restored');
+    showToast(t('msg.restored'));
   } else {
     renderCycles(); initTimer('work');
   }
@@ -1229,11 +1229,18 @@ function updateAnimalSVG(theme) {
 // ── LIVE CLOCK ─────────────────────────────────────────
 function updateClock() {
   const now = new Date();
+  // Clock and date follow the chosen app language, not the browser's:
+  // French convention is 24-hour, English keeps AM/PM.
+  const lang = window.I18N ? I18N.current() : 'en';
+  const loc  = lang === 'fr' ? 'fr-FR' : 'en-GB';
+  const h24  = lang === 'fr';
+
   let h = now.getHours();
   const m = now.getMinutes();
   const s = now.getSeconds();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
+  const ampm = h24 ? '' : (h >= 12 ? 'PM' : 'AM');
+  if (!h24) h = h % 12 || 12;
+
   document.getElementById('clockHours').textContent = String(h).padStart(2, '0');
   document.getElementById('clockMins').textContent  = String(m).padStart(2, '0');
   document.getElementById('clockSecs').textContent  = String(s).padStart(2, '0');
@@ -1241,11 +1248,12 @@ function updateClock() {
 
   const el = document.getElementById('liveDate');
   if (el) {
-    // Follows the reader's own locale rather than hardcoding a language.
-    const key = now.toDateString();
+    // Language is part of the cache key, otherwise switching to French
+    // would leave yesterday's English string until midnight.
+    const key = now.toDateString() + '|' + lang;
     if (el.dataset.day !== key) {
       el.dataset.day = key;
-      el.textContent = now.toLocaleDateString(undefined, {
+      el.textContent = now.toLocaleDateString(loc, {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
       });
     }
@@ -1401,19 +1409,19 @@ window.Room = (function(){
     if (!body) return;
     if (status === 'joined'){
       body.innerHTML =
-        '<div class="room-code-label">Room code</div>' +
+        '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
-        '<div class="room-peers"><span class="room-dot"></span>'+peers+' online</div>' +
-        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">Copy</button></div>' +
-        '<div class="room-hint">Share the link or code — everyone controls the timer</div>' +
-        '<button class="room-btn room-btn-leave" onclick="Room.leave()">Leave room</button>';
+        '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+'</div>' +
+        '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">' + esc(t('room.copy')) + '</button></div>' +
+        '<div class="room-hint">' + esc(t('room.hint')) + '</div>' +
+        '<button class="room-btn room-btn-leave" onclick="Room.leave()">' + esc(t('room.leave')) + '</button>';
     } else {
       const connecting = (status === 'connecting');
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?'Connecting…':'Create a room')+'</button>' +
-        '<div class="room-or">Or join with a code</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">Join</button></div>' +
-        (status === 'error' ? '<div class="room-err">Connection failed — try again</div>' : '');
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
+        '<div class="room-or">' + esc(t('room.or')) + '</div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">' + esc(t('room.join')) + '</button></div>' +
+        (status === 'error' ? '<div class="room-err">' + esc(t('room.failed')) + '</div>' : '');
     }
   }
 
@@ -1446,7 +1454,7 @@ window.Room = (function(){
     })();
   })();
 
-  return { onLocalChange: onLocalChange, create: create, join: join,
+  return { onLocalChange: onLocalChange, create: create, join: join, refresh: updateUI,
            joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
            togglePanel: togglePanel };
 })();
@@ -1715,7 +1723,7 @@ window.Study = (function(){
   // ── leaderboard ──
   async function loadBoard(){
     const cl = window.SB.get();
-    if (!cl){ boardErr = 'Leaderboard unavailable'; render(); return; }
+    if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
     const subj = boardSubject || null;
     try {
@@ -1728,7 +1736,7 @@ window.Study = (function(){
         if (!s.error && s.data && s.data.length) standing = s.data[0];
       }
     } catch(e){
-      board = []; boardErr = (e && e.message) ? e.message : 'Could not load the board';
+      board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
     }
     boardLoading = false; render();
   }
@@ -1740,15 +1748,15 @@ window.Study = (function(){
     const sel = document.getElementById('subjectSelect');
     if (!sel) return;
     const cur = current(), cs = customs();
-    let h = '<optgroup label="subjects">';
+    let h = '<optgroup label="' + esc(t('study.subjects')) + '">';
     PRESETS.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
     h += '</optgroup>';
     if (cs.length){
-      h += '<optgroup label="my subjects">';
+      h += '<optgroup label="' + esc(t('study.mySubjects')) + '">';
       cs.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
       h += '</optgroup>';
     }
-    h += '<option value="__add">＋ add a subject…</option>';
+    h += '<option value="__add">' + esc(t('study.addSubject')) + '</option>';
     sel.innerHTML = h;
     sel.value = cur;
   }
@@ -1758,7 +1766,7 @@ window.Study = (function(){
   // goal's older one.
   function onSelect(el){
     if (el.value === '__add'){
-      const n = window.prompt('New subject name');
+      const n = window.prompt(t('study.newSubject'));
       if (!n || !addCustom(n)) renderSelect();
       if (window.Goals) window.Goals.retagActive(current());
       render();
@@ -1771,9 +1779,9 @@ window.Study = (function(){
 
   // ── mini card in the left column ──
   function renderMini(){
-    const t = document.getElementById('studyToday');
+    const todayEl = document.getElementById('studyToday');
     const w = document.getElementById('studyWeek');
-    if (t) t.textContent = fmt(sumSince(dayStart()));
+    if (todayEl) todayEl.textContent = fmt(sumSince(dayStart()));
     if (w) w.textContent = fmt(sumSince(weekStart()));
 
     const bars = document.getElementById('studyMiniBars');
@@ -1782,7 +1790,7 @@ window.Study = (function(){
     const rows = Object.keys(bs).map(function(k){ return { s:k, m:bs[k] }; })
                        .sort(function(a,b){ return b.m - a.m; }).slice(0, 4);
     if (!rows.length){
-      bars.innerHTML = '<div class="study-mini-empty">No sessions yet this week</div>';
+      bars.innerHTML = '<div class="study-mini-empty">' + esc(t('study.noSessions')) + '</div>';
       return;
     }
     const max = rows[0].m || 1;
@@ -1801,27 +1809,27 @@ window.Study = (function(){
     if (inHtml){
       return '<div class="study-acct">' +
                '<div class="study-acct-who"><span class="study-dot"></span>'+esc(window.Auth.name())+'</div>' +
-               '<button class="study-link" onclick="Study.doRename()">Rename</button>' +
-               '<button class="study-link" onclick="Study.doSignOut()">Sign out</button>' +
+               '<button class="study-link" onclick="Study.doRename()">' + esc(t('study.rename')) + '</button>' +
+               '<button class="study-link" onclick="Study.doSignOut()">' + esc(t('study.signout')) + '</button>' +
              '</div>';
     }
     let h = '<div class="study-guest">' +
-              '<div class="study-guest-msg">You\'re a guest — your time is saved on this device. Sign in to appear on the board.</div>' +
-              '<button class="study-btn study-btn-google" onclick="Auth.google()">Continue with Google</button>';
+              '<div class="study-guest-msg">' + esc(t('study.guest')) + '</div>' +
+              '<button class="study-btn study-btn-google" onclick="Auth.google()">' + esc(t('study.google')) + '</button>';
     if (authMode === 'none'){
-      h += '<div class="study-or">or</div>' +
+      h += '<div class="study-or">' + esc(t('study.or')) + '</div>' +
            '<div class="study-authrow">' +
-             '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">Sign in</button>' +
-             '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">Create account</button>' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">' + esc(t('study.signin')) + '</button>' +
+             '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">' + esc(t('study.signup')) + '</button>' +
            '</div>';
     } else {
       const up = (authMode === 'signup');
       h += '<div class="study-form">' +
-             (up ? '<input class="study-input" id="authName" type="text" placeholder="display name" maxlength="24">' : '') +
-             '<input class="study-input" id="authEmail" type="email" placeholder="email" autocomplete="email">' +
-             '<input class="study-input" id="authPass" type="password" placeholder="password" autocomplete="'+(up?'new-password':'current-password')+'">' +
+             (up ? '<input class="study-input" id="authName" type="text" placeholder="' + esc(t('study.name')) + '" maxlength="24">' : '') +
+             '<input class="study-input" id="authEmail" type="email" placeholder="' + esc(t('study.email')) + '" autocomplete="email">' +
+             '<input class="study-input" id="authPass" type="password" placeholder="' + esc(t('study.password')) + '" autocomplete="'+(up?'new-password':'current-password')+'">' +
              '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'Create account':'Sign in')+'</button>' +
-             '<button class="study-link" onclick="Study.setAuthMode(\'none\')">Back</button>' +
+             '<button class="study-link" onclick="Study.setAuthMode(\'none\')">' + esc(t('study.back')) + '</button>' +
            '</div>';
     }
     return h + '</div>';
@@ -1829,7 +1837,7 @@ window.Study = (function(){
 
   function standingBlock(){
     if (!window.Auth || !window.Auth.signedIn()) return '';
-    if (!standing) return '<div class="study-standing-empty">Log a focus session to get your rank</div>';
+    if (!standing) return '<div class="study-standing-empty">' + esc(t('study.rankEmpty')) + '</div>';
     const pct = standing.percentile;
     return '<div class="study-standing">' +
              '<div class="study-rank">#'+standing.rank+'<span class="study-rank-of"> of '+standing.participants+'</span></div>' +
@@ -1839,7 +1847,7 @@ window.Study = (function(){
   }
 
   function boardBlock(){
-    if (boardLoading) return '<div class="study-board-msg">Loading…</div>';
+    if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
     return '<div class="study-board">' + board.map(function(r){
@@ -1861,7 +1869,7 @@ window.Study = (function(){
     if (!body || !panelOpen) return;
 
     let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-                 '<option value=""'+(boardSubject===''?' selected':'')+'>All subjects</option>';
+                 '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
     PRESETS.forEach(function(s){
       filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
     });
@@ -1869,16 +1877,16 @@ window.Study = (function(){
 
     body.innerHTML =
       authBlock() +
-      '<div class="study-sec-label">my week</div>' +
+      '<div class="study-sec-label">' + esc(t('study.myWeek')) + '</div>' +
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
         '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
       '</div>' +
       standingBlock() +
-      '<div class="study-sec-label">this week\'s board</div>' +
+      '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
       filter +
       boardBlock() +
-      '<div class="study-hint">The board resets every Monday</div>';
+      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>';
   }
 
   function closeOtherPanels(){
@@ -1973,15 +1981,15 @@ window.Goals = (function(){
     // New day: finished goals are archived away, unfinished ones roll over
     // with their progress intact.
     const stored = localStorage.getItem(K_DAY);
-    const t = today();
-    if (stored !== t){
+    const todayKey = today();
+    if (stored !== todayKey){
       const carried = items.filter(function(g){ return !g.done; })
-                           .map(function(g){ g.day = t; g.updated = Date.now(); return g; });
+                           .map(function(g){ g.day = todayKey; g.updated = Date.now(); return g; });
       const dropped = items.length - carried.length;
       items = carried;
-      localStorage.setItem(K_DAY, t);
+      localStorage.setItem(K_DAY, todayKey);
       save();
-      if (dropped > 0) setTimeout(function(){ toast('New day — ' + dropped + ' goal' + (dropped>1?'s':'') + ' cleared'); }, 900);
+      if (dropped > 0) setTimeout(function(){ toast(t('goals.newDay', { n: dropped })); }, 900);
     }
     if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
   }
@@ -1999,10 +2007,10 @@ window.Goals = (function(){
   function activeSubject(){ const a = active(); return (a && a.subject) || null; }
 
   function add(title, est, subject){
-    const t = String(title || '').trim().slice(0, 120);
-    if (!t) return;
+    const clean = String(title || '').trim().slice(0, 120);
+    if (!clean) return;
     const g = {
-      id: uuid(), day: today(), title: t,
+      id: uuid(), day: today(), title: clean,
       subject: subject || (window.Study ? window.Study.current() : null),
       est: Math.max(1, Math.min(20, parseInt(est) || 1)),
       progress: 0, done: false,
@@ -2070,7 +2078,7 @@ window.Goals = (function(){
     g.updated = Date.now();
     if (g.progress >= g.est && !g.done){
       g.done = true;
-      toast('Goal complete: ' + g.title);
+      toast(t('goals.complete', { title: g.title }));
       const next = items.filter(function(x){ return !x.done; })[0];
       activeId = next ? next.id : null;
     }
@@ -2131,7 +2139,7 @@ window.Goals = (function(){
 
     if (list){
       if (!items.length){
-        list.innerHTML = '<div class="goals-empty">Nothing yet — add what you want to finish today</div>';
+        list.innerHTML = '<div class="goals-empty">' + esc(t('goals.empty')) + '</div>';
       } else {
         list.innerHTML = items.map(function(g){
           const isActive = (g.id === activeId);
@@ -2184,7 +2192,7 @@ window.Goals = (function(){
       const a = active();
       if (a && a.title === v) return;
       add(v, 1);
-      toast('Added to today\'s goals');
+      toast(t('goals.added'));
     });
 
     if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });
@@ -2196,14 +2204,6 @@ window.Goals = (function(){
 })();
 
 
-// ── BOOTSTRAP ─────────────────────────────────────────────────
-// init() runs earlier in this file, before the modules above exist, so the
-// study/goals/auth bootstrap has to happen down here instead.
-// Study and Goals register their Auth.onChange listeners before Auth resolves
-// a session, so a restored login still triggers their sync.
-Study.init();
-Goals.init();
-Auth.init();
 
 
 // ── STUDY STOPWATCH (chronomètre d'étude) ─────────────────────
@@ -2248,7 +2248,7 @@ window.Chrono = (function(){
     set('cSecs', String(sec).padStart(2, '0'));
     const btn = document.getElementById('chronoBtn');
     if (btn){
-      btn.textContent = running ? 'Pause' : (ms > 0 ? 'Resume' : 'Start');
+      btn.textContent = running ? t('timer.pause') : (ms > 0 ? t('timer.resume') : t('timer.start'));
       btn.classList.toggle('running', running);
     }
   }
@@ -2298,14 +2298,14 @@ window.Chrono = (function(){
 
   function reset(){
     pause(); accum = 0; render(); save();
-    toast('Stopwatch reset');
+    toast(t('chrono.reset'));
   }
 
   // Logs the elapsed time to Study Time, and credits the focused goal one
   // pomodoro for every whole focus-length block studied.
   function commit(quiet){
     const mins = Math.floor(elapsedMs() / 60000);
-    if (mins < 1){ if (!quiet) toast('Nothing to save yet'); return; }
+    if (mins < 1){ if (!quiet) toast(t('chrono.nothing')); return; }
 
     if (window.Study) Study.logSession(mins);
 
@@ -2349,4 +2349,489 @@ window.Chrono = (function(){
            isActive:function(){ return active; } };
 })();
 
+
+
+// ── LANGUAGE ──────────────────────────────────────────────────
+// Small hand-rolled i18n: a dictionary per language, `t()` for strings
+// built in JS, and data-i18n attributes for the static markup.
+// Global function declaration so it hoists and is safe to call from any
+// module regardless of definition order.
+function t(key, vars){
+  return window.I18N ? I18N.t(key, vars) : key;
+}
+
+window.I18N = (function(){
+  const KEY = 'sf_lang';
+
+  const DICT = {
+    en: {
+      'nav.focus': 'Focus', 'nav.planner': 'Planner',
+      'tip.study': 'Study time & leaderboard', 'tip.room': 'Shared room',
+      'tip.player': 'Music player', 'tip.theme': 'Theme',
+      'tip.background': 'Background', 'tip.settings': 'Settings',
+      'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
+
+      'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
+      'timer.chronoTip': "Study stopwatch — counts up instead of down",
+      'timer.focus': 'Focus', 'timer.break': 'Break', 'timer.long': 'Long break',
+      'timer.start': 'Start', 'timer.pause': 'Pause', 'timer.resume': 'Resume',
+      'timer.reset': 'Reset', 'timer.skip': 'Skip',
+      'timer.task': 'What are you working on?', 'timer.subject': 'Subject',
+      'timer.saveSession': 'Save this session',
+      'chrono.hint': 'Counts up with no target. Saving logs the time to your subject.',
+      'chrono.reset': 'Stopwatch reset', 'chrono.nothing': 'Nothing to save yet',
+      'chrono.saved': 'Saved {time}', 'chrono.credited': '{n} pomodoro(s) credited',
+
+      'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
+      'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
+      'goals.hint': 'Tap a goal to focus it — finished sessions count toward it.',
+      'goals.empty': 'Nothing yet — add what you want to finish today',
+      'goals.complete': 'Goal complete: {title}',
+      'goals.added': "Added to today's goals",
+      'goals.newDay': 'New day — {n} goal(s) cleared',
+
+      'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
+      'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
+      'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
+      'study.guest': "You're a guest — your time is saved on this device. Sign in to appear on the board.",
+      'study.google': 'Continue with Google', 'study.or': 'or',
+      'study.signin': 'Sign in', 'study.signup': 'Create account', 'study.back': 'Back',
+      'study.signout': 'Sign out', 'study.rename': 'Rename',
+      'study.email': 'Email', 'study.password': 'Password', 'study.name': 'Display name',
+      'study.allSubjects': 'All subjects', 'study.loading': 'Loading…',
+      'study.resetsMonday': 'The board resets every Monday',
+      'study.rankEmpty': 'Log a focus session to get your rank',
+      'study.percentile': 'You studied more than <b>{pct}%</b> of candidates this week',
+      'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet — be first',
+      'study.unavailable': 'Leaderboard unavailable',
+      'study.addSubject': '＋ add a subject…', 'study.newSubject': 'New subject name',
+      'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
+
+      'room.title': 'Shared room', 'room.create': 'Create a room',
+      'room.or': 'Or join with a code', 'room.join': 'Join', 'room.copy': 'Copy',
+      'room.code': 'Room code', 'room.leave': 'Leave room',
+      'room.hint': 'Share the link or code — everyone controls the timer',
+      'room.online': 'online', 'room.connecting': 'Connecting…',
+      'room.failed': 'Connection failed — try again',
+
+      'player.title': 'Music player', 'player.paste': 'Paste a link…',
+      'player.load': 'Load', 'player.clear': 'Clear player',
+      'player.empty': 'Paste a YouTube, Spotify or SoundCloud link to play.',
+
+      'theme.title': 'Theme',
+      'theme.lofiDesc': 'soft pink · warm · cosy',
+      'theme.greensDesc': 'emerald · nature · calm',
+      'theme.cherryDesc': 'deep blue · cherry · elegant',
+      'theme.moonDesc': 'silver · quiet · cinematic',
+
+      'bg.title': 'Background', 'bg.upload': 'Upload a video, image or HTML',
+      'bg.dim': 'Dim', 'bg.blur': 'Blur', 'bg.glass': 'Card glass',
+      'bg.opacity': 'Opacity', 'bg.border': 'Border',
+      'bg.clear': 'Clear background', 'bg.remove': 'Remove default',
+      'bg.restore': 'Restore default', 'bg.suffix': '{name} background',
+
+      'set.title': 'Settings', 'set.focus': 'Focus', 'set.break': 'Break',
+      'set.long': 'Long', 'set.min': 'min', 'set.cycles': 'Cycles per round',
+      'set.autoBreak': 'Auto start break', 'set.autoWork': 'Auto start pomodoro',
+      'set.alarm': 'Alarm sound', 'set.bell': 'Bell', 'set.digital': 'Digital',
+      'set.soft': 'Soft chime', 'set.none': 'None', 'set.apply': 'Apply & reset',
+      'set.language': 'Language',
+
+      'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
+      'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
+      'plan.thisWeek': 'This week', 'plan.today': 'Today',
+      'plan.prev': 'Previous', 'plan.next': 'Next',
+      'plan.dayPlaceholder': 'Plan for this day…',
+      'plan.hint': 'Everything you type saves automatically on this device.',
+      'plan.cleared': 'Planner cleared',
+      'plan.clear': 'Clear this week', 'plan.clearMonth': 'Clear this month',
+
+      'msg.pomodoroDone': 'Pomodoro complete — take a break',
+      'msg.breakOver': 'Break over — back to focus',
+      'msg.roundDone': 'Round complete — starting over',
+      'msg.restored': 'Session restored', 'msg.settings': 'Settings applied',
+    },
+
+    fr: {
+      'nav.focus': 'Focus', 'nav.planner': 'Planning',
+      'tip.study': "Temps d'étude & classement", 'tip.room': 'Salle partagée',
+      'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
+      'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
+      'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',
+
+      'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
+      'timer.chronoTip': "Chronomètre d'étude — compte à l'endroit",
+      'timer.focus': 'Focus', 'timer.break': 'Pause', 'timer.long': 'Longue pause',
+      'timer.start': 'Démarrer', 'timer.pause': 'Pause', 'timer.resume': 'Reprendre',
+      'timer.reset': 'Réinitialiser', 'timer.skip': 'Passer',
+      'timer.task': 'Sur quoi travailles-tu ?', 'timer.subject': 'Matière',
+      'timer.saveSession': 'Enregistrer cette session',
+      'chrono.hint': "Compte à l'endroit, sans objectif. L'enregistrement ajoute le temps à ta matière.",
+      'chrono.reset': 'Chronomètre remis à zéro', 'chrono.nothing': 'Rien à enregistrer pour le moment',
+      'chrono.saved': '{time} enregistré', 'chrono.credited': '{n} pomodoro(s) crédité(s)',
+
+      'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
+      'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
+      'goals.hint': 'Touche un objectif pour le cibler — les sessions terminées y sont comptées.',
+      'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
+      'goals.complete': 'Objectif atteint : {title}',
+      'goals.added': 'Ajouté aux objectifs du jour',
+      'goals.newDay': 'Nouveau jour — {n} objectif(s) effacé(s)',
+
+      'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
+      'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
+      'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
+      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour apparaître au classement.",
+      'study.google': 'Continuer avec Google', 'study.or': 'ou',
+      'study.signin': 'Se connecter', 'study.signup': 'Créer un compte', 'study.back': 'Retour',
+      'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
+      'study.email': 'E-mail', 'study.password': 'Mot de passe', 'study.name': "Nom affiché",
+      'study.allSubjects': 'Toutes les matières', 'study.loading': 'Chargement…',
+      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi',
+      'study.rankEmpty': 'Enregistre une session pour obtenir ton rang',
+      'study.percentile': 'Tu as étudié plus que <b>{pct}%</b> des candidats cette semaine',
+      'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine — sois le premier",
+      'study.unavailable': 'Classement indisponible',
+      'study.addSubject': '＋ ajouter une matière…', 'study.newSubject': 'Nom de la matière',
+      'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
+
+      'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
+      'room.or': 'Ou rejoindre avec un code', 'room.join': 'Rejoindre', 'room.copy': 'Copier',
+      'room.code': 'Code de la salle', 'room.leave': 'Quitter la salle',
+      'room.hint': 'Partage le lien ou le code — tout le monde contrôle le minuteur',
+      'room.online': 'en ligne', 'room.connecting': 'Connexion…',
+      'room.failed': 'Échec de la connexion — réessaie',
+
+      'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
+      'player.load': 'Charger', 'player.clear': 'Vider le lecteur',
+      'player.empty': 'Colle un lien YouTube, Spotify ou SoundCloud pour lancer la lecture.',
+
+      'theme.title': 'Thème',
+      'theme.lofiDesc': 'rose doux · chaleureux · cosy',
+      'theme.greensDesc': 'émeraude · nature · calme',
+      'theme.cherryDesc': 'bleu profond · cerise · élégant',
+      'theme.moonDesc': 'argent · silencieux · cinématique',
+
+      'bg.title': 'Arrière-plan', 'bg.upload': 'Importe une vidéo, une image ou du HTML',
+      'bg.dim': 'Assombrir', 'bg.blur': 'Flou', 'bg.glass': 'Verre des cartes',
+      'bg.opacity': 'Opacité', 'bg.border': 'Bordure',
+      'bg.clear': "Effacer l'arrière-plan", 'bg.remove': 'Retirer par défaut',
+      'bg.restore': 'Restaurer par défaut', 'bg.suffix': 'Arrière-plan {name}',
+
+      'set.title': 'Paramètres', 'set.focus': 'Focus', 'set.break': 'Pause',
+      'set.long': 'Longue', 'set.min': 'min', 'set.cycles': 'Cycles par série',
+      'set.autoBreak': 'Démarrer la pause automatiquement',
+      'set.autoWork': 'Démarrer le pomodoro automatiquement',
+      'set.alarm': 'Son d’alarme', 'set.bell': 'Cloche', 'set.digital': 'Numérique',
+      'set.soft': 'Carillon doux', 'set.none': 'Aucun', 'set.apply': 'Appliquer & réinitialiser',
+      'set.language': 'Langue',
+
+      'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
+      'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',
+      'plan.thisWeek': 'Cette semaine', 'plan.today': "Aujourd'hui",
+      'plan.prev': 'Précédent', 'plan.next': 'Suivant',
+      'plan.dayPlaceholder': 'Plan pour ce jour…',
+      'plan.hint': 'Tout ce que tu écris est enregistré automatiquement sur cet appareil.',
+      'plan.cleared': 'Planning effacé',
+      'plan.clear': 'Effacer la semaine', 'plan.clearMonth': 'Effacer le mois',
+
+      'msg.pomodoroDone': 'Pomodoro terminé — fais une pause',
+      'msg.breakOver': 'Pause terminée — retour au travail',
+      'msg.roundDone': 'Série terminée — on recommence',
+      'msg.restored': 'Session restaurée', 'msg.settings': 'Paramètres appliqués',
+    }
+  };
+
+  let lang = 'en';
+  const listeners = [];
+
+  function detect(){
+    const saved = localStorage.getItem(KEY);
+    if (saved && DICT[saved]) return saved;
+    const nav = (navigator.language || 'en').toLowerCase();
+    return nav.indexOf('fr') === 0 ? 'fr' : 'en';
+  }
+
+  function tr(key, vars){
+    const table = DICT[lang] || DICT.en;
+    let out = table[key] != null ? table[key] : (DICT.en[key] != null ? DICT.en[key] : key);
+    if (vars) Object.keys(vars).forEach(function(k){
+      out = out.split('{' + k + '}').join(vars[k]);
+    });
+    return out;
+  }
+
+  // Walks the static markup. Elements opt in with data-i18n (text),
+  // data-i18n-ph (placeholder) or data-i18n-title (tooltip).
+  function apply(){
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      el.textContent = tr(el.getAttribute('data-i18n'));
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+      el.setAttribute('placeholder', tr(el.getAttribute('data-i18n-ph')));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(function(el){
+      const s = tr(el.getAttribute('data-i18n-title'));
+      el.setAttribute('title', s);
+      if (el.hasAttribute('aria-label')) el.setAttribute('aria-label', s);
+    });
+    document.documentElement.setAttribute('lang', lang);
+    listeners.forEach(function(fn){ try { fn(lang); } catch(e){ console.warn('i18n listener', e); } });
+  }
+
+  function set(next){
+    if (!DICT[next] || next === lang) return;
+    lang = next;
+    try { localStorage.setItem(KEY, lang); } catch(e){}
+    apply();
+    // Re-render everything that builds its own markup.
+    ['Study', 'Goals', 'Planner'].forEach(function(m){
+      if (window[m] && window[m].render) window[m].render();
+    });
+    if (window.Room && Room.refresh) Room.refresh();
+    syncButtons();
+  }
+
+  function syncButtons(){
+    document.querySelectorAll('[data-lang]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-lang') === lang);
+    });
+  }
+
+  function init(){
+    lang = detect();
+    apply();
+    syncButtons();
+  }
+
+  return { init:init, apply:apply, set:set, t:tr,
+           current:function(){ return lang; },
+           onChange:function(fn){ listeners.push(fn); } };
+})();
+
+
+// ── PLANNER (weekly + monthly) ────────────────────────────────
+// Its own view rather than another card on the timer screen: a weekly grid
+// needs real space, and the focus screen is deliberately one no-scroll page.
+// Local-first — everything is keyed by ISO week / month in localStorage.
+window.Planner = (function(){
+  const K_WEEK = 'sf_plan_week', K_MONTH = 'sf_plan_month', K_RANGE = 'sf_plan_range';
+
+  let weekRef = null;    // any date inside the shown week
+  let monthRef = null;   // any date inside the shown month
+  let saveTimer = null;
+
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function readJSON(k){
+    try { const v = JSON.parse(localStorage.getItem(k)); return v && typeof v === 'object' ? v : {}; }
+    catch(e){ return {}; }
+  }
+  function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+  function locale(){ return window.I18N ? (I18N.current() === 'fr' ? 'fr-FR' : 'en-GB') : 'en-GB'; }
+
+  // ── date helpers ──
+  function startOfWeek(d){
+    const x = new Date(d); x.setHours(0,0,0,0);
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));   // Monday
+    return x;
+  }
+  function ymd(d){
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  function weekKey(d){ return ymd(startOfWeek(d)); }
+  function monthKey(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  function sameDay(a,b){ return ymd(a) === ymd(b); }
+
+  function range(){
+    const r = readJSON(K_RANGE);
+    return { from: Number.isFinite(r.from) ? r.from : 8, to: Number.isFinite(r.to) ? r.to : 22 };
+  }
+  function setRange(which, val){
+    const r = range();
+    r[which] = Math.max(0, Math.min(23, parseInt(val) || 0));
+    if (r.to <= r.from) r.to = Math.min(23, r.from + 1);
+    writeJSON(K_RANGE, r);
+    render();
+  }
+
+  // ── persistence (debounced so typing isn't a write per keystroke) ──
+  function stash(store, bucket, cell, value){
+    clearTimeout(saveTimer);
+    const all = readJSON(store);
+    if (!all[bucket]) all[bucket] = {};
+    if (value.trim()) all[bucket][cell] = value;
+    else delete all[bucket][cell];
+    saveTimer = setTimeout(function(){ writeJSON(store, all); }, 250);
+    // keep the in-memory copy current for an immediate re-render
+    writeJSON(store, all);
+  }
+
+  function onWeekInput(el){ stash(K_WEEK, weekKey(weekRef), el.dataset.cell, el.value); }
+  function onMonthInput(el){ stash(K_MONTH, monthKey(monthRef), el.dataset.cell, el.value); }
+
+  // ── navigation ──
+  function shiftWeek(n){ weekRef.setDate(weekRef.getDate() + n*7); render(); }
+  function shiftMonth(n){ monthRef.setMonth(monthRef.getMonth() + n, 1); render(); }
+  function todayWeek(){ weekRef = new Date(); render(); }
+  function todayMonth(){ monthRef = new Date(); render(); }
+
+  function clearWeek(){
+    const all = readJSON(K_WEEK); delete all[weekKey(weekRef)]; writeJSON(K_WEEK, all);
+    render(); toast(t('plan.cleared'));
+  }
+  function clearMonth(){
+    const all = readJSON(K_MONTH); delete all[monthKey(monthRef)]; writeJSON(K_MONTH, all);
+    render(); toast(t('plan.cleared'));
+  }
+
+  function printView(){ window.print(); }
+
+  // ── rendering ──
+  function renderWeek(){
+    const host = document.getElementById('weekGrid');
+    const label = document.getElementById('weekLabel');
+    if (!host) return;
+
+    const start = startOfWeek(weekRef);
+    const data = readJSON(K_WEEK)[weekKey(weekRef)] || {};
+    const r = range();
+    const today = new Date();
+
+    if (label){
+      const end = new Date(start); end.setDate(end.getDate() + 6);
+      const f = { day: 'numeric', month: 'short' };
+      label.textContent = start.toLocaleDateString(locale(), f) + ' – ' +
+                          end.toLocaleDateString(locale(), Object.assign({ year: 'numeric' }, f));
+    }
+
+    let head = '<div class="pl-cell pl-corner"></div>';
+    for (let i = 0; i < 7; i++){
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      const isToday = sameDay(d, today);
+      head += '<div class="pl-cell pl-head' + (isToday ? ' is-today' : '') + '">' +
+                '<span class="pl-dayname">' + esc(d.toLocaleDateString(locale(), { weekday: 'short' })) + '</span>' +
+                '<span class="pl-daynum">' + d.getDate() + '</span>' +
+              '</div>';
+    }
+
+    let body = '';
+    for (let h = r.from; h <= r.to; h++){
+      body += '<div class="pl-cell pl-hour">' + String(h).padStart(2,'0') + ':00</div>';
+      for (let i = 0; i < 7; i++){
+        const d = new Date(start); d.setDate(d.getDate() + i);
+        const cell = i + '-' + h;
+        const isToday = sameDay(d, today);
+        body += '<textarea class="pl-cell pl-slot' + (isToday ? ' is-today' : '') + '" ' +
+                  'data-cell="' + cell + '" rows="1" ' +
+                  'oninput="Planner.onWeekInput(this)">' + esc(data[cell] || '') + '</textarea>';
+      }
+    }
+
+    host.style.setProperty('--pl-cols', '7');
+    host.innerHTML = head + body;
+
+    const fromSel = document.getElementById('planFrom');
+    const toSel = document.getElementById('planTo');
+    if (fromSel && !fromSel.dataset.built){
+      let o = '';
+      for (let h = 0; h < 24; h++) o += '<option value="'+h+'">' + String(h).padStart(2,'0') + ':00</option>';
+      fromSel.innerHTML = o; toSel.innerHTML = o;
+      fromSel.dataset.built = toSel.dataset.built = '1';
+    }
+    if (fromSel) fromSel.value = String(r.from);
+    if (toSel) toSel.value = String(r.to);
+  }
+
+  function renderMonth(){
+    const host = document.getElementById('monthGrid');
+    const label = document.getElementById('monthLabel');
+    if (!host) return;
+
+    const first = new Date(monthRef.getFullYear(), monthRef.getMonth(), 1);
+    const data = readJSON(K_MONTH)[monthKey(monthRef)] || {};
+    const today = new Date();
+
+    if (label){
+      label.textContent = first.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+    }
+
+    let out = '';
+    const wkStart = startOfWeek(first);
+    for (let i = 0; i < 7; i++){
+      const d = new Date(wkStart); d.setDate(d.getDate() + i);
+      out += '<div class="pl-cell pl-head">' + esc(d.toLocaleDateString(locale(), { weekday: 'short' })) + '</div>';
+    }
+
+    const daysInMonth = new Date(monthRef.getFullYear(), monthRef.getMonth() + 1, 0).getDate();
+    const lead = (first.getDay() + 6) % 7;               // Monday-first offset
+    const cells = Math.ceil((lead + daysInMonth) / 7) * 7;
+
+    for (let i = 0; i < cells; i++){
+      const dayNum = i - lead + 1;
+      if (dayNum < 1 || dayNum > daysInMonth){
+        out += '<div class="pl-cell pl-day is-empty"></div>';
+        continue;
+      }
+      const d = new Date(monthRef.getFullYear(), monthRef.getMonth(), dayNum);
+      const isToday = sameDay(d, today);
+      out += '<div class="pl-cell pl-day' + (isToday ? ' is-today' : '') + '">' +
+               '<span class="pl-daynum">' + dayNum + '</span>' +
+               '<textarea class="pl-note" data-cell="' + dayNum + '" rows="1" ' +
+                 'placeholder="' + esc(t('plan.dayPlaceholder')) + '" ' +
+                 'oninput="Planner.onMonthInput(this)">' + esc(data[dayNum] || '') + '</textarea>' +
+             '</div>';
+    }
+    host.innerHTML = out;
+  }
+
+  function render(){ renderWeek(); renderMonth(); }
+
+  function init(){
+    weekRef = new Date();
+    monthRef = new Date();
+    render();
+    if (window.I18N) I18N.onChange(function(){ render(); });
+  }
+
+  return { init:init, render:render,
+           onWeekInput:onWeekInput, onMonthInput:onMonthInput,
+           shiftWeek:shiftWeek, shiftMonth:shiftMonth,
+           todayWeek:todayWeek, todayMonth:todayMonth,
+           clearWeek:clearWeek, clearMonth:clearMonth,
+           setRange:setRange, print:printView };
+})();
+
+
+// ── VIEW SWITCH (focus ⇄ planner) ─────────────────────────────
+function showView(name){
+  document.body.classList.toggle('view-planner', name === 'planner');
+  document.querySelectorAll('[data-view]').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-view') === name);
+  });
+  try { localStorage.setItem('sf_view', name); } catch(e){}
+  window.scrollTo(0, 0);
+}
+
+
+// ── BOOTSTRAP ─────────────────────────────────────────────────
+// init() runs much earlier in this file, before any of the modules above
+// exist, so everything modular is started here instead.
+// Order matters: I18N first, otherwise the modules render raw keys before a
+// dictionary is loaded. Study and Goals register their Auth.onChange
+// listeners before Auth resolves a session, so a restored login still
+// triggers their sync.
+I18N.init();
+Study.init();
+Goals.init();
+Auth.init();
 Chrono.init();
+Planner.init();
+
+// Anything the modules rendered during init still needs translating.
+I18N.apply();
+
+showView(localStorage.getItem('sf_view') === 'planner' ? 'planner' : 'focus');

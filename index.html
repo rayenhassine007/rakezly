@@ -36,28 +36,37 @@
     <span class="live-date" id="liveDate"></span>
   </div>
 
+  <nav class="viewswitch" aria-label="View">
+    <button class="view-btn active" data-view="focus" onclick="showView('focus')" data-i18n="nav.focus">Focus</button>
+    <button class="view-btn" data-view="planner" onclick="showView('planner')" data-i18n="nav.planner">Planner</button>
+  </nav>
+
   <nav class="dock" aria-label="Tools">
-    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" title="Study time &amp; leaderboard" aria-label="Study time and leaderboard">
+    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Study time &amp; leaderboard" aria-label="Study time and leaderboard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
     </button>
-    <button class="dock-btn" onclick="Room.togglePanel()" id="roomFixedBtn" title="Shared room" aria-label="Shared room">
+    <button class="dock-btn" onclick="Room.togglePanel()" id="roomFixedBtn" data-i18n-title="tip.room" title="Shared room" aria-label="Shared room">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0112 0"/><path d="M16 5.5a3 3 0 010 5"/><path d="M18 20a6 6 0 00-2-4.5"/></svg>
     </button>
-    <button class="dock-btn" onclick="togglePlayerPanel()" id="playerFixedBtn" title="Music player" aria-label="Music player">
+    <button class="dock-btn" onclick="togglePlayerPanel()" id="playerFixedBtn" data-i18n-title="tip.player" title="Music player" aria-label="Music player">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 18V5l12-2v13"/></svg>
     </button>
-    <button class="dock-btn" onclick="toggleThemePanel()" id="themeFixedBtn" title="Theme" aria-label="Theme">
+    <button class="dock-btn" onclick="toggleThemePanel()" id="themeFixedBtn" data-i18n-title="tip.theme" title="Theme" aria-label="Theme">
       <!-- Half-filled circle: the conventional "appearance / colour scheme" mark -->
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18Z" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button class="dock-btn btn-bg-toggle" onclick="toggleBgPanel()" title="Background" aria-label="Background">
+    <button class="dock-btn btn-bg-toggle" onclick="toggleBgPanel()" data-i18n-title="tip.background" title="Background" aria-label="Background">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></svg>
     </button>
-    <button class="dock-btn" onclick="toggleSettingsPanel()" id="settingsFixedBtn" title="Settings" aria-label="Settings">
+    <button class="dock-btn" onclick="toggleSettingsPanel()" id="settingsFixedBtn" data-i18n-title="tip.settings" title="Settings" aria-label="Settings">
       <!-- Sliders, not a gear: the old rays-around-a-circle read as brightness -->
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7M17 7h3M4 17h3M13 17h7"/><circle cx="14" cy="7" r="2.4"/><circle cx="10" cy="17" r="2.4"/></svg>
     </button>
-    <button class="dock-btn" onclick="toggleFS()" id="fsBtn" title="Fullscreen" aria-label="Fullscreen">
+    <span class="lang-toggle" data-i18n-title="tip.language" title="Language">
+      <button class="lang-btn" data-lang="en" onclick="I18N.set('en')">EN</button>
+      <button class="lang-btn" data-lang="fr" onclick="I18N.set('fr')">FR</button>
+    </span>
+    <button class="dock-btn" onclick="toggleFS()" id="fsBtn" data-i18n-title="tip.fullscreen" title="Fullscreen" aria-label="Fullscreen">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
     </button>
   </nav>
@@ -71,9 +80,9 @@
 
     <!-- Primary switch: two different kinds of timer, not two sessions -->
     <div class="mode-switch" role="tablist" aria-label="Timer type">
-      <button class="switch-btn active" id="switchPomodoro" onclick="Chrono.exit()">Pomodoro</button>
+      <button class="switch-btn active" id="switchPomodoro" onclick="Chrono.exit()" data-i18n="timer.pomodoro">Pomodoro</button>
       <button class="switch-btn" id="switchChrono" onclick="Chrono.enter()"
-              title="Chronomètre d'étude — counts up instead of down">Chrono</button>
+              data-i18n-title="timer.chronoTip" data-i18n="timer.chrono" title="Chronomètre d'étude">Chrono</button>
     </div>
 
     <div class="cycles-row" id="cyclesRow"></div>
@@ -92,33 +101,33 @@
     </div>
 
     <div class="mode-tabs" role="tablist">
-      <button class="mode-tab active" data-mode="work"  onclick="switchMode('work')">Focus</button>
-      <button class="mode-tab bt"     data-mode="break" onclick="switchMode('break')">Break</button>
-      <button class="mode-tab lt"     data-mode="long"  onclick="switchMode('long')">Long break</button>
+      <button class="mode-tab active" data-mode="work"  onclick="switchMode('work')" data-i18n="timer.focus">Focus</button>
+      <button class="mode-tab bt"     data-mode="break" onclick="switchMode('break')" data-i18n="timer.break">Break</button>
+      <button class="mode-tab lt"     data-mode="long"  onclick="switchMode('long')" data-i18n="timer.long">Long break</button>
     </div>
 
     <div class="timer-controls">
-      <button class="btn btn-icon" onclick="resetTimer()" title="Reset" aria-label="Reset">
+      <button class="btn btn-icon" onclick="resetTimer()" data-i18n-title="timer.reset" title="Reset" aria-label="Reset">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.7L3 8"/><path d="M3 3v5h5"/></svg>
       </button>
       <button class="btn btn-primary" id="startBtn" onclick="toggleTimer()">Start</button>
-      <button class="btn btn-icon" onclick="skipSession()" title="Skip" aria-label="Skip">
+      <button class="btn btn-icon" onclick="skipSession()" data-i18n-title="timer.skip" title="Skip" aria-label="Skip">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7z" fill="currentColor" stroke="none"/><path d="M18 5v14"/></svg>
       </button>
     </div>
 
     <!-- Stopwatch controls, shown only in chrono mode -->
     <div class="timer-controls chrono-controls" id="chronoControls">
-      <button class="btn btn-icon" onclick="Chrono.reset()" title="Reset" aria-label="Reset stopwatch">
+      <button class="btn btn-icon" onclick="Chrono.reset()" data-i18n-title="timer.reset" title="Reset" aria-label="Reset stopwatch">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.7L3 8"/><path d="M3 3v5h5"/></svg>
       </button>
       <button class="btn btn-primary" id="chronoBtn" onclick="Chrono.toggle()">Start</button>
-      <button class="btn btn-icon" onclick="Chrono.save()" title="Save this session" aria-label="Save this session">
+      <button class="btn btn-icon" onclick="Chrono.save()" data-i18n-title="timer.saveSession" title="Save this session" aria-label="Save this session">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
       </button>
     </div>
 
-    <p class="chrono-hint" id="chronoHint">Counts up with no target. Saving logs the time to your subject.</p>
+    <p class="chrono-hint" id="chronoHint" data-i18n="chrono.hint">Counts up with no target.</p>
 
     <div class="quick-add-row">
       <button class="btn-qadd" onclick="addMins(1)">+1</button>
@@ -129,8 +138,8 @@
     </div>
 
     <div class="focus-row">
-      <input class="task-input" id="taskInput" type="text" placeholder="What are you working on?">
-      <select class="subject-select" id="subjectSelect" onchange="Study.onSelect(this)" aria-label="Subject"></select>
+      <input class="task-input" id="taskInput" type="text" data-i18n-ph="timer.task" placeholder="What are you working on?">
+      <select class="subject-select" id="subjectSelect" onchange="Study.onSelect(this)" data-i18n-title="timer.subject" aria-label="Subject"></select>
     </div>
   </section>
 
@@ -139,34 +148,84 @@
 
     <div class="pane goals-card">
       <div class="pane-head">
-        <h2 class="pane-title">Today's goals</h2>
+        <h2 class="pane-title" data-i18n="goals.title">Today's goals</h2>
         <span class="goals-count" id="goalsCount">0/0</span>
       </div>
       <div class="goals-list" id="goalsList"></div>
       <div class="goal-add-row">
-        <input class="goal-input" id="goalInput" type="text" placeholder="Add a goal…" maxlength="120">
-        <input class="goal-est" id="goalEst" type="number" min="1" max="20" value="1" title="Estimated pomodoros" aria-label="Estimated pomodoros">
-        <button class="goal-add-btn" onclick="Goals.addFromInput()" title="Add goal" aria-label="Add goal">+</button>
+        <input class="goal-input" id="goalInput" type="text" data-i18n-ph="goals.add" placeholder="Add a goal…" maxlength="120">
+        <input class="goal-est" id="goalEst" type="number" min="1" max="20" value="1" data-i18n-title="goals.est" title="Estimated pomodoros" aria-label="Estimated pomodoros">
+        <button class="goal-add-btn" onclick="Goals.addFromInput()" data-i18n-title="goals.addBtn" title="Add goal" aria-label="Add goal">+</button>
       </div>
-      <p class="goals-hint">Tap a goal to focus it — finished sessions count toward it.</p>
+      <p class="goals-hint" data-i18n="goals.hint">Tap a goal to focus it.</p>
     </div>
 
     <div class="pane study-mini-card">
       <div class="pane-head">
-        <h2 class="pane-title">Study time</h2>
-        <button class="study-mini-btn" onclick="Study.togglePanel()">Leaderboard</button>
+        <h2 class="pane-title" data-i18n="study.title">Study time</h2>
+        <button class="study-mini-btn" onclick="Study.togglePanel()" data-i18n="study.board">Leaderboard</button>
       </div>
       <div class="study-mini-nums">
         <div class="study-mini-item">
           <span class="study-mini-val" id="studyToday">0m</span>
-          <span class="stat-label">Today</span>
+          <span class="stat-label" data-i18n="study.today">Today</span>
         </div>
         <div class="study-mini-item">
           <span class="study-mini-val" id="studyWeek">0m</span>
-          <span class="stat-label">This week</span>
+          <span class="stat-label" data-i18n="study.week">This week</span>
         </div>
       </div>
       <div class="study-mini-bars" id="studyMiniBars"></div>
+    </div>
+
+  </section>
+
+  <!-- ─────────────── PLANNER VIEW ─────────────── -->
+  <section class="planner" aria-label="Planner">
+
+    <div class="pane planner-card">
+      <div class="pane-head">
+        <h2 class="pane-title" data-i18n="plan.weekly">Weekly planner</h2>
+        <div class="pl-nav">
+          <button class="pl-btn" onclick="Planner.shiftWeek(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous week">‹</button>
+          <span class="pl-label" id="weekLabel"></span>
+          <button class="pl-btn" onclick="Planner.shiftWeek(1)" data-i18n-title="plan.next" title="Next" aria-label="Next week">›</button>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.todayWeek()" data-i18n="plan.thisWeek">This week</button>
+        </div>
+      </div>
+
+      <div class="pl-toolbar">
+        <span class="pl-range-label" data-i18n="plan.from">From</span>
+        <select class="pl-select" id="planFrom" onchange="Planner.setRange('from', this.value)" aria-label="Start hour"></select>
+        <span class="pl-range-label" data-i18n="plan.to">to</span>
+        <select class="pl-select" id="planTo" onchange="Planner.setRange('to', this.value)" aria-label="End hour"></select>
+        <span class="pl-spacer"></span>
+        <button class="pl-btn pl-btn-wide" onclick="Planner.clearWeek()" data-i18n="plan.clear">Clear this week</button>
+        <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
+      </div>
+
+      <div class="pl-grid pl-week" id="weekGrid"></div>
+    </div>
+
+    <div class="pane planner-card">
+      <div class="pane-head">
+        <h2 class="pane-title" data-i18n="plan.monthly">Monthly planner</h2>
+        <div class="pl-nav">
+          <button class="pl-btn" onclick="Planner.shiftMonth(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous month">‹</button>
+          <span class="pl-label" id="monthLabel"></span>
+          <button class="pl-btn" onclick="Planner.shiftMonth(1)" data-i18n-title="plan.next" title="Next" aria-label="Next month">›</button>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.todayMonth()" data-i18n="plan.today">Today</button>
+        </div>
+      </div>
+
+      <div class="pl-toolbar">
+        <span class="pl-spacer"></span>
+        <button class="pl-btn pl-btn-wide" onclick="Planner.clearMonth()" data-i18n="plan.clearMonth">Clear this month</button>
+        <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
+      </div>
+
+      <div class="pl-grid pl-month" id="monthGrid"></div>
+      <p class="goals-hint" data-i18n="plan.hint">Everything you type saves automatically on this device.</p>
     </div>
 
   </section>
@@ -181,25 +240,25 @@
 <!-- ─────────────────────────── POPOVERS ─────────────────────────── -->
 
 <div id="studyPanel" class="popover study-panel">
-  <div class="popover-title study-panel-title">Study time</div>
+  <div class="popover-title study-panel-title" data-i18n="study.title">Study time</div>
   <div id="studyBody"></div>
 </div>
 
 <div id="roomPanel" class="popover room-panel">
-  <div class="popover-title room-panel-title">Shared room</div>
+  <div class="popover-title room-panel-title" data-i18n="room.title">Shared room</div>
   <div id="roomBody"></div>
 </div>
 
 <div class="popover player-panel" id="playerPanel">
-  <div class="popover-title player-panel-title">Music player</div>
+  <div class="popover-title player-panel-title" data-i18n="player.title">Music player</div>
   <div class="player-source-badges">
     <span class="player-badge" data-src="youtube">YouTube</span>
     <span class="player-badge" data-src="spotify">Spotify</span>
     <span class="player-badge" data-src="soundcloud">SoundCloud</span>
   </div>
   <div class="player-url-row">
-    <input class="player-url-input" id="playerUrlInput" type="text" placeholder="Paste a link…">
-    <button class="player-load-btn" onclick="loadPlayerUrl()">Load</button>
+    <input class="player-url-input" id="playerUrlInput" type="text" data-i18n-ph="player.paste" placeholder="Paste a link…">
+    <button class="player-load-btn" onclick="loadPlayerUrl()" data-i18n="player.load">Load</button>
   </div>
   <div class="player-embed-wrap" id="playerEmbedWrap">
     <iframe id="playerIframe" allow="autoplay; encrypted-media" allowfullscreen title="Music player"></iframe>
@@ -214,104 +273,104 @@
     <div class="player-empty-icon">♫</div>
     Paste a YouTube, Spotify or SoundCloud link to play.
   </div>
-  <button class="player-clear-btn" id="playerClearBtn" onclick="clearPlayer()">Clear player</button>
+  <button class="player-clear-btn" id="playerClearBtn" onclick="clearPlayer()" data-i18n="player.clear">Clear player</button>
 </div>
 
 <div class="popover theme-panel" id="themePanel">
-  <div class="popover-title theme-panel-title">Theme</div>
+  <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
   <div class="theme-option selected" id="theme-lofi" onclick="setTheme('lofi')">
     <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
     <span class="theme-option-info">
       <span class="theme-option-name">Lofi</span>
-      <span class="theme-option-desc">soft pink · warm · cosy</span>
+      <span class="theme-option-desc" data-i18n="theme.lofiDesc">soft pink</span>
     </span>
   </div>
   <div class="theme-option" id="theme-greens" onclick="setTheme('greens')">
     <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0d1a10,#123524 55%,#6ee7a8)"></span>
     <span class="theme-option-info">
       <span class="theme-option-name">Greens</span>
-      <span class="theme-option-desc">emerald · nature · calm</span>
+      <span class="theme-option-desc" data-i18n="theme.greensDesc">emerald</span>
     </span>
   </div>
   <div class="theme-option" id="theme-cherry-blues" onclick="setTheme('cherry-blues')">
     <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0b1222,#16294d 55%,#ff8fb0)"></span>
     <span class="theme-option-info">
       <span class="theme-option-name">Cherry Blues</span>
-      <span class="theme-option-desc">deep blue · cherry · elegant</span>
+      <span class="theme-option-desc" data-i18n="theme.cherryDesc">deep blue</span>
     </span>
   </div>
   <div class="theme-option" id="theme-moonlight" onclick="setTheme('moonlight')">
     <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0a0a0a,#1c1c1c 55%,#dcdcdc)"></span>
     <span class="theme-option-info">
       <span class="theme-option-name">Moonlight</span>
-      <span class="theme-option-desc">silver · quiet · cinematic</span>
+      <span class="theme-option-desc" data-i18n="theme.moonDesc">silver</span>
     </span>
   </div>
 </div>
 
 <div class="popover bg-panel" id="bgPanel">
-  <div class="popover-title bg-panel-title">Background</div>
+  <div class="popover-title bg-panel-title" data-i18n="bg.title">Background</div>
   <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
   <label class="bg-upload-area" id="uploadArea">
     <input type="file" id="mediaUpload" accept="video/*,image/*,text/html,.html" onchange="loadMedia(event)">
     <span class="upload-icon">＋</span>
-    <span class="upload-text" id="uploadText">Upload a video, image or HTML</span>
+    <span class="upload-text" id="uploadText" data-i18n="bg.upload">Upload a video, image or HTML</span>
   </label>
   <div class="bg-slider-group">
     <div class="bg-slider-row">
-      <span class="bg-slider-label">Dim</span>
+      <span class="bg-slider-label" data-i18n="bg.dim">Dim</span>
       <input type="range" class="bg-slider" id="dimSlider" min="0" max="95" value="60" oninput="setDim(this.value)">
       <span class="bg-slider-val" id="dimVal">60%</span>
     </div>
     <div class="bg-slider-row">
-      <span class="bg-slider-label">Blur</span>
+      <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
       <input type="range" class="bg-slider" id="blurSlider" min="0" max="20" value="0" oninput="setBlur(this.value)">
       <span class="bg-slider-val" id="blurVal">0px</span>
     </div>
     <div class="bg-panel-divider"></div>
-    <div class="bg-panel-section">Card glass</div>
+    <div class="bg-panel-section" data-i18n="bg.glass">Card glass</div>
     <div class="bg-slider-row">
-      <span class="bg-slider-label">Opacity</span>
+      <span class="bg-slider-label" data-i18n="bg.opacity">Opacity</span>
       <input type="range" class="bg-slider" id="glassOpacSlider" min="0" max="80" value="28" oninput="setGlassOpac(this.value)">
       <span class="bg-slider-val" id="glassOpacVal">28%</span>
     </div>
     <div class="bg-slider-row">
-      <span class="bg-slider-label">Blur</span>
+      <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
       <input type="range" class="bg-slider" id="glassBlurSlider" min="0" max="40" value="18" oninput="setGlassBlur(this.value)">
       <span class="bg-slider-val" id="glassBlurVal">18px</span>
     </div>
     <div class="bg-slider-row">
-      <span class="bg-slider-label">Border</span>
+      <span class="bg-slider-label" data-i18n="bg.border">Border</span>
       <input type="range" class="bg-slider" id="glassBordSlider" min="0" max="60" value="18" oninput="setGlassBorder(this.value)">
       <span class="bg-slider-val" id="glassBordVal">18%</span>
     </div>
   </div>
-  <button class="bg-clear-btn" onclick="clearMedia()">Clear background</button>
-  <button class="bg-clear-btn" id="removeDefaultBgBtn" onclick="removeDefaultBg()">Remove default</button>
-  <button class="bg-clear-btn" id="restoreDefaultBgBtn" onclick="restoreDefaultBg()" style="display:none;">Restore default</button>
+  <button class="bg-clear-btn" onclick="clearMedia()" data-i18n="bg.clear">Clear background</button>
+  <button class="bg-clear-btn" id="removeDefaultBgBtn" onclick="removeDefaultBg()" data-i18n="bg.remove">Remove default</button>
+  <button class="bg-clear-btn" id="restoreDefaultBgBtn" onclick="restoreDefaultBg()" data-i18n="bg.restore" style="display:none;">Restore default</button>
 </div>
 
 <div class="popover settings-slide-panel" id="settingsSlidePanel">
-  <div class="popover-title bg-panel-title">Settings</div>
+  <div class="popover-title bg-panel-title" data-i18n="set.title">Settings</div>
   <div class="settings-row">
     <label class="setting-item">
-      <span>Focus</span>
+      <span data-i18n="set.focus">Focus</span>
       <input type="number" id="setWork" min="1" max="90" value="25">
-      <span class="unit">min</span>
+      <span class="unit" data-i18n="set.min">min</span>
     </label>
     <label class="setting-item">
-      <span>Break</span>
+      <span data-i18n="set.break">Break</span>
       <input type="number" id="setBreak" min="1" max="30" value="5">
-      <span class="unit">min</span>
+      <span class="unit" data-i18n="set.min">min</span>
     </label>
     <label class="setting-item">
-      <span>Long</span>
+      <span data-i18n="set.long">Long</span>
       <input type="number" id="setLong" min="1" max="60" value="15">
-      <span class="unit">min</span>
+      <span class="unit" data-i18n="set.min">min</span>
     </label>
   </div>
   <div class="cycles-setting">
-    <span class="auto-label">Cycles per round</span>
+    <span class="auto-label" data-i18n="set.cycles">Cycles per round</span>
     <div class="cycles-count-btns">
       <button onclick="chgCycles(-1)" aria-label="Fewer cycles">−</button>
       <span class="cycles-count-val" id="cycleCountVal">4</span>
@@ -321,30 +380,30 @@
   <div class="bg-panel-divider"></div>
   <div class="auto-row">
     <div class="auto-item">
-      <span class="auto-label">Auto start break</span>
+      <span class="auto-label" data-i18n="set.autoBreak">Auto start break</span>
       <label class="toggle-switch">
         <input type="checkbox" id="autoBreakToggle" checked onchange="autoStartBreak=this.checked">
         <span class="toggle-slider"></span>
       </label>
     </div>
     <div class="auto-item">
-      <span class="auto-label">Auto start pomodoro</span>
+      <span class="auto-label" data-i18n="set.autoWork">Auto start pomodoro</span>
       <label class="toggle-switch">
         <input type="checkbox" id="autoWorkToggle" checked onchange="autoStartWork=this.checked">
         <span class="toggle-slider"></span>
       </label>
     </div>
     <div class="auto-item">
-      <span class="auto-label">Alarm sound</span>
+      <span class="auto-label" data-i18n="set.alarm">Alarm sound</span>
       <select class="alarm-select" id="alarmSelect" onchange="alarmType=this.value">
-        <option value="bell">Bell</option>
-        <option value="digital">Digital</option>
-        <option value="soft">Soft chime</option>
-        <option value="none">None</option>
+        <option value="bell" data-i18n="set.bell">Bell</option>
+        <option value="digital" data-i18n="set.digital">Digital</option>
+        <option value="soft" data-i18n="set.soft">Soft chime</option>
+        <option value="none" data-i18n="set.none">None</option>
       </select>
     </div>
   </div>
-  <button class="btn-apply" onclick="applySettings()">Apply &amp; reset</button>
+  <button class="btn-apply" onclick="applySettings()" data-i18n="set.apply">Apply &amp; reset</button>
 </div>
 
 <div class="toast" id="toast"></div>
