@@ -222,6 +222,14 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .live-clock .clock-sep  { opacity: .5; margin: 0 1px; }
 .live-clock .clock-ampm { font-size: 10px; margin-left: 4px; opacity: .75; }
 
+.live-date {
+  font-size: 12px; color: var(--text-faint);
+  padding-left: 14px; margin-left: 2px;
+  border-left: 1px solid var(--border-soft);
+  white-space: nowrap;
+  text-transform: capitalize;   /* fr locales lowercase the weekday */
+}
+
 .dock { display: flex; align-items: center; gap: 4px; }
 
 .dock-btn {
@@ -394,6 +402,37 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 }
 .subject-select { flex: 0 0 auto; max-width: 46%; }
 .subject-select option, .study-select option, .alarm-select option { background: var(--bg); color: var(--text); }
+
+
+/* Study stopwatch. Shares the timer block; a single class on the block
+   swaps which set of controls and readout is on screen. */
+.chrono-display {
+  display: none;
+  font-family: var(--font-display);
+  font-size: clamp(48px, 11vw, 76px);
+  font-weight: 300; line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.chrono-display .colon { opacity: .35; margin: 0 2px; }
+
+.chrono-controls, .chrono-hint { display: none; }
+
+.chrono-hint {
+  font-size: 11px; color: var(--text-faint);
+  line-height: 1.5; max-width: 320px;
+}
+
+.timer-block.chrono-mode .chrono-display { display: block; }
+.timer-block.chrono-mode .chrono-controls { display: flex; }
+.timer-block.chrono-mode .chrono-hint { display: block; }
+
+.timer-block.chrono-mode #timerDisplay,
+.timer-block.chrono-mode .timer-progress,
+.timer-block.chrono-mode .cycles-row,
+.timer-block.chrono-mode .quick-add-row,
+.timer-block.chrono-mode .timer-controls:not(.chrono-controls) { display: none; }
 
 
 /* ── 7. Panes ────────────────────────────────────────────────────────────── */
@@ -882,7 +921,7 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 
   .topbar     { padding: 10px 12px; }
   .brand      { font-size: 15px; }
-  .live-clock { display: none; }
+  .live-clock, .live-date { display: none; }
   .dock-btn   { width: 32px; height: 32px; padding: 7px; }
 
   /* Popovers become a bottom sheet — reachable with a thumb. */

@@ -33,6 +33,7 @@
     <span class="live-clock" id="liveClock">
       <span id="clockHours">00</span><span class="clock-sep">:</span><span id="clockMins">00</span><span class="clock-sep">:</span><span id="clockSecs">00</span><span id="clockAmpm" class="clock-ampm"></span>
     </span>
+    <span class="live-date" id="liveDate"></span>
   </div>
 
   <nav class="dock" aria-label="Tools">
@@ -78,10 +79,16 @@
       <div class="progress-animal" id="progressAnimal"></div>
     </div>
 
+    <div class="chrono-display" id="chronoDisplay">
+      <span id="cHours">0</span><span class="colon">:</span><span id="cMins">00</span><span class="colon">:</span><span id="cSecs">00</span>
+    </div>
+
     <div class="mode-tabs" role="tablist">
-      <button class="mode-tab active" onclick="switchMode('work')">Focus</button>
-      <button class="mode-tab bt" onclick="switchMode('break')">Break</button>
-      <button class="mode-tab lt" onclick="switchMode('long')">Long break</button>
+      <button class="mode-tab active" data-mode="work"  onclick="switchMode('work')">Focus</button>
+      <button class="mode-tab bt"     data-mode="break" onclick="switchMode('break')">Break</button>
+      <button class="mode-tab lt"     data-mode="long"  onclick="switchMode('long')">Long break</button>
+      <button class="mode-tab ct"     data-mode="chrono" onclick="Chrono.enter()"
+              title="Chronomètre d'étude — counts up instead of down">Chrono</button>
     </div>
 
     <div class="timer-controls">
@@ -93,6 +100,19 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7z" fill="currentColor" stroke="none"/><path d="M18 5v14"/></svg>
       </button>
     </div>
+
+    <!-- Stopwatch controls, shown only in chrono mode -->
+    <div class="timer-controls chrono-controls" id="chronoControls">
+      <button class="btn btn-icon" onclick="Chrono.reset()" title="Reset" aria-label="Reset stopwatch">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.7L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+      <button class="btn btn-primary" id="chronoBtn" onclick="Chrono.toggle()">Start</button>
+      <button class="btn btn-icon" onclick="Chrono.save()" title="Save this session" aria-label="Save this session">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+    </div>
+
+    <p class="chrono-hint" id="chronoHint">Counts up with no target. Saving logs the time to your subject.</p>
 
     <div class="quick-add-row">
       <button class="btn-qadd" onclick="addMins(1)">+1</button>

@@ -598,8 +598,15 @@ function advance(){
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
-function setTab(m){m=m==='brk'?'break':m==='lng'?'long':m;document.querySelectorAll('.mode-tab').forEach((t,i)=>t.classList.toggle('active',['work','break','long'][i]===m));}
-function switchMode(m){stopTimer();setTab(m);initTimer(m);renderCycles();saveTimerState();if(window.Room)Room.onLocalChange();}
+function setTab(m){
+  m = m==='brk' ? 'break' : m==='lng' ? 'long' : m;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+}
+function switchMode(m){
+  if (window.Chrono) Chrono.exit();
+  stopTimer(); setTab(m); initTimer(m); renderCycles(); saveTimerState();
+  if(window.Room)Room.onLocalChange();
+}
 
 function tryNotify(t,b){if('Notification'in window&&Notification.permission==='granted')new Notification(t,{body:b});else if('Notification'in window&&Notification.permission!=='denied')Notification.requestPermission();}
 
@@ -1231,6 +1238,18 @@ function updateClock() {
   document.getElementById('clockMins').textContent  = String(m).padStart(2, '0');
   document.getElementById('clockSecs').textContent  = String(s).padStart(2, '0');
   document.getElementById('clockAmpm').textContent  = ampm;
+
+  const el = document.getElementById('liveDate');
+  if (el) {
+    // Follows the reader's own locale rather than hardcoding a language.
+    const key = now.toDateString();
+    if (el.dataset.day !== key) {
+      el.dataset.day = key;
+      el.textContent = now.toLocaleDateString(undefined, {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    }
+  }
 }
 updateClock();
 setInterval(updateClock, 1000);
@@ -2185,3 +2204,138 @@ window.Goals = (function(){
 Study.init();
 Goals.init();
 Auth.init();
+
+
+// ── STUDY STOPWATCH (chronomètre d'étude) ─────────────────────
+// A count-up companion to the pomodoro: no target, no cycles. Kept as its
+// own module rather than a fourth entry in MODES, because the pomodoro
+// state machine (seq, cycleIndex, advance, Room sync) assumes every mode
+// has a fixed length.
+window.Chrono = (function(){
+  const KEY = 'sf_chrono';
+
+  let active = false, running = false;
+  let startedAt = 0, accum = 0, ticker = null;
+
+  function block(){ return document.querySelector('.timer-block'); }
+  function toast(m){ if (typeof showToast === 'function') showToast(m); }
+
+  function elapsedMs(){ return accum + (running ? Date.now() - startedAt : 0); }
+
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify({
+      active: active, running: running, accum: accum, startedAt: startedAt
+    })); } catch(e){}
+  }
+
+  function render(){
+    const ms = elapsedMs();
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('cHours', String(h));
+    set('cMins', String(m).padStart(2, '0'));
+    set('cSecs', String(sec).padStart(2, '0'));
+    const btn = document.getElementById('chronoBtn');
+    if (btn){
+      btn.textContent = running ? 'Pause' : (ms > 0 ? 'Resume' : 'Start');
+      btn.classList.toggle('running', running);
+    }
+  }
+
+  function tick(){ render(); save(); }
+
+  function enter(){
+    if (active) return;
+    if (typeof stopTimer === 'function') stopTimer();   // never run both clocks
+    active = true;
+    const b = block(); if (b) b.classList.add('chrono-mode');
+    setTab('chrono');
+    render(); save();
+  }
+
+  // Leaving the stopwatch banks whatever is on it, so a mode switch can
+  // never silently throw away studied time.
+  function exit(){
+    if (!active) return;
+    pause();
+    if (Math.floor(elapsedMs() / 60000) >= 1) commit(true);
+    else { accum = 0; }
+    active = false;
+    const b = block(); if (b) b.classList.remove('chrono-mode');
+    render(); save();
+  }
+
+  function start(){
+    if (running) return;
+    running = true; startedAt = Date.now();
+    clearInterval(ticker); ticker = setInterval(tick, 1000);
+    render(); save();
+  }
+
+  function pause(){
+    if (!running) return;
+    accum += Date.now() - startedAt;
+    running = false;
+    clearInterval(ticker); ticker = null;
+    render(); save();
+  }
+
+  function toggle(){ running ? pause() : start(); }
+
+  function reset(){
+    pause(); accum = 0; render(); save();
+    toast('Stopwatch reset');
+  }
+
+  // Logs the elapsed time to Study Time, and credits the focused goal one
+  // pomodoro for every whole focus-length block studied.
+  function commit(quiet){
+    const mins = Math.floor(elapsedMs() / 60000);
+    if (mins < 1){ if (!quiet) toast('Nothing to save yet'); return; }
+
+    if (window.Study) Study.logSession(mins);
+
+    let blocks = 0;
+    const per = (typeof MODES === 'object' && MODES.work) ? MODES.work : 25;
+    if (window.Goals && Goals.active()){
+      blocks = Math.floor(mins / per);
+      for (let i = 0; i < blocks; i++) Goals.onPomodoro();
+    }
+
+    accum = 0; startedAt = Date.now();
+    render(); save();
+
+    const label = mins >= 60
+      ? Math.floor(mins/60) + 'h ' + (mins % 60) + 'm'
+      : mins + 'm';
+    toast('Saved ' + label + (blocks ? ' · ' + blocks + ' pomodoro' + (blocks>1?'s':'') + ' credited' : ''));
+  }
+
+  function init(){
+    let st = null;
+    try { st = JSON.parse(localStorage.getItem(KEY)); } catch(e){}
+    if (st && st.active){
+      active = true;
+      accum = st.accum || 0;
+      const b = block(); if (b) b.classList.add('chrono-mode');
+      setTab('chrono');
+      if (st.running && st.startedAt){
+        // Keep counting across a reload instead of losing the session.
+        accum += Date.now() - st.startedAt;
+        running = false;
+        start();
+      }
+    }
+    render();
+  }
+
+  return { init:init, enter:enter, exit:exit, toggle:toggle,
+           start:start, pause:pause, reset:reset,
+           save:function(){ commit(false); },
+           isActive:function(){ return active; } };
+})();
+
+Chrono.init();
