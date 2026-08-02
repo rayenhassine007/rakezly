@@ -39,6 +39,7 @@
   <nav class="viewswitch" aria-label="View">
     <button class="view-btn active" data-view="focus" onclick="showView('focus')" data-i18n="nav.focus">Focus</button>
     <button class="view-btn" data-view="planner" onclick="showView('planner')" data-i18n="nav.planner">Planner</button>
+    <button class="view-btn" data-view="stats" onclick="showView('stats')" data-i18n="nav.stats">Stats</button>
   </nav>
 
   <nav class="dock" aria-label="Tools">
@@ -228,6 +229,19 @@
       <p class="goals-hint" data-i18n="plan.hint">Everything you type saves automatically on this device.</p>
     </div>
 
+  </section>
+
+  <!-- ─────────────── STATS VIEW ─────────────── -->
+  <section class="stats" aria-label="Stats">
+    <div class="pane stats-card">
+      <div class="pane-head">
+        <span class="pane-titlewrap">
+          <svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12M10 20V6M16 20v-5M22 20H2"/></svg>
+          <h2 class="pane-title" data-i18n="stats.title">Your study</h2>
+        </span>
+      </div>
+      <div id="statsBody"></div>
+    </div>
   </section>
 
   <p class="quote-card">

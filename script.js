@@ -2007,6 +2007,7 @@ window.Study = (function(){
            all:all, current:current, setCurrent:setCurrent,
            isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
            onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
+           entries:log, sumSince:sumSince, bySubjectSince:bySubjectSince,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
            render:render };
@@ -2436,7 +2437,15 @@ window.I18N = (function(){
 
   const DICT = {
     en: {
-      'nav.focus': 'Focus', 'nav.planner': 'Planner',
+      'nav.focus': 'Focus', 'nav.planner': 'Planner', 'nav.stats': 'Stats',
+      'stats.title': 'Your study', 'stats.thisWeek': 'This week',
+      'stats.avgDay': 'Average day', 'stats.streak': 'Streak',
+      'stats.days': 'd', 'stats.best': 'Best day',
+      'stats.last14': 'Last 14 days', 'stats.peak': 'peak {time}',
+      'stats.bySubject': 'By subject', 'stats.week': 'Week',
+      'stats.month': 'Month', 'stats.all': 'All time',
+      'stats.total': 'Total {time}',
+      'stats.empty': 'No sessions in this range yet — finish a focus session and it shows up here.',
       'tip.study': 'Study time & leaderboard', 'tip.room': 'Shared room',
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
@@ -2530,7 +2539,15 @@ window.I18N = (function(){
     },
 
     fr: {
-      'nav.focus': 'Focus', 'nav.planner': 'Planning',
+      'nav.focus': 'Focus', 'nav.planner': 'Planning', 'nav.stats': 'Stats',
+      'stats.title': 'Ton étude', 'stats.thisWeek': 'Cette semaine',
+      'stats.avgDay': 'Moyenne / jour', 'stats.streak': 'Série',
+      'stats.days': 'j', 'stats.best': 'Meilleur jour',
+      'stats.last14': '14 derniers jours', 'stats.peak': 'max {time}',
+      'stats.bySubject': 'Par matière', 'stats.week': 'Semaine',
+      'stats.month': 'Mois', 'stats.all': 'Tout',
+      'stats.total': 'Total {time}',
+      'stats.empty': 'Aucune session sur cette période — termine une session et elle apparaîtra ici.',
       'tip.study': "Temps d'étude & classement", 'tip.room': 'Salle partagée',
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
@@ -2901,6 +2918,9 @@ window.Planner = (function(){
 // ── VIEW SWITCH (focus ⇄ planner) ─────────────────────────────
 function showView(name){
   document.body.classList.toggle('view-planner', name === 'planner');
+  document.body.classList.toggle('view-stats', name === 'stats');
+  // Recompute on entry rather than on every logged session.
+  if (name === 'stats' && window.Stats) Stats.render();
   document.querySelectorAll('[data-view]').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
@@ -2909,25 +2929,7 @@ function showView(name){
 }
 
 
-// ── BOOTSTRAP ─────────────────────────────────────────────────
-// init() runs much earlier in this file, before any of the modules above
-// exist, so everything modular is started here instead.
-// Order matters: I18N first, otherwise the modules render raw keys before a
-// dictionary is loaded. Study and Goals register their Auth.onChange
-// listeners before Auth resolves a session, so a restored login still
-// triggers their sync.
-I18N.init();
-init();          // must follow I18N.init(): it translates during startup
-Study.init();
-Goals.init();
-Auth.init();
-Chrono.init();
-Planner.init();
 
-// Anything the modules rendered during init still needs translating.
-I18N.apply();
-
-showView(localStorage.getItem('sf_view') === 'planner' ? 'planner' : 'focus');
 
 
 // ── CELEBRATION & MICRO-INTERACTIONS ──────────────────────────
@@ -3109,4 +3111,192 @@ document.addEventListener('keydown', function(e){
     });
     panel.insertBefore(btn, panel.firstChild);
   });
+})();
+
+
+// ── STATS ─────────────────────────────────────────────────────
+// The local log already holds ~120 days; until now only today and this
+// week were ever shown. Single series (minutes), so one accent hue rather
+// than a categorical palette — which also means it re-tints per theme
+// instead of fighting four of them.
+window.Stats = (function(){
+  let range = 'week';   // week | month | all
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function locale(){ return window.I18N && I18N.current() === 'fr' ? 'fr-FR' : 'en-GB'; }
+  function fmt(m){ return window.Study ? Study.fmt(m) : m + 'm'; }
+  function entries(){ return window.Study ? Study.entries() : []; }
+
+  function dayKey(d){
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  // minutes per calendar day, oldest first
+  function daily(days){
+    const byDay = {};
+    entries().forEach(function(e){
+      if (!e || !e.t) return;
+      byDay[dayKey(new Date(e.t))] = (byDay[dayKey(new Date(e.t))] || 0) + e.m;
+    });
+    const out = [];
+    for (let i = days - 1; i >= 0; i--){
+      const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
+      out.push({ date: d, key: dayKey(d), minutes: byDay[dayKey(d)] || 0 });
+    }
+    return out;
+  }
+
+  // Consecutive days with any logged time, counting back from today. Today
+  // not being started yet must not break a run, so an empty today is
+  // skipped rather than ending it.
+  function streak(){
+    const has = {};
+    entries().forEach(function(e){ if (e && e.t) has[dayKey(new Date(e.t))] = 1; });
+    const d = new Date(); d.setHours(0,0,0,0);
+    if (!has[dayKey(d)]) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (has[dayKey(d)]){ n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function rangeStart(){
+    const d = new Date(); d.setHours(0,0,0,0);
+    if (range === 'week')  { d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+    if (range === 'month') { d.setDate(1); return d.getTime(); }
+    return 0;
+  }
+
+  function setRange(r){ range = r; render(); }
+
+  function statTiles(){
+    const week = window.Study ? Study.sumSince((function(){
+      const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime();
+    })()) : 0;
+
+    const last14 = daily(14);
+    const active = last14.filter(function(x){ return x.minutes > 0; });
+    const avg = active.length ? Math.round(active.reduce(function(a,x){ return a + x.minutes; }, 0) / active.length) : 0;
+    const best = last14.reduce(function(a,x){ return x.minutes > a ? x.minutes : a; }, 0);
+
+    return '<div class="st-tiles">' +
+      tile(fmt(week), t('stats.thisWeek')) +
+      tile(fmt(avg),  t('stats.avgDay')) +
+      tile(streak() + '', t('stats.streak'), true) +
+      tile(fmt(best), t('stats.best')) +
+    '</div>';
+  }
+  function tile(value, label, isCount){
+    return '<div class="st-tile"><span class="st-value">' + esc(value) +
+           (isCount ? '<span class="st-unit">' + esc(t('stats.days')) + '</span>' : '') +
+           '</span><span class="st-label">' + esc(label) + '</span></div>';
+  }
+
+  // Bars: thin marks, rounded data-end at the top, flat on the baseline,
+  // 2px gap between them. Weekends and today are marked in the axis, not by
+  // recolouring the bar — colour stays magnitude-only.
+  function dailyChart(){
+    const data = daily(14);
+    const max = Math.max.apply(null, data.map(function(x){ return x.minutes; }).concat([1]));
+    const todayKey = dayKey(new Date());
+
+    const bars = data.map(function(x){
+      const pct = x.minutes ? Math.max(3, Math.round(x.minutes / max * 100)) : 0;
+      const label = x.date.toLocaleDateString(locale(), { weekday:'long', day:'numeric', month:'long' });
+      return '<div class="st-col' + (x.key === todayKey ? ' is-today' : '') + '" tabindex="0" ' +
+               'role="img" aria-label="' + esc(label + ': ' + fmt(x.minutes)) + '">' +
+               '<div class="st-bar-track">' +
+                 (x.minutes ? '<div class="st-bar" style="height:' + pct + '%"></div>'
+                            : '<div class="st-bar is-empty"></div>') +
+               '</div>' +
+               '<span class="st-tick">' + esc(x.date.toLocaleDateString(locale(), { weekday:'narrow' })) + '</span>' +
+               '<span class="st-tip">' + esc(label) + '<b>' + esc(fmt(x.minutes)) + '</b></span>' +
+             '</div>';
+    }).join('');
+
+    return '<div class="st-section"><div class="st-section-head">' +
+             '<h3 class="st-title">' + esc(t('stats.last14')) + '</h3>' +
+             '<span class="st-max">' + esc(t('stats.peak', { time: fmt(max) })) + '</span>' +
+           '</div><div class="st-chart">' + bars + '</div></div>';
+  }
+
+  function subjectChart(){
+    const since = rangeStart();
+    const totals = window.Study ? Study.bySubjectSince(since) : {};
+    const rows = Object.keys(totals).map(function(k){ return { s:k, m:totals[k] }; })
+                       .sort(function(a,b){ return b.m - a.m; });
+
+    const picker = ['week','month','all'].map(function(r){
+      return '<button class="st-range' + (range === r ? ' active' : '') + '" ' +
+             'onclick="Stats.setRange(\'' + r + '\')">' + esc(t('stats.' + r)) + '</button>';
+    }).join('');
+
+    const head = '<div class="st-section-head">' +
+                   '<h3 class="st-title">' + esc(t('stats.bySubject')) + '</h3>' +
+                   '<div class="st-ranges">' + picker + '</div>' +
+                 '</div>';
+
+    if (!rows.length){
+      return '<div class="st-section">' + head +
+             '<p class="st-empty">' + esc(t('stats.empty')) + '</p></div>';
+    }
+
+    const max = rows[0].m || 1;
+    const total = rows.reduce(function(a,x){ return a + x.m; }, 0);
+    const body = rows.map(function(r){
+      const pct = Math.max(2, Math.round(r.m / max * 100));
+      const share = Math.round(r.m / total * 100);
+      return '<div class="st-row">' +
+               '<span class="st-row-name" title="' + esc(r.s) + '">' + esc(r.s) + '</span>' +
+               '<span class="st-row-track"><span class="st-row-fill" style="width:' + pct + '%"></span></span>' +
+               '<span class="st-row-val">' + esc(fmt(r.m)) + '</span>' +
+               '<span class="st-row-share">' + share + '%</span>' +
+             '</div>';
+    }).join('');
+
+    return '<div class="st-section">' + head +
+           '<div class="st-rows">' + body + '</div>' +
+           '<p class="st-total">' + esc(t('stats.total', { time: fmt(total) })) + '</p></div>';
+  }
+
+  function render(){
+    const host = document.getElementById('statsBody');
+    if (!host) return;
+    host.innerHTML = statTiles() + dailyChart() + subjectChart();
+  }
+
+  function init(){
+    render();
+    if (window.I18N) I18N.onChange(function(){ render(); });
+  }
+
+  return { init:init, render:render, setRange:setRange, streak:streak, daily:daily };
+})();
+
+
+// ── BOOTSTRAP ─────────────────────────────────────────────────
+// Everything modular is started here, and this block MUST stay last in the
+// file: each module is a `window.X = (function(){...})()` assignment, which
+// only exists once execution reaches it. Calling init() on a module defined
+// below this point throws and silently kills the rest of the startup.
+// Order matters: I18N first, otherwise the modules render raw keys before a
+// dictionary is loaded. Study and Goals register their Auth.onChange
+// listeners before Auth resolves a session, so a restored login still
+// triggers their sync.
+I18N.init();
+init();          // must follow I18N.init(): it translates during startup
+Study.init();
+Goals.init();
+Auth.init();
+Chrono.init();
+Planner.init();
+Stats.init();
+
+// Anything the modules rendered during init still needs translating.
+I18N.apply();
+
+(function(){
+  const saved = localStorage.getItem('sf_view');
+  showView(saved === 'planner' || saved === 'stats' ? saved : 'focus');
 })();

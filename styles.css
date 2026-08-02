@@ -1446,3 +1446,146 @@ body.view-planner .stage {
 .section-btn:hover { color: var(--text); border-color: var(--border); }
 .section-btn.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .section-btn:active { transform: scale(.94); }
+
+
+/* ══════════════════════════════════════════════════════════════
+   21  STATS
+   One series (minutes), so a single accent hue rather than a
+   categorical palette — it re-tints per theme instead of fighting
+   four of them, and needs no legend: the section title names it.
+   Thin marks, rounded data-ends on the baseline, recessive axes.
+   ══════════════════════════════════════════════════════════════ */
+
+.stats { display: none; }
+body.view-stats .stage > .timer-block,
+body.view-stats .stage > .panes,
+body.view-stats .stage > .planner,
+body.view-stats .stage > .quote-card { display: none; }
+body.view-planner .stats { display: none; }
+body.view-stats .stats { display: block; }
+body.view-stats .stage {
+  max-width: 800px; display: block; min-height: auto; padding: 88px 20px 40px;
+}
+
+.stats-card { padding: 20px 22px 22px; }
+
+/* Headline figures — hero numbers, not a chart. */
+.st-tiles {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px; margin-bottom: 26px;
+}
+.st-tile {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+.st-value {
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: 600; line-height: 1.15;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.st-unit { font-size: 12px; margin-left: 2px; opacity: .8; }
+.st-label { font-size: 11px; color: var(--text-faint); }
+
+.st-section { margin-top: 24px; }
+.st-section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.st-title { font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+.st-max   { font-size: 11px; color: var(--text-faint); }
+
+/* Daily bars */
+.st-chart {
+  display: grid; grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 2px;                    /* surface gap between adjacent bars */
+  align-items: end;
+  height: 150px;
+}
+.st-col {
+  position: relative;
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+  height: 100%; outline: none;
+}
+.st-bar-track {
+  flex: 1; display: flex; align-items: flex-end;
+  border-radius: 4px;
+}
+.st-bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;   /* rounded data-end, flat on the baseline */
+  transition: height .4s var(--ease), opacity .18s var(--ease);
+  min-height: 3px;
+}
+.st-bar.is-empty {
+  height: 3px; background: var(--border-soft); border-radius: 2px;
+}
+.st-tick {
+  font-size: 9.5px; color: var(--text-faint); text-align: center;
+  text-transform: uppercase;
+}
+.st-col.is-today .st-tick { color: var(--accent); font-weight: 700; }
+.st-col:hover .st-bar, .st-col:focus-visible .st-bar { opacity: .78; }
+.st-col:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Per-mark tooltip */
+.st-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+  font-size: 11px; color: var(--text-dim);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .16s var(--ease), transform .16s var(--ease);
+  z-index: 3;
+}
+.st-tip b { color: var(--accent); font-size: 13px; font-weight: 600; }
+.st-col:hover .st-tip, .st-col:focus-visible .st-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Keep the end tooltips inside the card. */
+.st-col:first-child .st-tip { left: 0; transform: translateX(0) translateY(4px); }
+.st-col:first-child:hover .st-tip { transform: translateX(0) translateY(0); }
+.st-col:last-child .st-tip { left: auto; right: 0; transform: translateX(0) translateY(4px); }
+.st-col:last-child:hover .st-tip { transform: translateX(0) translateY(0); }
+
+/* Range filter — one row above the chart it controls. */
+.st-ranges { display: flex; gap: 4px; }
+.st-range {
+  padding: 4px 11px; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  color: var(--text-faint);
+  border: 1px solid var(--border-soft);
+  transition: all .18s var(--ease);
+}
+.st-range:hover { color: var(--text); }
+.st-range.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+/* Subject rows */
+.st-rows { display: flex; flex-direction: column; gap: 9px; }
+.st-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.st-row-name {
+  width: 130px; flex: none; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.st-row-track { flex: 1; min-width: 0; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.st-row-fill  { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .45s var(--ease); }
+.st-row-val   { flex: none; width: 62px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.st-row-share { flex: none; width: 34px; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.st-total { font-size: 11px; color: var(--text-faint); margin-top: 12px; text-align: right; }
+.st-empty { font-size: 12px; color: var(--text-faint); line-height: 1.6; }
+
+@media (max-width: 700px) {
+  body.view-stats .stage { padding-bottom: 84px; }
+  .st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-chart { height: 120px; }
+  .st-row-name { width: 88px; }
+  .st-row-val { width: 54px; }
+  .stats-card { padding: 16px 15px 18px; }
+}
