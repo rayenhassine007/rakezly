@@ -1568,10 +1568,14 @@ window.Study = (function(){
   // Preset subjects are the rankable ones — custom subjects are tracked and
   // counted in a student's totals, but a per-subject board only makes sense
   // when everyone is filling the same bucket.
+  // Tunisian prépa (IPEI). Covers MP, PC, PT and BG between them — a
+  // student only ever uses the handful their stream actually sits.
   const PRESETS = [
-    'Mathématiques','Physique-Chimie','SVT','Sciences techniques','Informatique',
-    'Arabe','Français','Anglais','Allemand','Espagnol','Italien',
-    'Philosophie','Histoire-Géo','Économie','Gestion'
+    'Mathématiques', 'Physique', 'Chimie',
+    "Sciences de l'Ingénieur", 'Informatique',
+    'Génie Mécanique', 'Génie Électrique',
+    'Biologie', 'Géologie',
+    'Français', 'Anglais'
   ];
 
   const K_CUR = 'sf_subject', K_CUSTOM = 'sf_subjects_custom', K_LOG = 'sf_study_log';
@@ -1944,7 +1948,31 @@ window.Study = (function(){
     render();
   }
 
+  // Any subject that already has time or a goal against it but is no longer
+  // a preset is adopted as a custom subject. Without this, changing PRESETS
+  // would strand real history: the name would drop out of the picker and
+  // current() would silently fall back to the first preset.
+  function adoptOrphanSubjects(){
+    const known = {};
+    all().forEach(function(n){ known[n] = 1; });
+
+    const seen = {};
+    log().forEach(function(e){ if (e && e.s && !known[e.s]) seen[e.s] = 1; });
+    try {
+      const goals = JSON.parse(localStorage.getItem('sf_goals'));
+      if (Array.isArray(goals)) goals.forEach(function(g){
+        if (g && g.subject && !known[g.subject]) seen[g.subject] = 1;
+      });
+    } catch(e){}
+
+    const orphans = Object.keys(seen);
+    if (!orphans.length) return;
+    writeJSON(K_CUSTOM, customs().concat(orphans));
+    console.info('Kept previous subjects as custom entries:', orphans.join(', '));
+  }
+
   function init(){
+    adoptOrphanSubjects();
     renderSelect();
     render();
     if (window.Auth) window.Auth.onChange(function(){ render(); });
