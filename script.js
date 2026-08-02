@@ -1622,12 +1622,6 @@ window.Study = (function(){
   // rankable — a per-subject board needs everyone filling the same bucket.
   function isPreset(s){ return presets().indexOf(s) !== -1; }
 
-  // Every subject in any section, used to tell "belongs to another section"
-  // apart from "genuinely custom".
-  function inAnySection(s){
-    return SECTION_ORDER.some(function(k){ return SECTIONS[k].indexOf(s) !== -1; });
-  }
-
   function customs(){ const c = readJSON(K_CUSTOM, []); return Array.isArray(c) ? c : []; }
 
   function all(){
@@ -1995,32 +1989,7 @@ window.Study = (function(){
     render();
   }
 
-  // Any subject that already has time or a goal against it but is no longer
-  // a preset is adopted as a custom subject. Without this, changing PRESETS
-  // would strand real history: the name would drop out of the picker and
-  // current() would silently fall back to the first preset.
-  function adoptOrphanSubjects(){
-    const known = {};
-    all().forEach(function(n){ known[n] = 1; });
-
-    const seen = {};
-    const orphan = function(n){ return n && !known[n] && !inAnySection(n); };
-    log().forEach(function(e){ if (e && orphan(e.s)) seen[e.s] = 1; });
-    try {
-      const goals = JSON.parse(localStorage.getItem('sf_goals'));
-      if (Array.isArray(goals)) goals.forEach(function(g){
-        if (g && orphan(g.subject)) seen[g.subject] = 1;
-      });
-    } catch(e){}
-
-    const orphans = Object.keys(seen);
-    if (!orphans.length) return;
-    writeJSON(K_CUSTOM, customs().concat(orphans));
-    console.info('Kept previous subjects as custom entries:', orphans.join(', '));
-  }
-
   function init(){
-    adoptOrphanSubjects();
     syncSectionButtons();
     renderSelect();
     render();
