@@ -1568,17 +1568,23 @@ window.Study = (function(){
   // Preset subjects are the rankable ones — custom subjects are tracked and
   // counted in a student's totals, but a per-subject board only makes sense
   // when everyone is filling the same bucket.
-  // Tunisian prépa (IPEI). Covers MP, PC, PT and BG between them — a
-  // student only ever uses the handful their stream actually sits.
-  const PRESETS = [
-    'Mathématiques', 'Physique', 'Chimie',
-    "Sciences de l'Ingénieur", 'Informatique',
-    'Génie Mécanique', 'Génie Électrique',
-    'Biologie', 'Géologie',
-    'Français', 'Anglais'
-  ];
+  // Tunisian prépa (IPEI). Each section sits its own set, so the picker
+  // shows only what that student actually studies rather than a superset
+  // they have to hunt through.
+  const SECTIONS = {
+    MP: ['Physique', 'Chimie inorganique', 'Algèbre', 'Analyse',
+         'Informatique', 'STA', 'Français', 'Anglais'],
+    PC: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
+         'Informatique', 'STA', 'Français', 'Anglais'],
+    PT: ['Physique', 'Chimie inorganique', 'Maths',
+         'Informatique', 'STA', 'CFM', 'Français', 'Anglais'],
+    BG: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
+         'Biologie', 'Géologie', 'Informatique', 'Français', 'Anglais']
+  };
+  const SECTION_ORDER = ['MP', 'PC', 'PT', 'BG'];
 
   const K_CUR = 'sf_subject', K_CUSTOM = 'sf_subjects_custom', K_LOG = 'sf_study_log';
+  const K_SECTION = 'sf_section';
   const MAX_LOG_DAYS = 120;   // local history we keep
   const SYNC_WINDOW_DAYS = 14; // matches the insert policy in schema.sql
 
@@ -1606,13 +1612,53 @@ window.Study = (function(){
   }
   function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
+  function section(){
+    const v = localStorage.getItem(K_SECTION);
+    return SECTIONS[v] ? v : 'MP';
+  }
+  function presets(){ return SECTIONS[section()]; }
+
+  // True for any subject on the current section's list. Only these are
+  // rankable — a per-subject board needs everyone filling the same bucket.
+  function isPreset(s){ return presets().indexOf(s) !== -1; }
+
+  // Every subject in any section, used to tell "belongs to another section"
+  // apart from "genuinely custom".
+  function inAnySection(s){
+    return SECTION_ORDER.some(function(k){ return SECTIONS[k].indexOf(s) !== -1; });
+  }
+
   function customs(){ const c = readJSON(K_CUSTOM, []); return Array.isArray(c) ? c : []; }
-  function isPreset(s){ return PRESETS.indexOf(s) !== -1; }
-  function all(){ return PRESETS.concat(customs()); }
+
+  function all(){
+    const out = [], seen = {};
+    presets().concat(customs()).forEach(function(n){
+      if (n && !seen[n]){ seen[n] = 1; out.push(n); }
+    });
+    return out;
+  }
+
+  function setSection(next){
+    if (!SECTIONS[next] || next === section()) return;
+    try { localStorage.setItem(K_SECTION, next); } catch(e){}
+    // The selected subject may not exist in the new section; current()
+    // falls back on its own, but the picker has to be rebuilt either way.
+    renderSelect();
+    render();
+    syncSectionButtons();
+    toast(t('study.sectionSet', { section: next }));
+  }
+
+  function syncSectionButtons(){
+    const cur = section();
+    document.querySelectorAll('[data-section]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-section') === cur);
+    });
+  }
 
   function current(){
     const s = localStorage.getItem(K_CUR);
-    return (s && all().indexOf(s) !== -1) ? s : PRESETS[0];
+    return (s && all().indexOf(s) !== -1) ? s : presets()[0];
   }
   function setCurrent(s){
     if (all().indexOf(s) === -1) return;
@@ -1633,7 +1679,7 @@ window.Study = (function(){
   }
   function removeCustom(n){
     writeJSON(K_CUSTOM, customs().filter(function(s){ return s !== n; }));
-    if (current() === n) localStorage.setItem(K_CUR, PRESETS[0]);
+    if (current() === n) localStorage.setItem(K_CUR, presets()[0]);
     renderSelect(); render();
   }
 
@@ -1739,9 +1785,10 @@ window.Study = (function(){
   function renderSelect(){
     const sel = document.getElementById('subjectSelect');
     if (!sel) return;
-    const cur = current(), cs = customs();
+    const cur = current();
+    const cs = customs().filter(function(n){ return presets().indexOf(n) === -1; });
     let h = '<optgroup label="' + esc(t('study.subjects')) + '">';
-    PRESETS.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
+    presets().forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
     h += '</optgroup>';
     if (cs.length){
       h += '<optgroup label="' + esc(t('study.mySubjects')) + '">';
@@ -1868,7 +1915,7 @@ window.Study = (function(){
 
     let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
                  '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
-    PRESETS.forEach(function(s){
+    presets().forEach(function(s){
       filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
     });
     filter += '</select>';
@@ -1957,11 +2004,12 @@ window.Study = (function(){
     all().forEach(function(n){ known[n] = 1; });
 
     const seen = {};
-    log().forEach(function(e){ if (e && e.s && !known[e.s]) seen[e.s] = 1; });
+    const orphan = function(n){ return n && !known[n] && !inAnySection(n); };
+    log().forEach(function(e){ if (e && orphan(e.s)) seen[e.s] = 1; });
     try {
       const goals = JSON.parse(localStorage.getItem('sf_goals'));
       if (Array.isArray(goals)) goals.forEach(function(g){
-        if (g && g.subject && !known[g.subject]) seen[g.subject] = 1;
+        if (g && orphan(g.subject)) seen[g.subject] = 1;
       });
     } catch(e){}
 
@@ -1973,6 +2021,7 @@ window.Study = (function(){
 
   function init(){
     adoptOrphanSubjects();
+    syncSectionButtons();
     renderSelect();
     render();
     if (window.Auth) window.Auth.onChange(function(){ render(); });
@@ -1984,7 +2033,9 @@ window.Study = (function(){
 
   return { init:init, doGoogle:doGoogle,
            close: function(){ if (panelOpen){ panelOpen = false; render(); } },
-           PRESETS:PRESETS, all:all, current:current, setCurrent:setCurrent,
+           SECTIONS:SECTIONS, SECTION_ORDER:SECTION_ORDER,
+           presets:presets, section:section, setSection:setSection,
+           all:all, current:current, setCurrent:setCurrent,
            isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
            onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
@@ -2460,6 +2511,7 @@ window.I18N = (function(){
       'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
       'study.renamePrompt': 'Display name (shown on the leaderboard)',
       'study.unavailableAuth': 'Sign-in is unavailable right now.',
+      'study.sectionSet': 'Section {section} — subjects updated',
       'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
 
       'room.title': 'Shared room', 'room.create': 'Create a room',
@@ -2491,6 +2543,7 @@ window.I18N = (function(){
       'set.alarm': 'Alarm sound', 'set.bell': 'Bell', 'set.digital': 'Digital',
       'set.soft': 'Soft chime', 'set.none': 'None', 'set.apply': 'Apply & reset',
       'set.language': 'Language',
+      'set.section': 'Prépa section',
 
       'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
@@ -2552,6 +2605,7 @@ window.I18N = (function(){
       'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
       'study.renamePrompt': 'Nom affiché (visible au classement)',
       'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
+      'study.sectionSet': 'Section {section} — matières mises à jour',
       'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
 
       'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
@@ -2584,6 +2638,7 @@ window.I18N = (function(){
       'set.alarm': 'Son d’alarme', 'set.bell': 'Cloche', 'set.digital': 'Numérique',
       'set.soft': 'Carillon doux', 'set.none': 'Aucun', 'set.apply': 'Appliquer & réinitialiser',
       'set.language': 'Langue',
+      'set.section': 'Section prépa',
 
       'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',

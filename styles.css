@@ -1430,3 +1430,19 @@ body.view-planner .stage {
   .pl-day { min-height: 62px; }
   .pl-note { font-size: 11px; }
 }
+
+/* Prépa section picker. Four options need more room than a toggle pair, so
+   the row stacks its label above the choices. */
+.auto-item-stack { flex-direction: column; align-items: stretch; gap: 8px; }
+
+.section-toggle { display: flex; gap: 5px; }
+.section-btn {
+  flex: 1; padding: 7px 0;
+  border: 1px solid var(--border-soft); border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: .03em;
+  color: var(--text-faint);
+  transition: all .18s var(--ease);
+}
+.section-btn:hover { color: var(--text); border-color: var(--border); }
+.section-btn.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.section-btn:active { transform: scale(.94); }
