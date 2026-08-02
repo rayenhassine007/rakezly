@@ -2522,6 +2522,7 @@ window.I18N = (function(){
       'set.soft': 'Soft chime', 'set.none': 'None', 'set.apply': 'Apply & reset',
       'set.language': 'Language',
       'set.section': 'Prépa section',
+      'set.sectionHint': "Only this section's subjects appear in the picker.",
 
       'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
@@ -2625,6 +2626,7 @@ window.I18N = (function(){
       'set.soft': 'Carillon doux', 'set.none': 'Aucun', 'set.apply': 'Appliquer & réinitialiser',
       'set.language': 'Langue',
       'set.section': 'Section prépa',
+      'set.sectionHint': 'Seules les matières de cette section apparaissent dans le sélecteur.',
 
       'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',

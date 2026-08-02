@@ -1589,3 +1589,8 @@ body.view-stats .stage {
   .st-row-val { width: 54px; }
   .stats-card { padding: 16px 15px 18px; }
 }
+
+/* The section decides the whole subject list, so it leads the panel. */
+.set-block { display: flex; flex-direction: column; gap: 9px; margin-bottom: 14px; }
+.set-block-primary .auto-label { font-weight: 600; color: var(--text); }
+.set-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.45; }
