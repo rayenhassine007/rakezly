@@ -1293,3 +1293,140 @@ body.view-planner .stage {
 }
 .study-msg.is-ok    { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--text); }
 .study-msg.is-error { border-color: rgba(255,128,149,.4); background: rgba(255,128,149,.12); color: var(--danger); }
+
+
+/* ══════════════════════════════════════════════════════════════
+   20  PHONE LAYOUT
+   The top bar carried three clusters — brand, view switch, dock.
+   On a 390px screen they cannot coexist: the brand was clipped and
+   half the dock ran off-screen and could not be reached. The dock
+   moves to the bottom, which also puts it under the thumb.
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 700px) {
+  .topbar {
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .topbar-left { padding: 6px 14px; flex: none; }
+  .brand { font-size: 14px; }
+  .live-clock, .live-date { display: none; }
+
+  .viewswitch { padding: 3px; }
+  .view-btn { padding: 6px 15px; font-size: 12.5px; }
+
+  /* Dock becomes a bottom bar. */
+  .dock {
+    position: fixed;
+    left: 10px; right: 10px; bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 41;
+    justify-content: space-around;
+    gap: 0; padding: 5px 4px;
+    border-radius: 18px;
+    /* Opaque: unlike the top bar it floats over page content, not the
+       background video, so the glass tint alone let cards bleed through.
+       The theme colour under the usual tint keeps the look consistent. */
+    background-color: var(--bg);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.34);
+  }
+  .dock-btn { width: 40px; height: 40px; padding: 9px; }
+  /* Language lives in Settings on phones — no room for it here. */
+  .dock .lang-toggle { display: none; }
+
+  /* Keep the last card clear of the bottom bar. */
+  .stage { padding-bottom: 84px; }
+  body.view-planner .stage { padding-bottom: 84px; }
+
+  /* Bottom sheets cover the dock rather than fighting it for space;
+     tapping outside dismisses, which the click-away handler provides. */
+  .popover {
+    z-index: 46; max-height: 82vh;
+    background-color: var(--bg);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Narrow phones: the timer card was the tightest element. */
+@media (max-width: 430px) {
+  .stage { padding-left: 12px; padding-right: 12px; }
+  .timer-block { padding: 18px 14px 18px; gap: 13px; }
+
+  .switch-btn { padding: 7px 16px; font-size: 13px; }
+  .mode-tab { padding: 6px 12px; font-size: 12.5px; }
+  .mode-tabs { width: 100%; justify-content: center; }
+
+  .cycle-dot { width: 23px; height: 23px; font-size: 10px; }
+  .cycle-dot.brk, .cycle-dot.lng { width: 15px; height: 15px; }
+  .cycle-info { margin-left: 5px; }
+
+  .btn-primary { min-width: 120px; padding: 12px 24px; }
+  .btn-icon { width: 38px; height: 38px; padding: 10px; }
+  .btn-qadd { padding: 5px 10px; font-size: 11.5px; }
+
+  .pane { padding: 15px 15px; }
+  .study-mini-val { font-size: 19px; }
+  .study-mini-nums { gap: 14px; }
+
+  .topbar-left { padding: 6px 12px; }
+  .brand { font-size: 13px; }
+  .view-btn { padding: 6px 13px; font-size: 12px; }
+  .dock-btn { width: 38px; height: 38px; padding: 8px; }
+}
+
+/* Short screens in landscape: give the timer less vertical greed. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .timer-display { font-size: clamp(40px, 12vh, 62px); }
+  .timer-block { gap: 10px; padding: 14px 18px; }
+  .stage { padding-top: 64px; }
+}
+
+/* Explicit dismiss for the bottom sheets. Hidden on desktop, where the
+   popover floats beside its trigger and clicking that trigger closes it. */
+.popover-close {
+  display: none;
+  position: absolute; top: 12px; right: 12px;
+  width: 30px; height: 30px; padding: 7px;
+  border-radius: 50%;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  z-index: 2;
+}
+.popover-close svg {
+  width: 100%; height: 100%; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round;
+}
+.popover-close:active { transform: scale(.92); }
+
+@media (max-width: 700px) {
+  .popover { position: fixed; }
+  .popover-close { display: block; }
+  /* Grab-handle, so the sheet reads as draggable/dismissible. */
+  .popover::before {
+    content: ''; display: block;
+    width: 40px; height: 4px; margin: 0 auto 14px;
+    border-radius: 2px; background: var(--text-faint);
+    opacity: .55;
+  }
+  .popover-title { padding-right: 38px; }
+}
+
+/* Planner header on phones: title, then navigation, then tools — stacked
+   instead of three groups competing for one row. The week grid keeps its
+   horizontal scroll; a 7-column hour grid cannot usefully shrink further. */
+@media (max-width: 700px) {
+  .planner-card .pane-head {
+    flex-direction: column; align-items: stretch; gap: 10px;
+  }
+  .planner-card .pane-titlewrap { justify-content: flex-start; }
+  .planner-card .pane-title { white-space: nowrap; }
+  .pl-nav { justify-content: space-between; width: 100%; }
+  .pl-label { flex: 1; min-width: 0; text-align: center; }
+  .pl-toolbar { gap: 6px; }
+  .pl-toolbar .pl-spacer { display: none; }
+  .pl-week { min-width: 560px; }
+  .pl-day { min-height: 62px; }
+  .pl-note { font-size: 11px; }
+}

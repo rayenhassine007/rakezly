@@ -3036,3 +3036,25 @@ document.addEventListener('click', function(e){
 document.addEventListener('keydown', function(e){
   if (e.key === 'Escape') closeAllPanels();
 });
+
+
+// ── SHEET CLOSE AFFORDANCE ────────────────────────────────────
+// On phones a popover becomes a bottom sheet that covers the dock, so the
+// icon that opened it is no longer tappable. Tapping outside works, but
+// nothing says so — every panel gets an explicit close control instead.
+// Injected once here rather than repeated six times in the markup.
+(function addPopoverCloseButtons(){
+  document.querySelectorAll('.popover').forEach(function(panel){
+    if (panel.querySelector('.popover-close')) return;
+    const btn = document.createElement('button');
+    btn.className = 'popover-close';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Close');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      closeAllPanels();
+    });
+    panel.insertBefore(btn, panel.firstChild);
+  });
+})();

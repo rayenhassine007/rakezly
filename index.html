@@ -394,6 +394,13 @@
       </label>
     </div>
     <div class="auto-item">
+      <span class="auto-label" data-i18n="set.language">Language</span>
+      <span class="lang-toggle lang-toggle-settings">
+        <button class="lang-btn" data-lang="en" onclick="I18N.set('en')">EN</button>
+        <button class="lang-btn" data-lang="fr" onclick="I18N.set('fr')">FR</button>
+      </span>
+    </div>
+    <div class="auto-item">
       <span class="auto-label" data-i18n="set.alarm">Alarm sound</span>
       <select class="alarm-select" id="alarmSelect" onchange="alarmType=this.value">
         <option value="bell" data-i18n="set.bell">Bell</option>
