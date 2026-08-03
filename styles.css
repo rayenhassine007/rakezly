@@ -1594,3 +1594,10 @@ body.view-stats .stage {
 .set-block { display: flex; flex-direction: column; gap: 9px; margin-bottom: 14px; }
 .set-block-primary .auto-label { font-weight: 600; color: var(--text); }
 .set-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.45; }
+
+/* Section picker inside the study panel. */
+.study-panel .section-toggle { display: flex; gap: 5px; }
+.study-section-hint {
+  font-size: 10.5px; color: var(--text-faint);
+  line-height: 1.45; margin-top: 7px;
+}

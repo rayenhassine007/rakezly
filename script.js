@@ -1639,15 +1639,7 @@ window.Study = (function(){
     // falls back on its own, but the picker has to be rebuilt either way.
     renderSelect();
     render();
-    syncSectionButtons();
     toast(t('study.sectionSet', { section: next }));
-  }
-
-  function syncSectionButtons(){
-    const cur = section();
-    document.querySelectorAll('[data-section]').forEach(function(b){
-      b.classList.toggle('active', b.getAttribute('data-section') === cur);
-    });
   }
 
   function current(){
@@ -1837,6 +1829,17 @@ window.Study = (function(){
   }
 
   // ── panel ──
+  function sectionBlock(){
+    const cur = section();
+    const btns = SECTION_ORDER.map(function(k){
+      return '<button class="section-btn' + (k === cur ? ' active' : '') + '" ' +
+             'data-section="' + k + '" onclick="Study.setSection(\'' + k + '\')">' + k + '</button>';
+    }).join('');
+    return '<div class="study-sec-label">' + esc(t('set.section')) + '</div>' +
+           '<div class="section-toggle">' + btns + '</div>' +
+           '<p class="study-section-hint">' + esc(t('set.sectionHint')) + '</p>';
+  }
+
   function msgBlock(){
     if (!authMsg) return '';
     return '<div class="study-msg ' + (authMsg.kind === 'error' ? 'is-error' : 'is-ok') + '">' +
@@ -1916,6 +1919,7 @@ window.Study = (function(){
 
     body.innerHTML =
       authBlock() +
+      sectionBlock() +
       '<div class="study-sec-label">' + esc(t('study.myWeek')) + '</div>' +
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
@@ -1990,7 +1994,6 @@ window.Study = (function(){
   }
 
   function init(){
-    syncSectionButtons();
     renderSelect();
     render();
     if (window.Auth) window.Auth.onChange(function(){ render(); });
@@ -3078,13 +3081,26 @@ function closeAllPanels(){
   if (window.Room && Room.close) Room.close();
 }
 
+// Where the click started has to be recorded in the CAPTURE phase, before
+// any inline onclick runs. A control inside a panel often re-renders that
+// panel's innerHTML, which detaches the clicked node — and closest() on a
+// detached node returns null, so a bubble-phase check would conclude the
+// click came from outside and close the very panel being used.
+let clickOrigin = null;
 document.addEventListener('click', function(e){
+  const el = e.target;
+  clickOrigin = (el && el.closest) ? {
+    inPanel: !!el.closest('.popover'),
+    onDock:  !!el.closest('.dock-btn'),
+    onLang:  !!el.closest('.lang-toggle')
+  } : null;
+}, true);
+
+document.addEventListener('click', function(){
   // Inside a popover, or on the control that opens one — those manage
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
-  if (e.target.closest('.popover')) return;
-  if (e.target.closest('.dock-btn')) return;
-  if (e.target.closest('.lang-toggle')) return;
+  if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang)) return;
   closeAllPanels();
 });
 
