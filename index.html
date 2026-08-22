@@ -11,7 +11,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <script src="https://w.soundcloud.com/player/api.js" async></script>
-<script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Cinzel:wght@400;500;600&family=Josefin+Sans:wght@200;300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./styles.css">
@@ -271,6 +270,9 @@
     <span class="player-badge" data-src="spotify">Spotify</span>
     <span class="player-badge" data-src="soundcloud">SoundCloud</span>
   </div>
+  <div class="player-room-note" id="playerRoomNote" hidden>
+    Only YouTube is available in a shared room.
+  </div>
   <div class="player-url-row">
     <input class="player-url-input" id="playerUrlInput" type="text" data-i18n-ph="player.paste" placeholder="Paste a link…">
     <button class="player-load-btn" onclick="loadPlayerUrl()" data-i18n="player.load">Load</button>
@@ -290,7 +292,7 @@
   </button>
   <div class="player-empty" id="playerEmpty">
     <div class="player-empty-icon">♫</div>
-    Paste a YouTube, Spotify or SoundCloud link to play.
+    Paste a YouTube link to share in a room — or Spotify / SoundCloud when alone.
   </div>
   <button class="player-clear-btn" id="playerClearBtn" onclick="clearPlayer()" data-i18n="player.clear">Clear player</button>
 </div>

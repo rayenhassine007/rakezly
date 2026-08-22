@@ -595,22 +595,57 @@ let toastTO;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTO);toastTO=setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ── MUSIC PLAYER PANEL ──────────────────────────────────────
-// While in a shared room, load/play/seek are broadcast (if allowed).
+// Shared rooms sync YouTube only (reliable play/pause/seek).
+// Spotify / SoundCloud still work alone, as simple local embeds.
 // Mute is always local — it never leaves this browser.
 let currentPlayerRaw = '';
+let currentPlayerSrc = null;
 let playerApplyingRemote = false;
 let localMusicMuted = false;
 let knownPositionSec = 0;
 let spotifyCtrl = null;
-let spotifyApi = null;
 let spotifyPlaying = false;
-window.onSpotifyIframeApiReady = function(api){ spotifyApi = api; };
+let musicNotifyTimer = null;
+let scInitTries = 0;
+let ytInitTries = 0;
+
+function inSharedRoom(){
+  return !!(window.Room && Room.inRoom && Room.inRoom());
+}
+
+// Hide Spotify / SoundCloud while in a room and show the YouTube-only note.
+function syncPlayerRoomMode(){
+  const inRoom = inSharedRoom();
+  document.querySelectorAll('.player-badge[data-src="spotify"], .player-badge[data-src="soundcloud"]').forEach(function(b){
+    b.hidden = inRoom;
+    b.style.display = inRoom ? 'none' : '';
+  });
+  const note = document.getElementById('playerRoomNote');
+  if (note) {
+    note.hidden = !inRoom;
+    if (inRoom && typeof t === 'function') note.textContent = t('player.roomYoutubeNote');
+  }
+  const empty = document.getElementById('playerEmpty');
+  if (empty && !document.getElementById('playerEmbedWrap').classList.contains('has-player')) {
+    const icon = empty.querySelector('.player-empty-icon');
+    const iconHtml = icon ? icon.outerHTML : '<div class="player-empty-icon">♫</div>';
+    empty.innerHTML = iconHtml + (inRoom
+      ? (typeof t === 'function' ? t('player.roomYoutubeNote') : 'Only YouTube is available in a shared room.')
+      : 'Paste a YouTube, Spotify or SoundCloud link to play.');
+  }
+  if (inRoom) {
+    document.querySelectorAll('.player-badge').forEach(function(b){ b.classList.remove('active-src'); });
+    const yt = document.querySelector('.player-badge[data-src="youtube"]');
+    if (yt) yt.classList.add('active-src');
+    const input = document.getElementById('playerUrlInput');
+    if (input) input.placeholder = 'https://www.youtube.com/watch?v=…';
+  }
+}
 
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
   const isOpen = panel.classList.contains('open');
-  // Close all other panels
   document.getElementById('bgPanel').classList.remove('open');
   document.getElementById('settingsSlidePanel').classList.remove('open');
   document.getElementById('themePanel').classList.remove('open');
@@ -620,19 +655,58 @@ function togglePlayerPanel() {
   if (window.Room && Room.close) Room.close();
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncPlayerRoomMode();
 }
 
+// Only push music on explicit user actions — never from embed state
+// events (those caused sync loops that froze Clear / controls).
 function notifyMusicLocal(){
-  if (playerApplyingRemote) return;
-  if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+  if (playerApplyingRemote || !inSharedRoom()) return;
+  clearTimeout(musicNotifyTimer);
+  musicNotifyTimer = setTimeout(function(){
+    if (playerApplyingRemote) return;
+    if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+  }, 200);
 }
 
 function guardMusicControl(){
-  if (window.Room && Room.inRoom && Room.inRoom() && Room.canControlMusic && !Room.canControlMusic()){
+  if (inSharedRoom() && Room.canControlMusic && !Room.canControlMusic()){
     showToast(typeof t === 'function' ? t('room.musicLocked') : 'Only the host can control music right now');
     return false;
   }
   return true;
+}
+
+// YT.Player replaces the <iframe> node. Always tear it down and ensure a
+// fresh iframe exists before loading another source — otherwise Clear and
+// Spotify/SoundCloud loads silently break.
+function ensurePlayerIframe(){
+  const wrap = document.getElementById('playerEmbedWrap');
+  if (!wrap) return null;
+  let iframe = document.getElementById('playerIframe');
+  if (!iframe || iframe.tagName !== 'IFRAME') {
+    wrap.innerHTML = '<iframe id="playerIframe" allow="autoplay; encrypted-media; clipboard-write" allowfullscreen title="Music player"></iframe>';
+    iframe = document.getElementById('playerIframe');
+  }
+  return iframe;
+}
+
+function destroyPlayers(){
+  try {
+    if (ytPlayer) {
+      if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+      if (typeof ytPlayer.destroy === 'function') ytPlayer.destroy();
+    }
+  } catch(e){}
+  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
+  scWidget = null; scWidgetReady = false; scIsPlaying = false;
+  scShuffleOn = false; scRepeatOn = false; scTracks = [];
+  spotifyCtrl = null; spotifyPlaying = false;
+  scInitTries = 0; ytInitTries = 0;
+  const iframe = ensurePlayerIframe();
+  if (iframe) {
+    try { iframe.src = 'about:blank'; } catch(e){}
+  }
 }
 
 function loadPlayerUrl(opt) {
@@ -644,58 +718,58 @@ function loadPlayerUrl(opt) {
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
   if (!embedUrl) { if (!fromRemote) showToast('That link is not supported'); return; }
-  const iframe   = document.getElementById('playerIframe');
+
+  // Shared rooms: YouTube only — Spotify/SoundCloud embeds can't be synced
+  // reliably and were breaking Clear / controls.
+  if (inSharedRoom() && embedUrl.src !== 'youtube') {
+    if (!fromRemote) {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
+    return;
+  }
+
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
 
-  // Reset state
-  controls.classList.remove('visible');
-  scWidget = null; scWidgetReady = false;
-  ytPlayer = null; ytPlayerReady = false;
-  spotifyCtrl = null; spotifyPlaying = false;
-  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
+  destroyPlayers();
+  const iframe = ensurePlayerIframe();
+  if (!iframe) return;
 
+  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
   document.getElementById('playerUrlInput').value = raw;
   currentPlayerRaw = raw;
+  currentPlayerSrc = embedUrl.src;
 
-  iframe.src     = embedUrl.url;
   iframe.style.height = embedUrl.height + 'px';
   wrap.classList.add('has-player');
   empty.style.display = 'none';
   clearBtn.classList.add('visible');
-  controls.classList.add('visible');
-  updateCtrlLabels(embedUrl.src);
 
-  // SoundCloud: kick off widget init — it retries internally until SC API is ready
-  if (embedUrl.src === 'soundcloud') {
-    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // YouTube
-  if (embedUrl.src === 'youtube') {
-    const ytUrl = embedUrl.url + '&enablejsapi=1';
-    iframe.src = ytUrl;
-    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // Spotify — iframe + Embed API when available
-  if (embedUrl.src === 'spotify') {
-    initSpotifyPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // highlight badge
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
+  updateCtrlLabels(embedUrl.src);
+
+  if (embedUrl.src === 'youtube') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url + (embedUrl.url.indexOf('?') >= 0 ? '&' : '?') + 'enablejsapi=1&origin=' + encodeURIComponent(location.origin);
+    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'soundcloud') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url;
+    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'spotify') {
+    // Local-only embed — no IFrame API (it fought the DOM and froze the panel).
+    controls.classList.remove('visible');
+    iframe.src = embedUrl.url;
+  }
 
   if (!fromRemote) {
     showToast('Player loaded');
     localStorage.setItem('sf_player_url', raw);
     notifyMusicLocal();
-  } else if (!opts.skipPersonal) {
-    // Room music should not overwrite the personal stash used on leave.
   }
   applyLocalMuteState();
 }
@@ -705,7 +779,6 @@ function resolvePlayerEmbed(url) {
     const u = new URL(url);
     const host = u.hostname.replace('www.', '');
 
-    // YouTube
     if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com' || host === 'music.youtube.com') {
       let vid = u.searchParams.get('v');
       let list = u.searchParams.get('list');
@@ -716,16 +789,13 @@ function resolvePlayerEmbed(url) {
       if (list) return { url: `https://www.youtube.com/embed/videoseries?list=${list}&autoplay=1`, height: 230, src: 'youtube', rawUrl: url };
     }
 
-    // Spotify
     if (host === 'open.spotify.com') {
       const path = u.pathname;
-      // Tracks/episodes: compact. Everything else (playlist/album/artist): tall enough to show shuffle+repeat footer
       const isTrack = path.startsWith('/track/') || path.startsWith('/episode/');
       const h = isTrack ? 152 : 460;
       return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify', rawUrl: url };
     }
 
-    // SoundCloud
     if (host === 'soundcloud.com') {
       const encoded = encodeURIComponent(url);
       return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud', rawUrl: url };
@@ -739,25 +809,26 @@ let ytPlayer = null, ytPlayerReady = false, ytIsPlaying = false;
 function clearPlayer(opt) {
   const opts = opt || {};
   if (!opts.fromRemote && !guardMusicControl()) return;
-  const iframe   = document.getElementById('playerIframe');
+
+  destroyPlayers();
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
-  iframe.src = '';
-  wrap.classList.remove('has-player');
-  empty.style.display = '';
-  clearBtn.classList.remove('visible');
-  controls.classList.remove('visible');
-  scWidget = null; scWidgetReady = false; scIsPlaying = false; scShuffleOn = false; scRepeatOn = false;
-  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
-  spotifyCtrl = null; spotifyPlaying = false;
+  if (wrap) wrap.classList.remove('has-player');
+  if (empty) empty.style.display = '';
+  if (clearBtn) clearBtn.classList.remove('visible');
+  if (controls) controls.classList.remove('visible');
   currentPlayerRaw = '';
+  currentPlayerSrc = null;
   knownPositionSec = 0;
-  document.getElementById('ctrlPlay').textContent = '▶';
-  document.getElementById('ctrlShuffle').classList.remove('active');
+  const playBtn = document.getElementById('ctrlPlay');
+  if (playBtn) playBtn.textContent = '▶';
+  const shuffle = document.getElementById('ctrlShuffle');
+  if (shuffle) shuffle.classList.remove('active');
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
-  document.getElementById('playerUrlInput').value = '';
+  const input = document.getElementById('playerUrlInput');
+  if (input) input.value = '';
   if (!opts.fromRemote) {
     localStorage.removeItem('sf_player_url');
     showToast('Player cleared');
@@ -767,7 +838,6 @@ function clearPlayer(opt) {
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
 
-// Load YT IFrame API script once
 (function loadYTScript() {
   if (!document.getElementById('yt-iframe-api')) {
     const tag = document.createElement('script');
@@ -779,16 +849,17 @@ function clearPlayer(opt) {
 
 function initYTPlayer(opt) {
   const opts = opt || {};
-  // Wait until YT API and iframe are ready
   if (typeof YT === 'undefined' || !YT.Player) {
+    if (ytInitTries++ > 40) return;
     setTimeout(function(){ initYTPlayer(opts); }, 400); return;
   }
   const iframe = document.getElementById('playerIframe');
-  if (!iframe.src || !iframe.src.includes('youtube.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('youtube.com') < 0) return;
+  ytInitTries = 0;
   try {
     ytPlayer = new YT.Player('playerIframe', {
       events: {
-        onReady: () => {
+        onReady: function() {
           ytPlayerReady = true;
           const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
           if (seek > 0) { try { ytPlayer.seekTo(seek, true); } catch(e){} }
@@ -798,25 +869,29 @@ function initYTPlayer(opt) {
             else ytPlayer.pauseVideo();
           } catch(e){}
           ytIsPlaying = wantPlay;
-          document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+          const b = document.getElementById('ctrlPlay');
+          if (b) b.textContent = wantPlay ? '⏸' : '▶';
           applyLocalMuteState();
         },
-        onStateChange: (e) => {
+        onStateChange: function(e) {
           if (e.data === YT.PlayerState.PLAYING) {
             ytIsPlaying = true;
-            document.getElementById('ctrlPlay').textContent = '⏸';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '⏸';
             try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
-            if (!playerApplyingRemote) notifyMusicLocal();
           } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
             ytIsPlaying = false;
-            document.getElementById('ctrlPlay').textContent = '▶';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '▶';
             try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
-            if (!playerApplyingRemote) notifyMusicLocal();
           }
         }
       }
     });
-  } catch(e) { setTimeout(function(){ initYTPlayer(opts); }, 400); }
+  } catch(e) {
+    if (ytInitTries++ > 40) return;
+    setTimeout(function(){ initYTPlayer(opts); }, 400);
+  }
 }
 
 function ytTogglePlay() {
@@ -846,6 +921,7 @@ function ytPrevVideo() {
 
 // ── UNIFIED CONTROL ROUTING ────────────────────────────────
 function getActiveSrc() {
+  if (currentPlayerSrc) return currentPlayerSrc;
   const badge = document.querySelector('.player-badge.active-src');
   return badge ? badge.dataset.src : null;
 }
@@ -854,16 +930,15 @@ function ctrlPlayPause() {
   const src = getActiveSrc();
   if (src === 'youtube') ytTogglePlay();
   else if (src === 'soundcloud') scTogglePlay();
-  else if (src === 'spotify') spotifyTogglePlay();
   else return;
-  setTimeout(notifyMusicLocal, 120);
+  notifyMusicLocal();
 }
 function ctrlPrev() {
   if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipBackward(); showToast('−10s'); }
   else if (src === 'soundcloud') scPrev();
-  else if (src === 'spotify') spotifySkip(-10);
+  else return;
   notifyMusicLocal();
 }
 function ctrlNext() {
@@ -871,7 +946,7 @@ function ctrlNext() {
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipForward(); showToast('+10s'); }
   else if (src === 'soundcloud') scNext();
-  else if (src === 'spotify') spotifySkip(10);
+  else return;
   notifyMusicLocal();
 }
 function ctrlLeft() {
@@ -879,21 +954,19 @@ function ctrlLeft() {
   const src = getActiveSrc();
   if (src === 'youtube') { ytPrevVideo(); showToast('Previous video'); }
   else if (src === 'soundcloud') scShuffle();
+  else return;
   notifyMusicLocal();
 }
 
-// Update button labels based on active source
 function updateCtrlLabels(src) {
   const shuffle = document.getElementById('ctrlShuffle');
   const prev    = document.getElementById('ctrlPrev');
   const next    = document.getElementById('ctrlNext');
-  if (src === 'youtube' || src === 'spotify') {
+  if (!shuffle || !prev || !next) return;
+  if (src === 'youtube') {
     shuffle.title = 'Previous Video';  shuffle.textContent = '⏮⏮';
     prev.title    = '−10 seconds';     prev.textContent    = '−10s';
     next.title    = '+10 seconds';     next.textContent    = '+10s';
-    if (src === 'spotify') {
-      shuffle.title = 'Reload'; shuffle.textContent = '↻';
-    }
   } else {
     shuffle.title = 'Shuffle'; shuffle.textContent = '⇌';
     prev.title    = 'Previous'; prev.textContent   = '⏮';
@@ -907,24 +980,27 @@ let scTracks = [], scWidgetReady = false;
 
 function initSCWidget(opt) {
   const opts = opt || {};
-  // Retry until the SC Widget API script has loaded
   if (typeof SC === 'undefined' || !window.SC || !window.SC.Widget) {
+    if (scInitTries++ > 40) return;
     setTimeout(function(){ initSCWidget(opts); }, 400);
     return;
   }
   const iframe = document.getElementById('playerIframe');
-  // Guard: if iframe src is gone (user cleared), stop
-  if (!iframe.src || !iframe.src.includes('soundcloud.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('soundcloud.com') < 0) return;
+  scInitTries = 0;
   try {
     scWidget = SC.Widget(iframe);
-  } catch(e) { setTimeout(function(){ initSCWidget(opts); }, 400); return; }
+  } catch(e) {
+    if (scInitTries++ > 40) return;
+    setTimeout(function(){ initSCWidget(opts); }, 400);
+    return;
+  }
 
   scWidgetReady = false;
 
-  scWidget.bind(SC.Widget.Events.READY, () => {
+  scWidget.bind(SC.Widget.Events.READY, function() {
     scWidgetReady = true;
-    // Fetch track list for shuffle
-    scWidget.getSounds(sounds => { scTracks = sounds || []; });
+    scWidget.getSounds(function(sounds){ scTracks = sounds || []; });
     const seekMs = Math.max(0, Math.floor((opts.seekSec || 0) * 1000));
     if (seekMs > 0) { try { scWidget.seekTo(seekMs); } catch(e){} }
     const wantPlay = opts.playing !== false;
@@ -933,34 +1009,34 @@ function initSCWidget(opt) {
       else scWidget.pause();
     } catch(e){}
     scIsPlaying = wantPlay;
-    document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = wantPlay ? '⏸' : '▶';
     applyLocalMuteState();
   });
-  scWidget.bind(SC.Widget.Events.PLAY, () => {
+  scWidget.bind(SC.Widget.Events.PLAY, function() {
     scIsPlaying = true;
-    document.getElementById('ctrlPlay').textContent = '⏸';
-    if (!playerApplyingRemote) notifyMusicLocal();
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '⏸';
   });
-  scWidget.bind(SC.Widget.Events.PAUSE, () => {
+  scWidget.bind(SC.Widget.Events.PAUSE, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
-    if (!playerApplyingRemote) notifyMusicLocal();
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
   });
-  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, (data) => {
+  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, function(data) {
     if (data && typeof data.currentPosition === 'number') {
       knownPositionSec = data.currentPosition / 1000;
     }
   });
-  scWidget.bind(SC.Widget.Events.FINISH, () => {
+  scWidget.bind(SC.Widget.Events.FINISH, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
-    // Auto-advance: repeat or shuffle
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
     if (scRepeatOn) {
       scWidget.seekTo(0); scWidget.play();
     } else if (scShuffleOn && scTracks.length > 1) {
       scPlayRandom();
     }
-    if (!playerApplyingRemote) notifyMusicLocal();
   });
 }
 
@@ -984,65 +1060,15 @@ function scPlayRandom() {
 }
 function scShuffle() {
   scShuffleOn = !scShuffleOn;
-  document.getElementById('ctrlShuffle').classList.toggle('active', scShuffleOn);
+  const el = document.getElementById('ctrlShuffle');
+  if (el) el.classList.toggle('active', scShuffleOn);
   showToast(scShuffleOn ? 'Shuffle on' : 'Shuffle off');
 }
 function scToggleRepeat() {
   scRepeatOn = !scRepeatOn;
-  document.getElementById('ctrlRepeat').classList.toggle('active', scRepeatOn);
+  const el = document.getElementById('ctrlRepeat');
+  if (el) el.classList.toggle('active', scRepeatOn);
   showToast(scRepeatOn ? 'Repeat on' : 'Repeat off');
-}
-
-// ── SPOTIFY EMBED API ──────────────────────────────────────
-function initSpotifyPlayer(opt){
-  const opts = opt || {};
-  const iframe = document.getElementById('playerIframe');
-  if (!iframe || !iframe.src || !iframe.src.includes('spotify.com')) return;
-  if (!spotifyApi) {
-    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
-    return;
-  }
-  try {
-    spotifyApi.createController(iframe, {}, function(ctrl){
-      spotifyCtrl = ctrl;
-      const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
-      const wantPlay = opts.playing !== false;
-      try {
-        if (seek > 0 && ctrl.seek) ctrl.seek(seek);
-        if (wantPlay && ctrl.play) ctrl.play();
-        else if (!wantPlay && ctrl.pause) ctrl.pause();
-      } catch(e){}
-      spotifyPlaying = wantPlay;
-      document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
-      if (ctrl.addListener) {
-        ctrl.addListener('playback_update', function(e){
-          const d = (e && e.data) || e || {};
-          if (typeof d.position === 'number') knownPositionSec = d.position / 1000;
-          if (typeof d.isPaused === 'boolean') {
-            spotifyPlaying = !d.isPaused;
-            document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
-          }
-        });
-      }
-      applyLocalMuteState();
-    });
-  } catch(e) {
-    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
-  }
-}
-function spotifyTogglePlay(){
-  if (!spotifyCtrl) return;
-  try {
-    if (spotifyPlaying) spotifyCtrl.pause();
-    else spotifyCtrl.play();
-    spotifyPlaying = !spotifyPlaying;
-    document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
-  } catch(e){}
-}
-function spotifySkip(deltaSec){
-  if (!spotifyCtrl || !spotifyCtrl.seek) return;
-  knownPositionSec = Math.max(0, knownPositionSec + deltaSec);
-  try { spotifyCtrl.seek(knownPositionSec); } catch(e){}
 }
 
 // ── LOCAL MUTE (never synced) ──────────────────────────────
@@ -1064,18 +1090,6 @@ function applyLocalMuteState(){
       if (localMusicMuted) ytPlayer.mute(); else ytPlayer.unMute();
     } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
       scWidget.setVolume(localMusicMuted ? 0 : 100);
-    } else if (src === 'spotify' && spotifyCtrl) {
-      // Embed API has no reliable volume — pause locally while muted,
-      // without broadcasting, so the room keeps playing for others.
-      if (localMusicMuted && spotifyPlaying) {
-        playerApplyingRemote = true;
-        try { spotifyCtrl.pause(); } catch(e){}
-        playerApplyingRemote = false;
-      } else if (!localMusicMuted && spotifyPlaying === false && window.Room && Room.lastMusic && Room.lastMusic() && Room.lastMusic().playing) {
-        playerApplyingRemote = true;
-        try { spotifyCtrl.play(); } catch(e){}
-        playerApplyingRemote = false;
-      }
     }
   } catch(e){}
 }
@@ -1089,7 +1103,7 @@ function toggleLocalMute(){
 }
 function isLocalMuted(){ return localMusicMuted; }
 
-// ── MUSIC SNAPSHOT (for room sync) ─────────────────────────
+// ── MUSIC SNAPSHOT (for room sync — YouTube only) ──────────
 function getMusicSnapshot(){
   const src = getActiveSrc();
   let playing = false;
@@ -1098,16 +1112,12 @@ function getMusicSnapshot(){
     if (src === 'youtube' && ytPlayer && ytPlayerReady) {
       playing = ytIsPlaying;
       pos = ytPlayer.getCurrentTime() || pos;
-    } else if (src === 'soundcloud') {
-      playing = scIsPlaying;
-    } else if (src === 'spotify') {
-      playing = spotifyPlaying;
     }
   } catch(e){}
   knownPositionSec = pos;
   return {
-    url: currentPlayerRaw || '',
-    src: src || null,
+    url: (src === 'youtube') ? (currentPlayerRaw || '') : '',
+    src: (src === 'youtube') ? 'youtube' : null,
     playing: !!playing,
     positionSec: Number(pos) || 0,
     at: Date.now()
@@ -1123,52 +1133,33 @@ function applyMusicSnapshot(snap){
       if (currentPlayerRaw) clearPlayer({ fromRemote: true });
       return;
     }
-    // Adjust position for network lag while playing
+    const embed = resolvePlayerEmbed(url);
+    if (!embed || embed.src !== 'youtube') return;
+
     let pos = Number(snap.positionSec) || 0;
     if (snap.playing && snap.at) {
       pos += Math.max(0, (Date.now() - snap.at) / 1000);
     }
-    const same = currentPlayerRaw === url;
+    const same = currentPlayerRaw === url && currentPlayerSrc === 'youtube';
     if (!same) {
       loadPlayerUrl({
         url: url, fromRemote: true, skipPersonal: true,
         positionSec: pos, playing: !!snap.playing
       });
-    } else {
-      // Same track — seek + play/pause
-      const src = getActiveSrc();
+    } else if (ytPlayer && ytPlayerReady) {
       knownPositionSec = pos;
-      if (src === 'youtube' && ytPlayer && ytPlayerReady) {
-        try { ytPlayer.seekTo(pos, true); } catch(e){}
-        try {
-          if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
-          else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
-        } catch(e){}
-      } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
-        try { scWidget.seekTo(Math.floor(pos * 1000)); } catch(e){}
-        try {
-          if (snap.playing) { if (!scIsPlaying) scWidget.play(); }
-          else { if (scIsPlaying) scWidget.pause(); }
-        } catch(e){}
-      } else if (src === 'spotify' && spotifyCtrl) {
-        try { if (spotifyCtrl.seek) spotifyCtrl.seek(pos); } catch(e){}
-        if (!localMusicMuted) {
-          try {
-            if (snap.playing) spotifyCtrl.play();
-            else spotifyCtrl.pause();
-          } catch(e){}
-        }
-        spotifyPlaying = !!snap.playing;
-        document.getElementById('ctrlPlay').textContent = snap.playing ? '⏸' : '▶';
-      }
+      try { ytPlayer.seekTo(pos, true); } catch(e){}
+      try {
+        if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
+        else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
+      } catch(e){}
       applyLocalMuteState();
     }
   } finally {
-    setTimeout(function(){ playerApplyingRemote = false; }, 400);
+    setTimeout(function(){ playerApplyingRemote = false; }, 800);
   }
 }
 
-// Click badge to set placeholder example and highlight selection
 document.querySelectorAll('.player-badge').forEach(badge => {
   badge.addEventListener('click', () => {
     const examples = {
@@ -1178,13 +1169,14 @@ document.querySelectorAll('.player-badge').forEach(badge => {
     };
     const src = badge.dataset.src;
     document.getElementById('playerUrlInput').placeholder = examples[src] || 'paste link here...';
-    // Highlight the clicked badge
     document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
     badge.classList.add('active-src');
+    if (inSharedRoom() && src !== 'youtube') {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
   });
 });
 
-// Restore player on load (skipped if joining a room via ?room=)
 (function restorePlayer() {
   if (/[?&]room=/.test(location.search)) return;
   const saved = localStorage.getItem('sf_player_url');
@@ -1565,11 +1557,16 @@ window.SB = (function(){
 
 window.Room = (function(){
   const myId = Math.random().toString(36).slice(2, 10);
+  // How long the host can vanish (refresh / disconnect) before the next
+  // person who entered the room inherits hostship.
+  const HOST_GRACE_MS = 35000;
 
   let channel = null, code = null;
   let applying = false, panelOpen = false, status = 'idle', peers = 1;
   let isHost = false;
   let hostId = null;
+  let hostToken = null; // rotates on succession so an old host can't reclaim
+  let myJoinedAt = Date.now();
   // When true, everyone may control; when false, only the host.
   let allowTimer = true;
   let allowMusic = true;
@@ -1577,6 +1574,10 @@ window.Room = (function(){
   let lastMusicSnap = null;
   let personalStash = null; // { url } restored on leave
   let musicTick = null;
+  let hostCheckTimer = null;
+  let hostWatch = null;
+  let hostMissingSince = null;
+  let members = []; // [{ id, name, joinedAt, host }]
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
@@ -1587,6 +1588,86 @@ window.Room = (function(){
   function canControlMusic(){ return !inRoom() || isHost || allowMusic; }
   function lastMusic(){ return lastMusicSnap; }
 
+  // ── Display name (required for guests) ─────────────────────
+  function nameKey(){ return 'sf_room_display_name'; }
+  function getStoredName(){
+    try { return String(localStorage.getItem(nameKey()) || '').trim(); } catch(e){ return ''; }
+  }
+  function setStoredName(n){
+    try { localStorage.setItem(nameKey(), String(n || '').trim().slice(0, 24)); } catch(e){}
+  }
+  function displayName(){
+    const stored = getStoredName();
+    if (stored.length >= 2) return stored;
+    if (window.Auth && window.Auth.signedIn()) return String(window.Auth.name() || '').trim();
+    return '';
+  }
+  function needsName(){
+    if (window.Auth && window.Auth.signedIn()) return false;
+    return displayName().length < 2;
+  }
+  function saveNameFromInput(){
+    const el = document.getElementById('roomNameInput');
+    if (!el) return displayName();
+    const n = String(el.value || '').trim().slice(0, 24);
+    if (n.length >= 2) setStoredName(n);
+    return n;
+  }
+  function ensureNameOrToast(){
+    const n = saveNameFromInput();
+    if (window.Auth && window.Auth.signedIn()){
+      if (n.length >= 2) return n;
+      return displayName();
+    }
+    if (n.length < 2){
+      toast(t('room.needName'));
+      updateUI();
+      const el = document.getElementById('roomNameInput');
+      if (el) try { el.focus(); } catch(e){}
+      return null;
+    }
+    return n;
+  }
+
+  // ── Host token (survives refresh, invalidated on succession) ─
+  function hostKey(c){ return 'sf_room_owner_v3_' + String(c || '').toUpperCase(); }
+  function joinedKey(c){ return 'sf_room_joined_v1_' + String(c || '').toUpperCase(); }
+  function rememberHost(c, token){
+    try { sessionStorage.setItem(hostKey(c), token); } catch(e){}
+  }
+  function forgetHost(c){
+    try { sessionStorage.removeItem(hostKey(c)); } catch(e){}
+  }
+  function storedHostToken(c){
+    try { return sessionStorage.getItem(hostKey(c)) || ''; } catch(e){ return ''; }
+  }
+  function iOwnHostToken(c){
+    const mine = storedHostToken(c);
+    if (!mine || !hostToken) return false;
+    return mine === hostToken;
+  }
+  function newHostToken(){
+    return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+  function joinStamp(c, fresh){
+    try {
+      if (fresh) {
+        const v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+        return Number(v);
+      }
+      let v = sessionStorage.getItem(joinedKey(c));
+      if (!v){
+        v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+      }
+      return Number(v);
+    } catch(e){ return Date.now(); }
+  }
+  function forgetJoin(c){
+    try { sessionStorage.removeItem(joinedKey(c)); } catch(e){}
+  }
+
   function genCode(){
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let s = ''; for (let i=0;i<6;i++) s += A[Math.floor(Math.random()*A.length)];
@@ -1596,7 +1677,8 @@ window.Room = (function(){
   function snapshot(){
     return {
       mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running,
-      hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+      hostId: hostId, hostToken: hostToken,
+      allowTimer: allowTimer, allowMusic: allowMusic
     };
   }
 
@@ -1605,9 +1687,158 @@ window.Room = (function(){
     return { url: '', playing: false, positionSec: 0, at: Date.now() };
   }
 
+  function trackPresence(){
+    if (!channel) return;
+    try {
+      channel.track({
+        id: myId,
+        name: displayName() || 'student',
+        joinedAt: myJoinedAt,
+        host: isHost,
+        at: Date.now()
+      });
+    } catch(e){}
+  }
+
+  // permanent: true → write/rotate host token (create or succession)
+  function claimHost(opts){
+    const permanent = !!(opts && opts.permanent);
+    const openLocks = !!(opts && opts.openLocks);
+    const rotate = !!(opts && opts.rotateToken);
+    isHost = true;
+    hostId = myId;
+    if (permanent && code){
+      if (rotate || !hostToken || !iOwnHostToken(code)){
+        hostToken = newHostToken();
+      }
+      rememberHost(code, hostToken);
+    }
+    if (openLocks){ allowTimer = true; allowMusic = true; }
+    trackPresence();
+    if (status === 'joined') {
+      push();
+      pushMusic();
+    }
+    updateUI();
+  }
+
+  function yieldHost(newHostId){
+    isHost = false;
+    if (newHostId) hostId = newHostId;
+    trackPresence();
+    updateUI();
+  }
+
+  function presentPeople(){
+    if (!channel) return [];
+    const out = [];
+    const seen = {};
+    try {
+      const state = channel.presenceState() || {};
+      Object.keys(state).forEach(function(k){
+        (state[k] || []).forEach(function(p){
+          if (!p || !p.id || seen[p.id]) return;
+          seen[p.id] = 1;
+          out.push({
+            id: p.id,
+            name: String(p.name || 'student').slice(0, 24),
+            joinedAt: Number(p.joinedAt) || 0,
+            host: !!p.host
+          });
+        });
+      });
+    } catch(e){}
+    out.sort(function(a, b){
+      if (a.joinedAt !== b.joinedAt) return a.joinedAt - b.joinedAt;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return out;
+  }
+
+  function refreshMembers(){
+    members = presentPeople();
+    peers = members.length || 1;
+  }
+
+  // Next in join order after the missing host (or earliest if host unknown).
+  function successorId(people, missingHostId){
+    if (!people.length) return null;
+    if (missingHostId){
+      const idx = people.findIndex(function(p){ return p.id === missingHostId; });
+      // Host not in list — pick earliest joiner overall.
+      if (idx < 0) return people[0].id;
+    }
+    return people[0].id;
+  }
+
+  // If the host is gone for HOST_GRACE_MS, the next person who entered
+  // becomes the permanent host (new token so the old host can't steal it back).
+  function ensureHostAlive(){
+    if (status !== 'joined' || !channel) return;
+    refreshMembers();
+    const people = members;
+    if (!people.length) return;
+    const ids = people.map(function(p){ return p.id; });
+    const hostHere = !!(hostId && ids.indexOf(hostId) !== -1);
+
+    if (hostHere) {
+      hostMissingSince = null;
+      isHost = (hostId === myId);
+      updateUI();
+      return;
+    }
+
+    // Still the token holder and reconnecting — reclaim immediately.
+    if (code && iOwnHostToken(code)) {
+      hostMissingSince = null;
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
+      return;
+    }
+
+    if (!hostMissingSince) {
+      hostMissingSince = Date.now();
+      toast(t('room.hostMissingToast'));
+    }
+    const goneFor = Date.now() - hostMissingSince;
+    if (goneFor < HOST_GRACE_MS) {
+      updateUI();
+      return;
+    }
+
+    const next = successorId(people, hostId);
+    if (next === myId) {
+      if (!(isHost && hostId === myId && iOwnHostToken(code))) {
+        claimHost({ permanent: true, openLocks: true, rotateToken: true });
+        toast(t('room.youAreNowHost'));
+      }
+    } else {
+      yieldHost(next);
+    }
+  }
+
   function applyMeta(s){
     if (!s) return;
-    if (s.hostId) hostId = s.hostId;
+    if (s.hostToken) hostToken = s.hostToken;
+    const remoteHost = s.hostId || null;
+    const iAmOwner = !!(code && iOwnHostToken(code));
+
+    if (iAmOwner) {
+      hostId = myId;
+      isHost = true;
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      return;
+    }
+
+    if (remoteHost && remoteHost !== myId) {
+      hostId = remoteHost;
+      isHost = false;
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      return;
+    }
+
+    if (remoteHost) hostId = remoteHost;
     if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
     if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
     isHost = (hostId === myId);
@@ -1629,14 +1860,17 @@ window.Room = (function(){
       updateDisplay(); updateBar();
       const b = document.getElementById('startBtn');
       if (s.running){
-        if (!running) startTimer();               // sets label 'Pause' + starts ticker
+        if (!running) startTimer();
       } else {
-        if (running){ running = false; clearInterval(ticker); }   // stop ticker, no label churn
+        if (running){ running = false; clearInterval(ticker); }
         if (b){ b.textContent = (remainSecs >= totalSecs) ? t('timer.start') : t('timer.resume'); b.classList.remove('running'); }
         if (td) td.classList.toggle('blink', remainSecs < totalSecs);
       }
     } catch(e){ console.warn('room apply', e); }
     applying = false;
+    if (code && iOwnHostToken(code) && hostId !== myId) {
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
+    }
     updateUI();
   }
 
@@ -1670,7 +1904,8 @@ window.Room = (function(){
     if (!canControlTimer()){
       toast(t('room.timerLocked'));
       if (lastTimerSnap) apply(Object.assign({}, lastTimerSnap, {
-        hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+        hostId: hostId, hostToken: hostToken,
+        allowTimer: allowTimer, allowMusic: allowMusic
       }));
       return;
     }
@@ -1713,6 +1948,17 @@ window.Room = (function(){
   function stopMusicTick(){
     if (musicTick){ clearInterval(musicTick); musicTick = null; }
   }
+  function startHostWatch(){
+    stopHostWatch();
+    hostWatch = setInterval(function(){
+      ensureHostAlive();
+      // Refresh the countdown label every tick while waiting.
+      if (hostMissingSince && status === 'joined') updateUI();
+    }, 1000);
+  }
+  function stopHostWatch(){
+    if (hostWatch){ clearInterval(hostWatch); hostWatch = null; }
+  }
 
   function stashPersonal(){
     personalStash = {
@@ -1726,7 +1972,6 @@ window.Room = (function(){
     if (url) {
       if (typeof loadPlayerUrl === 'function') {
         loadPlayerUrl({ url: url, fromRemote: true });
-        // fromRemote skips localStorage write and room notify — re-save personal
         try { localStorage.setItem('sf_player_url', url); } catch(e){}
       }
     } else if (typeof clearPlayer === 'function') {
@@ -1738,45 +1983,55 @@ window.Room = (function(){
     const created = opts && opts.created;
     const cl = sb();
     if (!cl){ toast('Shared rooms are unavailable right now'); return; }
+    if (!ensureNameOrToast()) return;
     if (channel) leave(true);
+
+    myJoinedAt = joinStamp(c, !!created);
+    const reclaim = !created && iOwnHostToken(c);
     if (created){
       isHost = true;
       hostId = myId;
+      hostToken = newHostToken();
+      rememberHost(c, hostToken);
       allowTimer = true;
       allowMusic = true;
+    } else if (reclaim){
+      isHost = true;
+      hostId = myId;
+      hostToken = storedHostToken(c) || hostToken;
     } else {
       isHost = false;
-      // hostId / allows arrive via sync
+      hostId = null;
     }
+
     stashPersonal();
-    code = c; status = 'connecting'; updateUI();
+    code = c; status = 'connecting'; hostMissingSince = null; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
     channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
     channel.on('broadcast', { event:'music' }, function(m){ applyMusic(m.payload); });
     channel.on('broadcast', { event:'hello' }, function(){
-      // Timer: anyone can echo. Music: only the host is authoritative,
-      // otherwise every peer would race with their personal player.
       push();
       if (isHost) pushMusic();
     });
     channel.on('presence',  { event:'sync'  }, function(){
-      try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
+      refreshMembers();
+      ensureHostAlive();
       updateUI();
     });
     channel.subscribe(function(st){
       if (st === 'SUBSCRIBED'){
         status = 'joined';
-        try {
-          channel.track({ id: myId, host: isHost, at: Date.now() });
-        } catch(e){}
+        trackPresence();
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}
-        if (created) {
-          // Seed room music from whatever the host already had loaded
-          pushFull();
-        }
+        if (created || reclaim) pushFull();
         setUrl(c);
-        toast(created ? (t('room.created') || ('Room '+c)) : ('Joined room '+c));
+        toast(created ? t('room.created')
+          : reclaim ? t('room.reclaimed')
+          : ('Joined room '+c));
         startMusicTick();
+        startHostWatch();
+        if (hostCheckTimer) clearTimeout(hostCheckTimer);
+        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 1500);
         updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
@@ -1784,16 +2039,28 @@ window.Room = (function(){
     });
   }
 
-  function create(){ join(genCode(), { created: true }); }
+  function create(){
+    if (!ensureNameOrToast()) return;
+    join(genCode(), { created: true });
+  }
 
   function leave(silent){
     const cl = sb();
+    const leavingCode = code;
+    const owned = leavingCode && iOwnHostToken(leavingCode);
     stopMusicTick();
+    stopHostWatch();
+    if (hostCheckTimer){ clearTimeout(hostCheckTimer); hostCheckTimer = null; }
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
-    channel = null; code = null; status = 'idle'; peers = 1;
-    isHost = false; hostId = null;
+    channel = null; code = null; status = 'idle'; peers = 1; members = [];
+    isHost = false; hostId = null; hostToken = null;
     allowTimer = true; allowMusic = true;
     lastTimerSnap = null; lastMusicSnap = null;
+    if (!silent && leavingCode){
+      if (owned) forgetHost(leavingCode);
+      forgetJoin(leavingCode);
+    }
+    hostMissingSince = null;
     clearUrl();
     restorePersonal();
     if (!silent) toast('Left the room');
@@ -1818,13 +2085,54 @@ window.Room = (function(){
       '</button>';
   }
 
+  function membersHtml(){
+    const list = members.length ? members : presentPeople();
+    if (!list.length){
+      return '<div class="room-members-empty">' + esc(t('room.noMembers')) + '</div>';
+    }
+    return '<ul class="room-members">' + list.map(function(p){
+      const isMe = p.id === myId;
+      const isH = (hostId && p.id === hostId);
+      const hostBadge = isH ? '<span class="room-host-badge">' + esc(t('room.hostBadge')) + '</span>' : '';
+      const you = isMe ? '<span class="room-you-badge">' + esc(t('room.you')) + '</span>' : '';
+      return '<li class="room-member'+(isH?' is-host':'')+(isMe?' is-me':'')+'">' +
+               '<span class="room-member-name">'+esc(p.name || 'student')+'</span>' +
+               hostBadge + you +
+             '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function nameFieldHtml(){
+    const signedIn = window.Auth && window.Auth.signedIn();
+    const val = esc(displayName());
+    if (signedIn && displayName()){
+      return '<div class="room-name-row room-name-set">' +
+               '<span class="room-name-label">' + esc(t('room.yourName')) + '</span>' +
+               '<span class="room-name-value">'+val+'</span>' +
+             '</div>';
+    }
+    return '<div class="room-name-row">' +
+             '<label class="room-name-label" for="roomNameInput">' + esc(t('room.yourName')) + '</label>' +
+             '<input class="room-input" id="roomNameInput" type="text" maxlength="24" ' +
+               'placeholder="' + esc(t('room.namePlaceholder')) + '" value="'+val+'" ' +
+               'onkeydown="if(event.key===\'Enter\'){Room.saveName();}">' +
+           '</div>' +
+           (needsName() ? '<div class="room-name-hint">' + esc(t('room.needName')) + '</div>' : '');
+  }
+
   function updateUI(){
+    if (typeof syncPlayerRoomMode === 'function') syncPlayerRoomMode();
     const btn = document.getElementById('roomFixedBtn');
     if (btn) btn.classList.toggle('active', status === 'joined');
     const panel = document.getElementById('roomPanel');
     if (panel) panel.classList.toggle('open', panelOpen);
     const body = document.getElementById('roomBody');
     if (!body) return;
+
+    // Preserve name/code inputs across re-renders when possible
+    const prevName = (document.getElementById('roomNameInput') || {}).value;
+    const prevCode = (document.getElementById('roomJoinInput') || {}).value;
+
     if (status === 'joined'){
       let perms = '';
       if (isHost){
@@ -1843,28 +2151,55 @@ window.Room = (function(){
       }
       const muteLabel = (typeof isLocalMuted === 'function' && isLocalMuted())
         ? t('player.unmute') : t('player.mute');
+      const waiting = hostMissingSince && !(hostId && members.some(function(m){ return m.id === hostId; }));
+      let waitNote = '';
+      if (waiting) {
+        const left = Math.max(1, Math.ceil((HOST_GRACE_MS - (Date.now() - hostMissingSince)) / 1000));
+        waitNote = '<div class="room-host-wait">' +
+          esc(t('room.hostMissingCountdown').replace('{s}', String(left))) +
+          '</div>';
+      }
       body.innerHTML =
         '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
         '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+
           (isHost ? ' · '+esc(t('room.youHost')) : '') +
         '</div>' +
+        waitNote +
         '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">' + esc(t('room.copy')) + '</button></div>' +
+        '<div class="room-sec-label">' + esc(t('room.people')) + '</div>' +
+        membersHtml() +
         perms +
         '<button type="button" class="room-btn room-mute-btn'+(typeof isLocalMuted==='function'&&isLocalMuted()?' is-on':'')+'" onclick="toggleLocalMute()">'+esc(muteLabel)+'</button>' +
         '<div class="room-hint">' + esc(t('room.hint')) + '</div>' +
         '<button class="room-btn room-btn-leave" onclick="Room.leave()">' + esc(t('room.leave')) + '</button>';
     } else {
       const connecting = (status === 'connecting');
+      const blocked = needsName() && !(window.Auth && window.Auth.signedIn());
+      const pendingRoom = (function(){
+        const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
+        return m ? m[1].toUpperCase() : '';
+      })();
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
+        nameFieldHtml() +
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting||blocked?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
         '<div class="room-or">' + esc(t('room.or')) + '</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">' + esc(t('room.join')) + '</button></div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8" value="'+(prevCode?esc(prevCode):(pendingRoom&&blocked?esc(pendingRoom):''))+'"><button class="room-btn" onclick="Room.joinFromInput()"'+(connecting||blocked?' disabled':'')+'>' + esc(t('room.join')) + '</button></div>' +
         (status === 'error' ? '<div class="room-err">' + esc(t('room.failed')) + '</div>' : '');
+      if (prevName && document.getElementById('roomNameInput') && !getStoredName()){
+        document.getElementById('roomNameInput').value = prevName;
+      }
     }
   }
 
+  function saveName(){
+    saveNameFromInput();
+    updateUI();
+    if (status === 'joined') trackPresence();
+  }
+
   function joinFromInput(){
+    if (!ensureNameOrToast()) return;
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
     if (v.length >= 4) join(v); else toast('That code is too short');
@@ -1876,22 +2211,38 @@ window.Room = (function(){
     const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  // close the room panel whenever another fixed panel button is clicked
   ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
-  // auto-join from ?room=CODE once the Supabase lib is ready
+  // auto-join from ?room=CODE once named + Supabase ready
   (function autoJoin(){
     const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
     if (!m) { updateUI(); return; }
     const c = m[1].toUpperCase();
+    panelOpen = true;
     let tries = 0;
     (function wait(){
-      if (window.supabase && window.supabase.createClient){ panelOpen = true; join(c); }
-      else if (tries++ < 40){ setTimeout(wait, 150); }
+      if (!(window.supabase && window.supabase.createClient)){
+        if (tries++ < 40) setTimeout(wait, 150);
+        else updateUI();
+        return;
+      }
+      if (needsName()){
+        updateUI(); // show name field; user joins manually after naming
+        return;
+      }
+      join(c);
     })();
   })();
+
+  if (window.Auth && window.Auth.onChange){
+    window.Auth.onChange(function(){ updateUI(); });
+  } else {
+    setTimeout(function(){
+      if (window.Auth && window.Auth.onChange) window.Auth.onChange(function(){ updateUI(); });
+    }, 0);
+  }
 
   return {
     onLocalChange: onLocalChange,
@@ -1899,7 +2250,7 @@ window.Room = (function(){
     create: create, join: join, refresh: updateUI,
     close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
     joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
-    togglePanel: togglePanel,
+    togglePanel: togglePanel, saveName: saveName,
     inRoom: inRoom,
     canControlTimer: canControlTimer,
     canControlMusic: canControlMusic,
@@ -2063,6 +2414,8 @@ window.Study = (function(){
   // Account feedback belongs next to the form that caused it, not in a
   // toast at the far side of the screen.
   let authMsg = null;    // { kind: 'error' | 'ok', text }
+  let authGateOpen = false; // popup asking guests to sign in for the board
+
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -2211,6 +2564,12 @@ window.Study = (function(){
 
   // ── leaderboard ──
   async function loadBoard(){
+    // Guests only see a blurred teaser — never fetch rankings signed out.
+    if (!window.Auth || !window.Auth.signedIn()){
+      board = []; standing = null; boardLoading = false; boardErr = '';
+      render();
+      return;
+    }
     const cl = window.SB.get();
     if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
@@ -2220,10 +2579,8 @@ window.Study = (function(){
       if (r.error) throw r.error;
       board = r.data || [];
       standing = null;
-      if (window.Auth && window.Auth.signedIn()){
-        const s = await cl.rpc('my_week_standing', { p_subject: subj });
-        if (!s.error && s.data && s.data.length) standing = s.data[0];
-      }
+      const s = await cl.rpc('my_week_standing', { p_subject: subj });
+      if (!s.error && s.data && s.data.length) standing = s.data[0];
     } catch(e){
       board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
       // Full object, not just the message: during setup the useful part is
@@ -2358,6 +2715,20 @@ window.Study = (function(){
   }
 
   function boardBlock(){
+    if (!window.Auth || !window.Auth.signedIn()){
+      // Blurred teaser — click opens the sign-in gate.
+      const fake = [1,2,3,4,5].map(function(n){
+        return '<div class="study-row">' +
+                 '<span class="study-row-rank">'+n+'</span>' +
+                 '<span class="study-row-name">••••••••</span>' +
+                 '<span class="study-row-mins">—</span>' +
+               '</div>';
+      }).join('');
+      return '<button type="button" class="study-board-lock" onclick="Study.openAuthGate()">' +
+               '<div class="study-board study-board-blurred" aria-hidden="true">'+fake+'</div>' +
+               '<span class="study-board-lock-label">' + esc(t('study.boardLocked')) + '</span>' +
+             '</button>';
+    }
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
@@ -2370,6 +2741,40 @@ window.Study = (function(){
     }).join('') + '</div>';
   }
 
+  function authGateBlock(){
+    if (!authGateOpen) return '';
+    if (window.Auth && window.Auth.signedIn()){ authGateOpen = false; return ''; }
+    let form = '';
+    if (authMode === 'none'){
+      form =
+        '<button class="study-btn study-btn-google" onclick="Study.doGoogle()">' + esc(t('study.google')) + '</button>' +
+        '<div class="study-or">' + esc(t('study.or')) + '</div>' +
+        '<div class="study-authrow">' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">' + esc(t('study.signin')) + '</button>' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">' + esc(t('study.signup')) + '</button>' +
+        '</div>';
+    } else {
+      const up = (authMode === 'signup');
+      form =
+        '<div class="study-form">' +
+          (up ? '<input class="study-input" id="authName" type="text" placeholder="' + esc(t('study.name')) + '" maxlength="24">' : '') +
+          '<input class="study-input" id="authEmail" type="email" placeholder="' + esc(t('study.email')) + '" autocomplete="email">' +
+          '<input class="study-input" id="authPass" type="password" placeholder="' + esc(t('study.password')) + '" autocomplete="'+(up?'new-password':'current-password')+'">' +
+          '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'Create account':'Sign in')+'</button>' +
+          '<button class="study-link" onclick="Study.setAuthMode(\'none\')">' + esc(t('study.back')) + '</button>' +
+        '</div>';
+    }
+    return '<div class="study-auth-gate" role="dialog" aria-modal="true" aria-label="' + esc(t('study.boardGateTitle')) + '">' +
+             '<div class="study-auth-gate-card">' +
+               '<button type="button" class="study-auth-gate-x" onclick="Study.closeAuthGate()" aria-label="Close">×</button>' +
+               '<div class="study-auth-gate-title">' + esc(t('study.boardGateTitle')) + '</div>' +
+               '<div class="study-auth-gate-msg">' + esc(t('study.boardGateMsg')) + '</div>' +
+               form +
+               msgBlock() +
+             '</div>' +
+           '</div>';
+  }
+
   function render(){
     renderMini();
     const btn = document.getElementById('studyFixedBtn');
@@ -2379,12 +2784,16 @@ window.Study = (function(){
     const body = document.getElementById('studyBody');
     if (!body || !panelOpen) return;
 
-    let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-                 '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
-    presets().forEach(function(s){
-      filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
-    });
-    filter += '</select>';
+    const signedIn = window.Auth && window.Auth.signedIn();
+    let filter = '';
+    if (signedIn){
+      filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
+               '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
+      presets().forEach(function(s){
+        filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
+      });
+      filter += '</select>';
+    }
 
     body.innerHTML =
       authBlock() +
@@ -2398,7 +2807,8 @@ window.Study = (function(){
       '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
       filter +
       boardBlock() +
-      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>';
+      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>' +
+      authGateBlock();
   }
 
   function closeOtherPanels(){
@@ -2420,6 +2830,14 @@ window.Study = (function(){
   // ── panel actions ──
   function setAuthMode(m){ authMode = m; authMsg = null; render(); }
   function setAuthMsg(kind, text){ authMsg = { kind: kind, text: text }; render(); }
+  function openAuthGate(){
+    if (window.Auth && window.Auth.signedIn()){ loadBoard(); return; }
+    authGateOpen = true;
+    authMode = 'none';
+    authMsg = null;
+    render();
+  }
+  function closeAuthGate(){ authGateOpen = false; authMsg = null; render(); }
 
   async function doAuth(){
     const em = (document.getElementById('authEmail')||{}).value || '';
@@ -2435,7 +2853,11 @@ window.Study = (function(){
       : await window.Auth.signIn(em.trim(), pw);
 
     authMsg = { kind: r.ok ? 'ok' : 'error', text: r.msg };
-    if (r.ok){ authMode = 'none'; loadBoard(); }
+    if (r.ok){
+      authMode = 'none';
+      authGateOpen = false;
+      loadBoard();
+    }
     render();
   }
 
@@ -2465,7 +2887,11 @@ window.Study = (function(){
   function init(){
     renderSelect();
     render();
-    if (window.Auth) window.Auth.onChange(function(){ render(); });
+    if (window.Auth) window.Auth.onChange(function(){
+      if (window.Auth.signedIn()) authGateOpen = false;
+      loadBoard();
+      render();
+    });
     ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
       const b = document.querySelector(sel);
       if (b) b.addEventListener('click', function(){ if (panelOpen){ panelOpen = false; render(); } });
@@ -2473,7 +2899,7 @@ window.Study = (function(){
   }
 
   return { init:init, doGoogle:doGoogle,
-           close: function(){ if (panelOpen){ panelOpen = false; render(); } },
+           close: function(){ if (panelOpen){ panelOpen = false; authGateOpen = false; render(); } },
            SECTIONS:SECTIONS, SECTION_ORDER:SECTION_ORDER,
            presets:presets, section:section, setSection:setSection,
            all:all, current:current, setCurrent:setCurrent,
@@ -2482,6 +2908,7 @@ window.Study = (function(){
            entries:log, sumSince:sumSince, bySubjectSince:bySubjectSince,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
+           openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
 })();
 
@@ -2945,7 +3372,10 @@ window.I18N = (function(){
       'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
       'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
-      'study.guest': "You're a guest — your time is saved on this device. Sign in to appear on the board.",
+      'study.guest': "You're a guest — your time is saved on this device. Sign in to unlock the leaderboard.",
+      'study.boardLocked': 'Sign in to see the leaderboard',
+      'study.boardGateTitle': 'Leaderboard is for members',
+      'study.boardGateMsg': 'Sign in or create an account to see weekly rankings and your place on the board.',
       'study.google': 'Continue with Google', 'study.or': 'or',
       'study.signin': 'Sign in', 'study.signup': 'Create account', 'study.back': 'Back',
       'study.signout': 'Sign out', 'study.rename': 'Rename',
@@ -2971,7 +3401,19 @@ window.I18N = (function(){
       'room.online': 'online', 'room.connecting': 'Connecting…',
       'room.failed': 'Connection failed — try again',
       'room.created': 'Room created',
+      'room.reclaimed': 'Back as host',
       'room.youHost': 'you are host',
+      'room.youAreNowHost': 'You are now the host',
+      'room.hostMissing': 'Host disconnected — waiting before passing the role…',
+      'room.hostMissingToast': 'Host left the room — next host in 35 seconds',
+      'room.hostMissingCountdown': 'Host disconnected — next host in {s}s',
+      'room.people': 'In this room',
+      'room.hostBadge': 'host',
+      'room.you': 'you',
+      'room.noMembers': 'No one else here yet',
+      'room.yourName': 'Your name',
+      'room.namePlaceholder': 'e.g. Amine',
+      'room.needName': 'Enter a name (at least 2 characters) before creating or joining a room',
       'room.perms': 'Who can control',
       'room.allowTimer': 'Others can control the timer',
       'room.allowMusic': 'Others can control the music',
@@ -2985,6 +3427,8 @@ window.I18N = (function(){
       'player.muteTip': 'Mute only on this device',
       'player.mutedToast': 'Muted for you only — others still hear it',
       'player.unmutedToast': 'Unmuted',
+      'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync — paste a YouTube URL',
+      'player.roomYoutubeNote': 'Only YouTube is available in a shared room.',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
       'player.load': 'Load', 'player.clear': 'Clear player',
@@ -3063,7 +3507,10 @@ window.I18N = (function(){
       'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
       'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
-      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour apparaître au classement.",
+      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",
+      'study.boardLocked': 'Connecte-toi pour voir le classement',
+      'study.boardGateTitle': 'Classement réservé aux membres',
+      'study.boardGateMsg': 'Connecte-toi ou crée un compte pour voir le classement de la semaine et ta place.',
       'study.google': 'Continuer avec Google', 'study.or': 'ou',
       'study.signin': 'Se connecter', 'study.signup': 'Créer un compte', 'study.back': 'Retour',
       'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
@@ -3089,7 +3536,19 @@ window.I18N = (function(){
       'room.online': 'en ligne', 'room.connecting': 'Connexion…',
       'room.failed': 'Échec de la connexion — réessaie',
       'room.created': 'Salle créée',
+      'room.reclaimed': 'De retour en tant qu’hôte',
       'room.youHost': 'tu es hôte',
+      'room.youAreNowHost': 'Tu es maintenant l’hôte',
+      'room.hostMissing': 'Hôte déconnecté — transfert du rôle dans un instant…',
+      'room.hostMissingToast': 'L’hôte a quitté — prochain hôte dans 35 secondes',
+      'room.hostMissingCountdown': 'Hôte déconnecté — prochain hôte dans {s}s',
+      'room.people': 'Dans la salle',
+      'room.hostBadge': 'hôte',
+      'room.you': 'toi',
+      'room.noMembers': 'Personne d’autre pour l’instant',
+      'room.yourName': 'Ton prénom',
+      'room.namePlaceholder': 'ex. Amine',
+      'room.needName': 'Entre un prénom (au moins 2 caractères) avant de créer ou rejoindre une salle',
       'room.perms': 'Qui peut contrôler',
       'room.allowTimer': 'Les autres peuvent contrôler le minuteur',
       'room.allowMusic': 'Les autres peuvent contrôler la musique',
@@ -3103,6 +3562,8 @@ window.I18N = (function(){
       'player.muteTip': 'Coupe le son seulement sur cet appareil',
       'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
       'player.unmutedToast': 'Son rétabli',
+      'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise — colle un lien YouTube',
+      'player.roomYoutubeNote': 'Seul YouTube est disponible dans une salle partagée.',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
       'player.load': 'Charger', 'player.clear': 'Vider le lecteur',
