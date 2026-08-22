@@ -595,22 +595,28 @@ let toastTO;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTO);toastTO=setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ── MUSIC PLAYER PANEL ──────────────────────────────────────
-// While in a shared room, load/play/seek are broadcast (if allowed).
+// Shared rooms sync YouTube only (reliable play/pause/seek).
+// Spotify / SoundCloud still work alone, as simple local embeds.
 // Mute is always local — it never leaves this browser.
 let currentPlayerRaw = '';
+let currentPlayerSrc = null;
 let playerApplyingRemote = false;
 let localMusicMuted = false;
 let knownPositionSec = 0;
 let spotifyCtrl = null;
-let spotifyApi = null;
 let spotifyPlaying = false;
-window.onSpotifyIframeApiReady = function(api){ spotifyApi = api; };
+let musicNotifyTimer = null;
+let scInitTries = 0;
+let ytInitTries = 0;
+
+function inSharedRoom(){
+  return !!(window.Room && Room.inRoom && Room.inRoom());
+}
 
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
   const isOpen = panel.classList.contains('open');
-  // Close all other panels
   document.getElementById('bgPanel').classList.remove('open');
   document.getElementById('settingsSlidePanel').classList.remove('open');
   document.getElementById('themePanel').classList.remove('open');
@@ -622,17 +628,55 @@ function togglePlayerPanel() {
   btn.classList.toggle('active', !isOpen);
 }
 
+// Only push music on explicit user actions — never from embed state
+// events (those caused sync loops that froze Clear / controls).
 function notifyMusicLocal(){
-  if (playerApplyingRemote) return;
-  if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+  if (playerApplyingRemote || !inSharedRoom()) return;
+  clearTimeout(musicNotifyTimer);
+  musicNotifyTimer = setTimeout(function(){
+    if (playerApplyingRemote) return;
+    if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+  }, 200);
 }
 
 function guardMusicControl(){
-  if (window.Room && Room.inRoom && Room.inRoom() && Room.canControlMusic && !Room.canControlMusic()){
+  if (inSharedRoom() && Room.canControlMusic && !Room.canControlMusic()){
     showToast(typeof t === 'function' ? t('room.musicLocked') : 'Only the host can control music right now');
     return false;
   }
   return true;
+}
+
+// YT.Player replaces the <iframe> node. Always tear it down and ensure a
+// fresh iframe exists before loading another source — otherwise Clear and
+// Spotify/SoundCloud loads silently break.
+function ensurePlayerIframe(){
+  const wrap = document.getElementById('playerEmbedWrap');
+  if (!wrap) return null;
+  let iframe = document.getElementById('playerIframe');
+  if (!iframe || iframe.tagName !== 'IFRAME') {
+    wrap.innerHTML = '<iframe id="playerIframe" allow="autoplay; encrypted-media; clipboard-write" allowfullscreen title="Music player"></iframe>';
+    iframe = document.getElementById('playerIframe');
+  }
+  return iframe;
+}
+
+function destroyPlayers(){
+  try {
+    if (ytPlayer) {
+      if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+      if (typeof ytPlayer.destroy === 'function') ytPlayer.destroy();
+    }
+  } catch(e){}
+  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
+  scWidget = null; scWidgetReady = false; scIsPlaying = false;
+  scShuffleOn = false; scRepeatOn = false; scTracks = [];
+  spotifyCtrl = null; spotifyPlaying = false;
+  scInitTries = 0; ytInitTries = 0;
+  const iframe = ensurePlayerIframe();
+  if (iframe) {
+    try { iframe.src = 'about:blank'; } catch(e){}
+  }
 }
 
 function loadPlayerUrl(opt) {
@@ -644,58 +688,58 @@ function loadPlayerUrl(opt) {
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
   if (!embedUrl) { if (!fromRemote) showToast('That link is not supported'); return; }
-  const iframe   = document.getElementById('playerIframe');
+
+  // Shared rooms: YouTube only — Spotify/SoundCloud embeds can't be synced
+  // reliably and were breaking Clear / controls.
+  if (inSharedRoom() && embedUrl.src !== 'youtube') {
+    if (!fromRemote) {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
+    return;
+  }
+
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
 
-  // Reset state
-  controls.classList.remove('visible');
-  scWidget = null; scWidgetReady = false;
-  ytPlayer = null; ytPlayerReady = false;
-  spotifyCtrl = null; spotifyPlaying = false;
-  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
+  destroyPlayers();
+  const iframe = ensurePlayerIframe();
+  if (!iframe) return;
 
+  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
   document.getElementById('playerUrlInput').value = raw;
   currentPlayerRaw = raw;
+  currentPlayerSrc = embedUrl.src;
 
-  iframe.src     = embedUrl.url;
   iframe.style.height = embedUrl.height + 'px';
   wrap.classList.add('has-player');
   empty.style.display = 'none';
   clearBtn.classList.add('visible');
-  controls.classList.add('visible');
-  updateCtrlLabels(embedUrl.src);
 
-  // SoundCloud: kick off widget init — it retries internally until SC API is ready
-  if (embedUrl.src === 'soundcloud') {
-    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // YouTube
-  if (embedUrl.src === 'youtube') {
-    const ytUrl = embedUrl.url + '&enablejsapi=1';
-    iframe.src = ytUrl;
-    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // Spotify — iframe + Embed API when available
-  if (embedUrl.src === 'spotify') {
-    initSpotifyPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
-  }
-
-  // highlight badge
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
+  updateCtrlLabels(embedUrl.src);
+
+  if (embedUrl.src === 'youtube') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url + (embedUrl.url.indexOf('?') >= 0 ? '&' : '?') + 'enablejsapi=1&origin=' + encodeURIComponent(location.origin);
+    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'soundcloud') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url;
+    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'spotify') {
+    // Local-only embed — no IFrame API (it fought the DOM and froze the panel).
+    controls.classList.remove('visible');
+    iframe.src = embedUrl.url;
+  }
 
   if (!fromRemote) {
     showToast('Player loaded');
     localStorage.setItem('sf_player_url', raw);
     notifyMusicLocal();
-  } else if (!opts.skipPersonal) {
-    // Room music should not overwrite the personal stash used on leave.
   }
   applyLocalMuteState();
 }
@@ -705,7 +749,6 @@ function resolvePlayerEmbed(url) {
     const u = new URL(url);
     const host = u.hostname.replace('www.', '');
 
-    // YouTube
     if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com' || host === 'music.youtube.com') {
       let vid = u.searchParams.get('v');
       let list = u.searchParams.get('list');
@@ -716,16 +759,13 @@ function resolvePlayerEmbed(url) {
       if (list) return { url: `https://www.youtube.com/embed/videoseries?list=${list}&autoplay=1`, height: 230, src: 'youtube', rawUrl: url };
     }
 
-    // Spotify
     if (host === 'open.spotify.com') {
       const path = u.pathname;
-      // Tracks/episodes: compact. Everything else (playlist/album/artist): tall enough to show shuffle+repeat footer
       const isTrack = path.startsWith('/track/') || path.startsWith('/episode/');
       const h = isTrack ? 152 : 460;
       return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify', rawUrl: url };
     }
 
-    // SoundCloud
     if (host === 'soundcloud.com') {
       const encoded = encodeURIComponent(url);
       return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud', rawUrl: url };
@@ -739,25 +779,26 @@ let ytPlayer = null, ytPlayerReady = false, ytIsPlaying = false;
 function clearPlayer(opt) {
   const opts = opt || {};
   if (!opts.fromRemote && !guardMusicControl()) return;
-  const iframe   = document.getElementById('playerIframe');
+
+  destroyPlayers();
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
-  iframe.src = '';
-  wrap.classList.remove('has-player');
-  empty.style.display = '';
-  clearBtn.classList.remove('visible');
-  controls.classList.remove('visible');
-  scWidget = null; scWidgetReady = false; scIsPlaying = false; scShuffleOn = false; scRepeatOn = false;
-  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
-  spotifyCtrl = null; spotifyPlaying = false;
+  if (wrap) wrap.classList.remove('has-player');
+  if (empty) empty.style.display = '';
+  if (clearBtn) clearBtn.classList.remove('visible');
+  if (controls) controls.classList.remove('visible');
   currentPlayerRaw = '';
+  currentPlayerSrc = null;
   knownPositionSec = 0;
-  document.getElementById('ctrlPlay').textContent = '▶';
-  document.getElementById('ctrlShuffle').classList.remove('active');
+  const playBtn = document.getElementById('ctrlPlay');
+  if (playBtn) playBtn.textContent = '▶';
+  const shuffle = document.getElementById('ctrlShuffle');
+  if (shuffle) shuffle.classList.remove('active');
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
-  document.getElementById('playerUrlInput').value = '';
+  const input = document.getElementById('playerUrlInput');
+  if (input) input.value = '';
   if (!opts.fromRemote) {
     localStorage.removeItem('sf_player_url');
     showToast('Player cleared');
@@ -767,7 +808,6 @@ function clearPlayer(opt) {
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
 
-// Load YT IFrame API script once
 (function loadYTScript() {
   if (!document.getElementById('yt-iframe-api')) {
     const tag = document.createElement('script');
@@ -779,16 +819,17 @@ function clearPlayer(opt) {
 
 function initYTPlayer(opt) {
   const opts = opt || {};
-  // Wait until YT API and iframe are ready
   if (typeof YT === 'undefined' || !YT.Player) {
+    if (ytInitTries++ > 40) return;
     setTimeout(function(){ initYTPlayer(opts); }, 400); return;
   }
   const iframe = document.getElementById('playerIframe');
-  if (!iframe.src || !iframe.src.includes('youtube.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('youtube.com') < 0) return;
+  ytInitTries = 0;
   try {
     ytPlayer = new YT.Player('playerIframe', {
       events: {
-        onReady: () => {
+        onReady: function() {
           ytPlayerReady = true;
           const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
           if (seek > 0) { try { ytPlayer.seekTo(seek, true); } catch(e){} }
@@ -798,25 +839,29 @@ function initYTPlayer(opt) {
             else ytPlayer.pauseVideo();
           } catch(e){}
           ytIsPlaying = wantPlay;
-          document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+          const b = document.getElementById('ctrlPlay');
+          if (b) b.textContent = wantPlay ? '⏸' : '▶';
           applyLocalMuteState();
         },
-        onStateChange: (e) => {
+        onStateChange: function(e) {
           if (e.data === YT.PlayerState.PLAYING) {
             ytIsPlaying = true;
-            document.getElementById('ctrlPlay').textContent = '⏸';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '⏸';
             try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
-            if (!playerApplyingRemote) notifyMusicLocal();
           } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
             ytIsPlaying = false;
-            document.getElementById('ctrlPlay').textContent = '▶';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '▶';
             try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
-            if (!playerApplyingRemote) notifyMusicLocal();
           }
         }
       }
     });
-  } catch(e) { setTimeout(function(){ initYTPlayer(opts); }, 400); }
+  } catch(e) {
+    if (ytInitTries++ > 40) return;
+    setTimeout(function(){ initYTPlayer(opts); }, 400);
+  }
 }
 
 function ytTogglePlay() {
@@ -846,6 +891,7 @@ function ytPrevVideo() {
 
 // ── UNIFIED CONTROL ROUTING ────────────────────────────────
 function getActiveSrc() {
+  if (currentPlayerSrc) return currentPlayerSrc;
   const badge = document.querySelector('.player-badge.active-src');
   return badge ? badge.dataset.src : null;
 }
@@ -854,16 +900,15 @@ function ctrlPlayPause() {
   const src = getActiveSrc();
   if (src === 'youtube') ytTogglePlay();
   else if (src === 'soundcloud') scTogglePlay();
-  else if (src === 'spotify') spotifyTogglePlay();
   else return;
-  setTimeout(notifyMusicLocal, 120);
+  notifyMusicLocal();
 }
 function ctrlPrev() {
   if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipBackward(); showToast('−10s'); }
   else if (src === 'soundcloud') scPrev();
-  else if (src === 'spotify') spotifySkip(-10);
+  else return;
   notifyMusicLocal();
 }
 function ctrlNext() {
@@ -871,7 +916,7 @@ function ctrlNext() {
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipForward(); showToast('+10s'); }
   else if (src === 'soundcloud') scNext();
-  else if (src === 'spotify') spotifySkip(10);
+  else return;
   notifyMusicLocal();
 }
 function ctrlLeft() {
@@ -879,21 +924,19 @@ function ctrlLeft() {
   const src = getActiveSrc();
   if (src === 'youtube') { ytPrevVideo(); showToast('Previous video'); }
   else if (src === 'soundcloud') scShuffle();
+  else return;
   notifyMusicLocal();
 }
 
-// Update button labels based on active source
 function updateCtrlLabels(src) {
   const shuffle = document.getElementById('ctrlShuffle');
   const prev    = document.getElementById('ctrlPrev');
   const next    = document.getElementById('ctrlNext');
-  if (src === 'youtube' || src === 'spotify') {
+  if (!shuffle || !prev || !next) return;
+  if (src === 'youtube') {
     shuffle.title = 'Previous Video';  shuffle.textContent = '⏮⏮';
     prev.title    = '−10 seconds';     prev.textContent    = '−10s';
     next.title    = '+10 seconds';     next.textContent    = '+10s';
-    if (src === 'spotify') {
-      shuffle.title = 'Reload'; shuffle.textContent = '↻';
-    }
   } else {
     shuffle.title = 'Shuffle'; shuffle.textContent = '⇌';
     prev.title    = 'Previous'; prev.textContent   = '⏮';
@@ -907,24 +950,27 @@ let scTracks = [], scWidgetReady = false;
 
 function initSCWidget(opt) {
   const opts = opt || {};
-  // Retry until the SC Widget API script has loaded
   if (typeof SC === 'undefined' || !window.SC || !window.SC.Widget) {
+    if (scInitTries++ > 40) return;
     setTimeout(function(){ initSCWidget(opts); }, 400);
     return;
   }
   const iframe = document.getElementById('playerIframe');
-  // Guard: if iframe src is gone (user cleared), stop
-  if (!iframe.src || !iframe.src.includes('soundcloud.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('soundcloud.com') < 0) return;
+  scInitTries = 0;
   try {
     scWidget = SC.Widget(iframe);
-  } catch(e) { setTimeout(function(){ initSCWidget(opts); }, 400); return; }
+  } catch(e) {
+    if (scInitTries++ > 40) return;
+    setTimeout(function(){ initSCWidget(opts); }, 400);
+    return;
+  }
 
   scWidgetReady = false;
 
-  scWidget.bind(SC.Widget.Events.READY, () => {
+  scWidget.bind(SC.Widget.Events.READY, function() {
     scWidgetReady = true;
-    // Fetch track list for shuffle
-    scWidget.getSounds(sounds => { scTracks = sounds || []; });
+    scWidget.getSounds(function(sounds){ scTracks = sounds || []; });
     const seekMs = Math.max(0, Math.floor((opts.seekSec || 0) * 1000));
     if (seekMs > 0) { try { scWidget.seekTo(seekMs); } catch(e){} }
     const wantPlay = opts.playing !== false;
@@ -933,34 +979,34 @@ function initSCWidget(opt) {
       else scWidget.pause();
     } catch(e){}
     scIsPlaying = wantPlay;
-    document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = wantPlay ? '⏸' : '▶';
     applyLocalMuteState();
   });
-  scWidget.bind(SC.Widget.Events.PLAY, () => {
+  scWidget.bind(SC.Widget.Events.PLAY, function() {
     scIsPlaying = true;
-    document.getElementById('ctrlPlay').textContent = '⏸';
-    if (!playerApplyingRemote) notifyMusicLocal();
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '⏸';
   });
-  scWidget.bind(SC.Widget.Events.PAUSE, () => {
+  scWidget.bind(SC.Widget.Events.PAUSE, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
-    if (!playerApplyingRemote) notifyMusicLocal();
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
   });
-  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, (data) => {
+  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, function(data) {
     if (data && typeof data.currentPosition === 'number') {
       knownPositionSec = data.currentPosition / 1000;
     }
   });
-  scWidget.bind(SC.Widget.Events.FINISH, () => {
+  scWidget.bind(SC.Widget.Events.FINISH, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
-    // Auto-advance: repeat or shuffle
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
     if (scRepeatOn) {
       scWidget.seekTo(0); scWidget.play();
     } else if (scShuffleOn && scTracks.length > 1) {
       scPlayRandom();
     }
-    if (!playerApplyingRemote) notifyMusicLocal();
   });
 }
 
@@ -984,65 +1030,15 @@ function scPlayRandom() {
 }
 function scShuffle() {
   scShuffleOn = !scShuffleOn;
-  document.getElementById('ctrlShuffle').classList.toggle('active', scShuffleOn);
+  const el = document.getElementById('ctrlShuffle');
+  if (el) el.classList.toggle('active', scShuffleOn);
   showToast(scShuffleOn ? 'Shuffle on' : 'Shuffle off');
 }
 function scToggleRepeat() {
   scRepeatOn = !scRepeatOn;
-  document.getElementById('ctrlRepeat').classList.toggle('active', scRepeatOn);
+  const el = document.getElementById('ctrlRepeat');
+  if (el) el.classList.toggle('active', scRepeatOn);
   showToast(scRepeatOn ? 'Repeat on' : 'Repeat off');
-}
-
-// ── SPOTIFY EMBED API ──────────────────────────────────────
-function initSpotifyPlayer(opt){
-  const opts = opt || {};
-  const iframe = document.getElementById('playerIframe');
-  if (!iframe || !iframe.src || !iframe.src.includes('spotify.com')) return;
-  if (!spotifyApi) {
-    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
-    return;
-  }
-  try {
-    spotifyApi.createController(iframe, {}, function(ctrl){
-      spotifyCtrl = ctrl;
-      const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
-      const wantPlay = opts.playing !== false;
-      try {
-        if (seek > 0 && ctrl.seek) ctrl.seek(seek);
-        if (wantPlay && ctrl.play) ctrl.play();
-        else if (!wantPlay && ctrl.pause) ctrl.pause();
-      } catch(e){}
-      spotifyPlaying = wantPlay;
-      document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
-      if (ctrl.addListener) {
-        ctrl.addListener('playback_update', function(e){
-          const d = (e && e.data) || e || {};
-          if (typeof d.position === 'number') knownPositionSec = d.position / 1000;
-          if (typeof d.isPaused === 'boolean') {
-            spotifyPlaying = !d.isPaused;
-            document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
-          }
-        });
-      }
-      applyLocalMuteState();
-    });
-  } catch(e) {
-    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
-  }
-}
-function spotifyTogglePlay(){
-  if (!spotifyCtrl) return;
-  try {
-    if (spotifyPlaying) spotifyCtrl.pause();
-    else spotifyCtrl.play();
-    spotifyPlaying = !spotifyPlaying;
-    document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
-  } catch(e){}
-}
-function spotifySkip(deltaSec){
-  if (!spotifyCtrl || !spotifyCtrl.seek) return;
-  knownPositionSec = Math.max(0, knownPositionSec + deltaSec);
-  try { spotifyCtrl.seek(knownPositionSec); } catch(e){}
 }
 
 // ── LOCAL MUTE (never synced) ──────────────────────────────
@@ -1064,18 +1060,6 @@ function applyLocalMuteState(){
       if (localMusicMuted) ytPlayer.mute(); else ytPlayer.unMute();
     } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
       scWidget.setVolume(localMusicMuted ? 0 : 100);
-    } else if (src === 'spotify' && spotifyCtrl) {
-      // Embed API has no reliable volume — pause locally while muted,
-      // without broadcasting, so the room keeps playing for others.
-      if (localMusicMuted && spotifyPlaying) {
-        playerApplyingRemote = true;
-        try { spotifyCtrl.pause(); } catch(e){}
-        playerApplyingRemote = false;
-      } else if (!localMusicMuted && spotifyPlaying === false && window.Room && Room.lastMusic && Room.lastMusic() && Room.lastMusic().playing) {
-        playerApplyingRemote = true;
-        try { spotifyCtrl.play(); } catch(e){}
-        playerApplyingRemote = false;
-      }
     }
   } catch(e){}
 }
@@ -1089,7 +1073,7 @@ function toggleLocalMute(){
 }
 function isLocalMuted(){ return localMusicMuted; }
 
-// ── MUSIC SNAPSHOT (for room sync) ─────────────────────────
+// ── MUSIC SNAPSHOT (for room sync — YouTube only) ──────────
 function getMusicSnapshot(){
   const src = getActiveSrc();
   let playing = false;
@@ -1098,16 +1082,12 @@ function getMusicSnapshot(){
     if (src === 'youtube' && ytPlayer && ytPlayerReady) {
       playing = ytIsPlaying;
       pos = ytPlayer.getCurrentTime() || pos;
-    } else if (src === 'soundcloud') {
-      playing = scIsPlaying;
-    } else if (src === 'spotify') {
-      playing = spotifyPlaying;
     }
   } catch(e){}
   knownPositionSec = pos;
   return {
-    url: currentPlayerRaw || '',
-    src: src || null,
+    url: (src === 'youtube') ? (currentPlayerRaw || '') : '',
+    src: (src === 'youtube') ? 'youtube' : null,
     playing: !!playing,
     positionSec: Number(pos) || 0,
     at: Date.now()
@@ -1123,52 +1103,33 @@ function applyMusicSnapshot(snap){
       if (currentPlayerRaw) clearPlayer({ fromRemote: true });
       return;
     }
-    // Adjust position for network lag while playing
+    const embed = resolvePlayerEmbed(url);
+    if (!embed || embed.src !== 'youtube') return;
+
     let pos = Number(snap.positionSec) || 0;
     if (snap.playing && snap.at) {
       pos += Math.max(0, (Date.now() - snap.at) / 1000);
     }
-    const same = currentPlayerRaw === url;
+    const same = currentPlayerRaw === url && currentPlayerSrc === 'youtube';
     if (!same) {
       loadPlayerUrl({
         url: url, fromRemote: true, skipPersonal: true,
         positionSec: pos, playing: !!snap.playing
       });
-    } else {
-      // Same track — seek + play/pause
-      const src = getActiveSrc();
+    } else if (ytPlayer && ytPlayerReady) {
       knownPositionSec = pos;
-      if (src === 'youtube' && ytPlayer && ytPlayerReady) {
-        try { ytPlayer.seekTo(pos, true); } catch(e){}
-        try {
-          if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
-          else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
-        } catch(e){}
-      } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
-        try { scWidget.seekTo(Math.floor(pos * 1000)); } catch(e){}
-        try {
-          if (snap.playing) { if (!scIsPlaying) scWidget.play(); }
-          else { if (scIsPlaying) scWidget.pause(); }
-        } catch(e){}
-      } else if (src === 'spotify' && spotifyCtrl) {
-        try { if (spotifyCtrl.seek) spotifyCtrl.seek(pos); } catch(e){}
-        if (!localMusicMuted) {
-          try {
-            if (snap.playing) spotifyCtrl.play();
-            else spotifyCtrl.pause();
-          } catch(e){}
-        }
-        spotifyPlaying = !!snap.playing;
-        document.getElementById('ctrlPlay').textContent = snap.playing ? '⏸' : '▶';
-      }
+      try { ytPlayer.seekTo(pos, true); } catch(e){}
+      try {
+        if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
+        else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
+      } catch(e){}
       applyLocalMuteState();
     }
   } finally {
-    setTimeout(function(){ playerApplyingRemote = false; }, 400);
+    setTimeout(function(){ playerApplyingRemote = false; }, 800);
   }
 }
 
-// Click badge to set placeholder example and highlight selection
 document.querySelectorAll('.player-badge').forEach(badge => {
   badge.addEventListener('click', () => {
     const examples = {
@@ -1178,13 +1139,14 @@ document.querySelectorAll('.player-badge').forEach(badge => {
     };
     const src = badge.dataset.src;
     document.getElementById('playerUrlInput').placeholder = examples[src] || 'paste link here...';
-    // Highlight the clicked badge
     document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
     badge.classList.add('active-src');
+    if (inSharedRoom() && src !== 'youtube') {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
   });
 });
 
-// Restore player on load (skipped if joining a room via ?room=)
 (function restorePlayer() {
   if (/[?&]room=/.test(location.search)) return;
   const saved = localStorage.getItem('sf_player_url');
@@ -1651,8 +1613,7 @@ window.Room = (function(){
   }
   function iOwnHostToken(c){
     const mine = storedHostToken(c);
-    if (!mine) return false;
-    if (!hostToken) return true; // reconnecting before first sync
+    if (!mine || !hostToken) return false;
     return mine === hostToken;
   }
   function newHostToken(){
