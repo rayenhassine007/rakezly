@@ -1950,7 +1950,11 @@ window.Room = (function(){
   }
   function startHostWatch(){
     stopHostWatch();
-    hostWatch = setInterval(function(){ ensureHostAlive(); }, 5000);
+    hostWatch = setInterval(function(){
+      ensureHostAlive();
+      // Refresh the countdown label every tick while waiting.
+      if (hostMissingSince && status === 'joined') updateUI();
+    }, 1000);
   }
   function stopHostWatch(){
     if (hostWatch){ clearInterval(hostWatch); hostWatch = null; }
