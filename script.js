@@ -1251,13 +1251,20 @@ setInterval(updateClock, 1000);
 // ── SHARED SUPABASE CLIENT ────────────────────────────────────
 // One client for realtime rooms, auth, study sessions and goals — creating
 // several would give each its own auth/realtime state.
-// Credentials live in supabase-config.js (window.RAKEZLY_SUPABASE). The
-// defaults there currently point at a project ref that no longer resolves
-// in DNS — see supabase/SETUP.md → Recovering a missing project.
+// Credentials live in supabase-config.js (window.RAKEZLY_SUPABASE) or
+// VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY via Vite. Leave them empty
+// until you have a live project — see supabase/SETUP.md.
 window.SB = (function(){
-  const cfg = (typeof window !== 'undefined' && window.RAKEZLY_SUPABASE) || {};
-  const SB_URL = String(cfg.url || '').replace(/\/$/, '');
-  const SB_KEY = String(cfg.key || '');
+  function readCfg(){
+    const c = (typeof window !== 'undefined' && window.RAKEZLY_SUPABASE) || {};
+    let url = String(c.url || '').trim().replace(/\/$/, '');
+    let key = String(c.key || '').trim();
+    if (/^%VITE_/.test(url) || /^%VITE_/.test(key)){ url = ''; key = ''; }
+    return { url: url, key: key };
+  }
+  const _cfg = readCfg();
+  const SB_URL = _cfg.url;
+  const SB_KEY = _cfg.key;
 
   let client = null;
   // Cached connectivity probe: { ok, code, detail, message, at }
@@ -1635,6 +1642,24 @@ window.Auth = (function(){
     return (e && e.message) || t('study.unavailableAuth');
   }
 
+  function mapAuthApiError(msg){
+    const m = String(msg || '');
+    const low = m.toLowerCase();
+    if (/email not confirmed/.test(low)){
+      return m + ' — confirm via inbox, or turn off Confirm email (SETUP.md step 2).';
+    }
+    if (/provider is not enabled|unsupported provider/.test(low)){
+      return m + ' — enable Google under Authentication → Providers (SETUP.md step 2).';
+    }
+    if (/redirect|requested path is invalid|invalid redirect/.test(low)){
+      return m + ' — add this site to Redirect URLs (SETUP.md step 3).';
+    }
+    if (/failed to fetch|networkerror|load failed/.test(low)){
+      return mapAuthCatch({ message: m, name: 'TypeError' });
+    }
+    return m;
+  }
+
   async function google(){
     const reach = await ensureReachable();
     if (!reach.ok) return { error: { message: reach.msg } };
@@ -1646,10 +1671,7 @@ window.Auth = (function(){
         options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
       });
       if (r && r.error){
-        const msg = r.error.message || '';
-        if (/failed to fetch|networkerror|load failed/i.test(msg)){
-          return { error: { message: mapAuthCatch(r.error) } };
-        }
+        return { error: { message: mapAuthApiError(r.error.message) } };
       }
       return r;
     } catch(e){
@@ -1667,13 +1689,7 @@ window.Auth = (function(){
         email: email, password: password,
         options: { data: { display_name: displayName } }
       });
-      if (r.error){
-        const msg = r.error.message || '';
-        if (/failed to fetch|networkerror|load failed/i.test(msg)){
-          return { ok:false, msg: mapAuthCatch(r.error) };
-        }
-        return { ok:false, msg: r.error.message };
-      }
+      if (r.error) return { ok:false, msg: mapAuthApiError(r.error.message) };
       if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'Check your inbox to confirm your email' };
       return { ok:true, msg:'Welcome, ' + displayName };
     } catch(e){
@@ -1688,13 +1704,7 @@ window.Auth = (function(){
     if (!cl) return { ok:false, msg: t('study.unavailableAuth') };
     try {
       const r = await cl.auth.signInWithPassword({ email: email, password: password });
-      if (r.error){
-        const msg = r.error.message || '';
-        if (/failed to fetch|networkerror|load failed/i.test(msg)){
-          return { ok:false, msg: mapAuthCatch(r.error) };
-        }
-        return { ok:false, msg: r.error.message };
-      }
+      if (r.error) return { ok:false, msg: mapAuthApiError(r.error.message) };
       return { ok:true, msg:'Signed in' };
     } catch(e){
       return { ok:false, msg: mapAuthCatch(e) };
