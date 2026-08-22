@@ -3383,6 +3383,7 @@ window.I18N = (function(){
       'player.muteTip': 'Mute only on this device',
       'player.mutedToast': 'Muted for you only — others still hear it',
       'player.unmutedToast': 'Unmuted',
+      'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync — paste a YouTube URL',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
       'player.load': 'Load', 'player.clear': 'Clear player',
@@ -3514,6 +3515,7 @@ window.I18N = (function(){
       'player.muteTip': 'Coupe le son seulement sur cet appareil',
       'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
       'player.unmutedToast': 'Son rétabli',
+      'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise — colle un lien YouTube',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
       'player.load': 'Charger', 'player.clear': 'Vider le lecteur',
