@@ -1577,6 +1577,7 @@ window.Room = (function(){
   let lastMusicSnap = null;
   let personalStash = null; // { url } restored on leave
   let musicTick = null;
+  let hostCheckTimer = null;
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
@@ -1586,6 +1587,20 @@ window.Room = (function(){
   function canControlTimer(){ return !inRoom() || isHost || allowTimer; }
   function canControlMusic(){ return !inRoom() || isHost || allowMusic; }
   function lastMusic(){ return lastMusicSnap; }
+
+  // Hostship survives refresh via sessionStorage. Without this, a reload
+  // mints a new myId, join() treats you as a guest, and if controls were
+  // locked to the host nobody can unlock them.
+  function hostKey(c){ return 'sf_room_host_' + String(c || '').toUpperCase(); }
+  function rememberHost(c){
+    try { sessionStorage.setItem(hostKey(c), '1'); } catch(e){}
+  }
+  function forgetHost(c){
+    try { sessionStorage.removeItem(hostKey(c)); } catch(e){}
+  }
+  function wasHost(c){
+    try { return sessionStorage.getItem(hostKey(c)) === '1'; } catch(e){ return false; }
+  }
 
   function genCode(){
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -1605,9 +1620,93 @@ window.Room = (function(){
     return { url: '', playing: false, positionSec: 0, at: Date.now() };
   }
 
+  function trackPresence(){
+    if (!channel) return;
+    try {
+      channel.track({ id: myId, host: isHost, at: Date.now() });
+    } catch(e){}
+  }
+
+  function claimHost(opts){
+    const openLocks = opts && opts.openLocks;
+    isHost = true;
+    hostId = myId;
+    if (code) rememberHost(code);
+    if (openLocks){ allowTimer = true; allowMusic = true; }
+    trackPresence();
+    if (status === 'joined') {
+      push();
+      pushMusic();
+    }
+    updateUI();
+  }
+
+  function presentPeople(){
+    if (!channel) return [];
+    const out = [];
+    try {
+      const state = channel.presenceState() || {};
+      Object.keys(state).forEach(function(k){
+        (state[k] || []).forEach(function(p){
+          if (p && p.id) out.push(p);
+        });
+      });
+    } catch(e){}
+    return out;
+  }
+
+  // If the recorded host is no longer in presence, reclaim (session host)
+  // or elect the lowest peer id so the room never stays ownerless/locked.
+  function ensureHostAlive(){
+    if (status !== 'joined' || !channel) return;
+    const people = presentPeople();
+    if (!people.length) return;
+    const ids = people.map(function(p){ return p.id; });
+    const hostHere = !!(hostId && ids.indexOf(hostId) !== -1);
+
+    if (hostHere) {
+      isHost = (hostId === myId);
+      if (isHost && code) rememberHost(code);
+      updateUI();
+      return;
+    }
+
+    // Dead / missing host
+    if (wasHost(code)) {
+      claimHost({ openLocks: false });
+      return;
+    }
+    const sorted = ids.slice().sort();
+    if (sorted[0] === myId) {
+      // Open locks when electing a replacement so guests aren't stuck
+      // locked with nobody able to flip the toggles.
+      claimHost({ openLocks: true });
+    } else {
+      isHost = false;
+      hostId = sorted[0];
+      updateUI();
+    }
+  }
+
   function applyMeta(s){
     if (!s) return;
-    if (s.hostId) hostId = s.hostId;
+    const remoteHost = s.hostId || null;
+    // Session host wins over stale broadcasts that still carry the old
+    // pre-refresh host id.
+    if (code && wasHost(code)) {
+      hostId = myId;
+      isHost = true;
+      if (typeof s.allowTimer === 'boolean' && remoteHost === myId) allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean' && remoteHost === myId) allowMusic = s.allowMusic;
+      // Still accept allow flags from sync when we just reclaimed and the
+      // room still has the previous allow state from another peer.
+      if (remoteHost && remoteHost !== myId) {
+        if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+        if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      }
+      return;
+    }
+    if (remoteHost) hostId = remoteHost;
     if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
     if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
     isHost = (hostId === myId);
@@ -1637,6 +1736,8 @@ window.Room = (function(){
       }
     } catch(e){ console.warn('room apply', e); }
     applying = false;
+    // After applying a stale "old host" sync, re-assert if we own the session.
+    if (code && wasHost(code) && hostId !== myId) claimHost({ openLocks: false });
     updateUI();
   }
 
@@ -1739,14 +1840,16 @@ window.Room = (function(){
     const cl = sb();
     if (!cl){ toast('Shared rooms are unavailable right now'); return; }
     if (channel) leave(true);
-    if (created){
+    const reclaim = !created && wasHost(c);
+    if (created || reclaim){
       isHost = true;
       hostId = myId;
-      allowTimer = true;
-      allowMusic = true;
+      rememberHost(c);
+      if (created){ allowTimer = true; allowMusic = true; }
     } else {
       isHost = false;
-      // hostId / allows arrive via sync
+      hostId = null;
+      // allowTimer / allowMusic arrive via sync
     }
     stashPersonal();
     code = c; status = 'connecting'; updateUI();
@@ -1761,22 +1864,25 @@ window.Room = (function(){
     });
     channel.on('presence',  { event:'sync'  }, function(){
       try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
+      ensureHostAlive();
       updateUI();
     });
     channel.subscribe(function(st){
       if (st === 'SUBSCRIBED'){
         status = 'joined';
-        try {
-          channel.track({ id: myId, host: isHost, at: Date.now() });
-        } catch(e){}
+        trackPresence();
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}
-        if (created) {
-          // Seed room music from whatever the host already had loaded
+        if (created || reclaim) {
+          // Seed / re-assert host state after create or refresh
           pushFull();
         }
         setUrl(c);
-        toast(created ? (t('room.created') || ('Room '+c)) : ('Joined room '+c));
+        toast(created ? (t('room.created') || ('Room '+c))
+          : reclaim ? (t('room.reclaimed') || ('Back as host · '+c))
+          : ('Joined room '+c));
         startMusicTick();
+        if (hostCheckTimer) clearTimeout(hostCheckTimer);
+        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 600);
         updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
@@ -1788,12 +1894,18 @@ window.Room = (function(){
 
   function leave(silent){
     const cl = sb();
+    const leavingCode = code;
+    const leavingAsHost = isHost;
     stopMusicTick();
+    if (hostCheckTimer){ clearTimeout(hostCheckTimer); hostCheckTimer = null; }
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
     channel = null; code = null; status = 'idle'; peers = 1;
     isHost = false; hostId = null;
     allowTimer = true; allowMusic = true;
     lastTimerSnap = null; lastMusicSnap = null;
+    // Intentional leave drops host claim; silent leave (re-join) keeps it
+    // so a refresh / reconnect can reclaim.
+    if (!silent && leavingAsHost && leavingCode) forgetHost(leavingCode);
     clearUrl();
     restorePersonal();
     if (!silent) toast('Left the room');
