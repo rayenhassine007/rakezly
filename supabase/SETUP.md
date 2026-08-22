@@ -7,36 +7,37 @@ exactly two things:
 - **accounts** (Google or email/password), and
 - **the weekly leaderboard**, which needs accounts to rank.
 
-Until the steps below are done, the Study panel will show a "Leaderboard
-unavailable" / host-unreachable message and sign-in will fail. Nothing else
-is affected.
+Until the steps below are done, the Study panel shows a clear setup /
+host-unreachable message and sign-in fails. Nothing else is affected.
+
+Credentials are **not** hard-coded with a fake project. Paste a live Project
+URL + anon/publishable key into [`../supabase-config.js`](../supabase-config.js),
+or set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for Vite/Vercel builds.
 
 ---
 
-## Recovering a missing project (do this first)
+## Recovering a missing project (do this first if login broke)
 
-`supabase-config.js` ships with **empty** `url` / `key` on purpose. The old
-project hostname:
+Login used to talk to:
 
 `https://kucqirnkgrtebmowzwlw.supabase.co`
 
-no longer resolves in public DNS (**NXDOMAIN**) — deleted, paused past
-recovery, or the ref is wrong. **Email and Gmail login cannot work until
-you restore or create a live Supabase project and paste its URL +
-publishable key into the app (or set the Vercel env vars below).**
+That hostname no longer resolves in public DNS (**NXDOMAIN**). The project
+was deleted, paused past recovery, or the ref is wrong. **Email and Gmail
+login cannot work until you restore or create a live Supabase project and
+point the app at it.**
 
-### 1. Get a live project
+### A. Get a live project
 
 1. Open [https://supabase.com/dashboard](https://supabase.com/dashboard).
 2. If the old project still appears and can be restored / unpaused, do that.
-3. Otherwise **New project** → note the project URL
+3. Otherwise **New project** → copy the project URL
    (`https://<project-ref>.supabase.co`) and the **anon / publishable** key
-   (Settings → API).
+   (Settings → API). Do not invent these values.
 
-### 2. Point the app at it
+### B. Point the app at it
 
-Edit [`../supabase-config.js`](../supabase-config.js) and replace `url` and
-`key`:
+**Option 1 — edit the config file** (works for static hosting too):
 
 ```js
 window.RAKEZLY_SUPABASE = {
@@ -45,15 +46,18 @@ window.RAKEZLY_SUPABASE = {
 };
 ```
 
-For Vite / Vercel you can instead set env vars (they override the file at
-dev/build time — see `vite.config.js`):
+in [`../supabase-config.js`](../supabase-config.js).
+
+**Option 2 — env vars** (Vite dev / Vercel). Copy [`.env.example`](../.env.example)
+to `.env.local`, or set the same names in the Vercel project:
 
 - `VITE_SUPABASE_URL` (or `SUPABASE_URL`)
 - `VITE_SUPABASE_ANON_KEY` (or `SUPABASE_ANON_KEY`)
 
+`vite.config.js` injects those into `supabase-config.js` at serve/build time.
 Redeploy after changing env vars.
 
-### 3. Confirm the host is alive
+### C. Confirm the host is alive
 
 In the browser console on the site:
 
@@ -61,10 +65,9 @@ In the browser console on the site:
 await checkSupabase()
 ```
 
-If `step0_host` still says FAILED, the URL is still wrong or DNS has not
-caught up. Fix credentials before continuing below.
-
-Then continue with steps 1–4 in this guide (schema, providers, redirect URLs).
+- `step0_host` FAILED / `misconfigured` → finish step B.
+- `step0_host` FAILED / `host_unreachable` → URL still wrong or DNS not ready.
+- `step0_host` OK → continue with schema + providers below.
 
 ---
 
@@ -168,18 +171,21 @@ first sign-in, as long as they are within the last 14 days.
 
 ## If something fails
 
-The panel shows the real error (or a clear “cannot reach Supabase” message
-when the host is dead). The full object is also logged to the browser
-console (**F12 → Console**). The usual ones:
+The Study panel shows actionable errors (missing credentials, unreachable
+host, or the real Auth/Postgres message). The full object is also logged to
+the browser console (**F12 → Console**). Run `await checkSupabase()` for a
+step-by-step report. The usual ones:
 
 | Message | Cause |
 |---|---|
-| `Cannot reach Supabase at …` / Failed to fetch | Project deleted/paused or wrong URL — see **Recovering a missing project** |
+| `Supabase URL/key not set…` | Paste credentials (recovery step B) |
+| `Cannot reach Supabase at …` / Failed to fetch | Project deleted/paused or wrong URL — recovery steps A–C |
 | `Could not find the function public.leaderboard_week` | Step 1 was not run, or failed partway |
 | `relation "public.study_sessions" does not exist` | Same — re-run `schema.sql` |
 | `new row violates row-level security policy` | Signed out, or the session is older than the 14-day upload window |
 | `requested path is invalid` after Google sign-in | Step 3: the redirect URL is not on the allowlist |
 | `Email not confirmed` | Check the inbox, or turn off *Confirm email* in step 2 |
+| `provider is not enabled` | Enable Google in step 2 |
 
 ---
 

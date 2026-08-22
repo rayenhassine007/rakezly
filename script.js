@@ -1928,7 +1928,19 @@ window.Study = (function(){
   // ── leaderboard ──
   async function loadBoard(){
     const cl = window.SB.get();
-    if (!cl){ boardErr = t('study.unavailable'); render(); return; }
+    if (!cl){
+      board = [];
+      if (window.SB && window.SB.ping){
+        try {
+          const reach = await window.SB.ping();
+          boardErr = (reach && reach.message) || t('study.unavailable');
+        } catch(e){ boardErr = t('study.unavailable'); }
+      } else {
+        boardErr = t('study.unavailable');
+      }
+      render();
+      return;
+    }
     boardLoading = true; boardErr = ''; render();
     if (window.SB && window.SB.ping){
       try {
