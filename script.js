@@ -1597,16 +1597,20 @@ window.Room = (function(){
     try { localStorage.setItem(nameKey(), String(n || '').trim().slice(0, 24)); } catch(e){}
   }
   function displayName(){
-    const stored = getStoredName();
-    if (stored.length >= 2) return stored;
-    if (window.Auth && window.Auth.signedIn()) return String(window.Auth.name() || '').trim();
-    return '';
+    // Signed-in profile always wins over a leftover guest nickname.
+    if (window.Auth && window.Auth.signedIn()) {
+      const authName = String(window.Auth.name() || '').trim();
+      if (authName.length >= 2) return authName;
+    }
+    return getStoredName();
   }
   function needsName(){
     if (window.Auth && window.Auth.signedIn()) return false;
     return displayName().length < 2;
   }
   function saveNameFromInput(){
+    // Guests only — signed-in users keep their Auth display name.
+    if (window.Auth && window.Auth.signedIn()) return displayName();
     const el = document.getElementById('roomNameInput');
     if (!el) return displayName();
     const n = String(el.value || '').trim().slice(0, 24);
@@ -1614,11 +1618,14 @@ window.Room = (function(){
     return n;
   }
   function ensureNameOrToast(){
-    const n = saveNameFromInput();
     if (window.Auth && window.Auth.signedIn()){
+      const n = displayName();
       if (n.length >= 2) return n;
-      return displayName();
+      toast(t('room.needName'));
+      updateUI();
+      return null;
     }
+    const n = saveNameFromInput();
     if (n.length < 2){
       toast(t('room.needName'));
       updateUI();
@@ -2213,9 +2220,11 @@ window.Room = (function(){
     ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('open'); });
     ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('active'); });
     const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
+    // Close via Study.close so its panelOpen flag stays in sync with the DOM.
+    if (window.Study && Study.close) Study.close();
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
@@ -2240,11 +2249,16 @@ window.Room = (function(){
     })();
   })();
 
+  function onAuthChanged(){
+    updateUI();
+    // Push the signed-in name into presence so the people list updates.
+    if (status === 'joined') trackPresence();
+  }
   if (window.Auth && window.Auth.onChange){
-    window.Auth.onChange(function(){ updateUI(); });
+    window.Auth.onChange(onAuthChanged);
   } else {
     setTimeout(function(){
-      if (window.Auth && window.Auth.onChange) window.Auth.onChange(function(){ updateUI(); });
+      if (window.Auth && window.Auth.onChange) window.Auth.onChange(onAuthChanged);
     }, 0);
   }
 
@@ -2816,13 +2830,16 @@ window.Study = (function(){
   }
 
   function closeOtherPanels(){
-    ['bgPanel','settingsSlidePanel','themePanel','playerPanel','roomPanel'].forEach(function(id){
+    ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){
       const e = document.getElementById(id); if (e) e.classList.remove('open');
     });
-    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn','roomFixedBtn'].forEach(function(id){
+    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){
       const e = document.getElementById(id); if (e) e.classList.remove('active');
     });
     const bg = document.querySelector('.btn-bg-toggle'); if (bg) bg.classList.remove('active');
+    // Must call Room.close() — stripping the class alone leaves Room.panelOpen
+    // true, and the next Room.updateUI() (auth/presence) reopens Shared room.
+    if (window.Room && Room.close) Room.close();
   }
 
   function togglePanel(){
