@@ -2005,6 +2005,10 @@ window.Room = (function(){
     }
 
     stashPersonal();
+    // Shared rooms only sync YouTube — drop Spotify/SoundCloud embeds on entry.
+    if (typeof currentPlayerSrc !== 'undefined' && currentPlayerSrc && currentPlayerSrc !== 'youtube') {
+      if (typeof clearPlayer === 'function') clearPlayer({ fromRemote: true });
+    }
     code = c; status = 'connecting'; hostMissingSince = null; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
     channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
