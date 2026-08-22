@@ -1591,7 +1591,7 @@ window.Room = (function(){
   // Hostship survives refresh via sessionStorage. Without this, a reload
   // mints a new myId, join() treats you as a guest, and if controls were
   // locked to the host nobody can unlock them.
-  function hostKey(c){ return 'sf_room_host_' + String(c || '').toUpperCase(); }
+  function hostKey(c){ return 'sf_room_owner_v2_' + String(c || '').toUpperCase(); }
   function rememberHost(c){
     try { sessionStorage.setItem(hostKey(c), '1'); } catch(e){}
   }
@@ -1627,17 +1627,28 @@ window.Room = (function(){
     } catch(e){}
   }
 
+  // permanent: true  → real room owner (create / refresh reclaim) — written to sessionStorage
+  // permanent: false → temporary stand-in while the owner is gone — NEVER remembered,
+  //                    otherwise a refresh blip makes every peer a lasting "host".
   function claimHost(opts){
-    const openLocks = opts && opts.openLocks;
+    const permanent = !!(opts && opts.permanent);
+    const openLocks = !!(opts && opts.openLocks);
     isHost = true;
     hostId = myId;
-    if (code) rememberHost(code);
+    if (permanent && code) rememberHost(code);
     if (openLocks){ allowTimer = true; allowMusic = true; }
     trackPresence();
     if (status === 'joined') {
       push();
       pushMusic();
     }
+    updateUI();
+  }
+
+  function yieldHost(newHostId){
+    isHost = false;
+    if (newHostId) hostId = newHostId;
+    trackPresence();
     updateUI();
   }
 
@@ -1655,8 +1666,11 @@ window.Room = (function(){
     return out;
   }
 
-  // If the recorded host is no longer in presence, reclaim (session host)
-  // or elect the lowest peer id so the room never stays ownerless/locked.
+  let hostMissingSince = null;
+
+  // If the recorded host is no longer in presence, the session owner reclaims.
+  // Anyone else may only become a temporary host after a short grace period
+  // (so a refresh doesn't crown every remaining peer).
   function ensureHostAlive(){
     if (status !== 'joined' || !channel) return;
     const people = presentPeople();
@@ -1665,47 +1679,58 @@ window.Room = (function(){
     const hostHere = !!(hostId && ids.indexOf(hostId) !== -1);
 
     if (hostHere) {
+      hostMissingSince = null;
       isHost = (hostId === myId);
-      if (isHost && code) rememberHost(code);
+      // Do NOT rememberHost here — that was crowning temporary hosts forever.
       updateUI();
       return;
     }
 
     // Dead / missing host
     if (wasHost(code)) {
-      claimHost({ openLocks: false });
+      hostMissingSince = null;
+      claimHost({ permanent: true, openLocks: false });
       return;
     }
+
+    // Wait for the real host to finish refreshing before electing anyone.
+    if (!hostMissingSince) hostMissingSince = Date.now();
+    if (Date.now() - hostMissingSince < 2800) return;
+
     const sorted = ids.slice().sort();
     if (sorted[0] === myId) {
-      // Open locks when electing a replacement so guests aren't stuck
-      // locked with nobody able to flip the toggles.
-      claimHost({ openLocks: true });
+      // Temporary only — open locks so the room isn't stuck, but leave
+      // sessionStorage alone so the original host can reclaim on return.
+      if (!(isHost && hostId === myId)) {
+        claimHost({ permanent: false, openLocks: true });
+      }
     } else {
-      isHost = false;
-      hostId = sorted[0];
-      updateUI();
+      yieldHost(sorted[0]);
     }
   }
 
   function applyMeta(s){
     if (!s) return;
     const remoteHost = s.hostId || null;
-    // Session host wins over stale broadcasts that still carry the old
-    // pre-refresh host id.
+
+    // Session owner always keeps hostship (survives stale pre-refresh ids).
     if (code && wasHost(code)) {
       hostId = myId;
       isHost = true;
-      if (typeof s.allowTimer === 'boolean' && remoteHost === myId) allowTimer = s.allowTimer;
-      if (typeof s.allowMusic === 'boolean' && remoteHost === myId) allowMusic = s.allowMusic;
-      // Still accept allow flags from sync when we just reclaimed and the
-      // room still has the previous allow state from another peer.
-      if (remoteHost && remoteHost !== myId) {
-        if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
-        if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
-      }
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
       return;
     }
+
+    // Temporary host yields as soon as someone else claims host in a sync.
+    if (remoteHost && remoteHost !== myId) {
+      hostId = remoteHost;
+      isHost = false;
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      return;
+    }
+
     if (remoteHost) hostId = remoteHost;
     if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
     if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
@@ -1737,7 +1762,7 @@ window.Room = (function(){
     } catch(e){ console.warn('room apply', e); }
     applying = false;
     // After applying a stale "old host" sync, re-assert if we own the session.
-    if (code && wasHost(code) && hostId !== myId) claimHost({ openLocks: false });
+    if (code && wasHost(code) && hostId !== myId) claimHost({ permanent: true, openLocks: false });
     updateUI();
   }
 
@@ -1882,7 +1907,9 @@ window.Room = (function(){
           : ('Joined room '+c));
         startMusicTick();
         if (hostCheckTimer) clearTimeout(hostCheckTimer);
-        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 600);
+        // Longer than the grace window so a refreshing host can reconnect
+        // before anyone else is elected.
+        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 3200);
         updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
@@ -1895,7 +1922,6 @@ window.Room = (function(){
   function leave(silent){
     const cl = sb();
     const leavingCode = code;
-    const leavingAsHost = isHost;
     stopMusicTick();
     if (hostCheckTimer){ clearTimeout(hostCheckTimer); hostCheckTimer = null; }
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
@@ -1904,8 +1930,10 @@ window.Room = (function(){
     allowTimer = true; allowMusic = true;
     lastTimerSnap = null; lastMusicSnap = null;
     // Intentional leave drops host claim; silent leave (re-join) keeps it
-    // so a refresh / reconnect can reclaim.
-    if (!silent && leavingAsHost && leavingCode) forgetHost(leavingCode);
+    // so a refresh / reconnect can reclaim. Only the session owner has a
+    // stored claim — temporary stand-ins never wrote one.
+    if (!silent && leavingCode && wasHost(leavingCode)) forgetHost(leavingCode);
+    hostMissingSince = null;
     clearUrl();
     restorePersonal();
     if (!silent) toast('Left the room');
@@ -2175,6 +2203,8 @@ window.Study = (function(){
   // Account feedback belongs next to the form that caused it, not in a
   // toast at the far side of the screen.
   let authMsg = null;    // { kind: 'error' | 'ok', text }
+  let authGateOpen = false; // popup asking guests to sign in for the board
+
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -2323,6 +2353,12 @@ window.Study = (function(){
 
   // ── leaderboard ──
   async function loadBoard(){
+    // Guests only see a blurred teaser — never fetch rankings signed out.
+    if (!window.Auth || !window.Auth.signedIn()){
+      board = []; standing = null; boardLoading = false; boardErr = '';
+      render();
+      return;
+    }
     const cl = window.SB.get();
     if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
@@ -2332,10 +2368,8 @@ window.Study = (function(){
       if (r.error) throw r.error;
       board = r.data || [];
       standing = null;
-      if (window.Auth && window.Auth.signedIn()){
-        const s = await cl.rpc('my_week_standing', { p_subject: subj });
-        if (!s.error && s.data && s.data.length) standing = s.data[0];
-      }
+      const s = await cl.rpc('my_week_standing', { p_subject: subj });
+      if (!s.error && s.data && s.data.length) standing = s.data[0];
     } catch(e){
       board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
       // Full object, not just the message: during setup the useful part is
@@ -2470,6 +2504,20 @@ window.Study = (function(){
   }
 
   function boardBlock(){
+    if (!window.Auth || !window.Auth.signedIn()){
+      // Blurred teaser — click opens the sign-in gate.
+      const fake = [1,2,3,4,5].map(function(n){
+        return '<div class="study-row">' +
+                 '<span class="study-row-rank">'+n+'</span>' +
+                 '<span class="study-row-name">••••••••</span>' +
+                 '<span class="study-row-mins">—</span>' +
+               '</div>';
+      }).join('');
+      return '<button type="button" class="study-board-lock" onclick="Study.openAuthGate()">' +
+               '<div class="study-board study-board-blurred" aria-hidden="true">'+fake+'</div>' +
+               '<span class="study-board-lock-label">' + esc(t('study.boardLocked')) + '</span>' +
+             '</button>';
+    }
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
@@ -2482,6 +2530,40 @@ window.Study = (function(){
     }).join('') + '</div>';
   }
 
+  function authGateBlock(){
+    if (!authGateOpen) return '';
+    if (window.Auth && window.Auth.signedIn()){ authGateOpen = false; return ''; }
+    let form = '';
+    if (authMode === 'none'){
+      form =
+        '<button class="study-btn study-btn-google" onclick="Study.doGoogle()">' + esc(t('study.google')) + '</button>' +
+        '<div class="study-or">' + esc(t('study.or')) + '</div>' +
+        '<div class="study-authrow">' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">' + esc(t('study.signin')) + '</button>' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">' + esc(t('study.signup')) + '</button>' +
+        '</div>';
+    } else {
+      const up = (authMode === 'signup');
+      form =
+        '<div class="study-form">' +
+          (up ? '<input class="study-input" id="authName" type="text" placeholder="' + esc(t('study.name')) + '" maxlength="24">' : '') +
+          '<input class="study-input" id="authEmail" type="email" placeholder="' + esc(t('study.email')) + '" autocomplete="email">' +
+          '<input class="study-input" id="authPass" type="password" placeholder="' + esc(t('study.password')) + '" autocomplete="'+(up?'new-password':'current-password')+'">' +
+          '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'Create account':'Sign in')+'</button>' +
+          '<button class="study-link" onclick="Study.setAuthMode(\'none\')">' + esc(t('study.back')) + '</button>' +
+        '</div>';
+    }
+    return '<div class="study-auth-gate" role="dialog" aria-modal="true" aria-label="' + esc(t('study.boardGateTitle')) + '">' +
+             '<div class="study-auth-gate-card">' +
+               '<button type="button" class="study-auth-gate-x" onclick="Study.closeAuthGate()" aria-label="Close">×</button>' +
+               '<div class="study-auth-gate-title">' + esc(t('study.boardGateTitle')) + '</div>' +
+               '<div class="study-auth-gate-msg">' + esc(t('study.boardGateMsg')) + '</div>' +
+               form +
+               msgBlock() +
+             '</div>' +
+           '</div>';
+  }
+
   function render(){
     renderMini();
     const btn = document.getElementById('studyFixedBtn');
@@ -2491,12 +2573,16 @@ window.Study = (function(){
     const body = document.getElementById('studyBody');
     if (!body || !panelOpen) return;
 
-    let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-                 '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
-    presets().forEach(function(s){
-      filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
-    });
-    filter += '</select>';
+    const signedIn = window.Auth && window.Auth.signedIn();
+    let filter = '';
+    if (signedIn){
+      filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
+               '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
+      presets().forEach(function(s){
+        filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
+      });
+      filter += '</select>';
+    }
 
     body.innerHTML =
       authBlock() +
@@ -2510,7 +2596,8 @@ window.Study = (function(){
       '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
       filter +
       boardBlock() +
-      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>';
+      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>' +
+      authGateBlock();
   }
 
   function closeOtherPanels(){
@@ -2532,6 +2619,14 @@ window.Study = (function(){
   // ── panel actions ──
   function setAuthMode(m){ authMode = m; authMsg = null; render(); }
   function setAuthMsg(kind, text){ authMsg = { kind: kind, text: text }; render(); }
+  function openAuthGate(){
+    if (window.Auth && window.Auth.signedIn()){ loadBoard(); return; }
+    authGateOpen = true;
+    authMode = 'none';
+    authMsg = null;
+    render();
+  }
+  function closeAuthGate(){ authGateOpen = false; authMsg = null; render(); }
 
   async function doAuth(){
     const em = (document.getElementById('authEmail')||{}).value || '';
@@ -2547,7 +2642,11 @@ window.Study = (function(){
       : await window.Auth.signIn(em.trim(), pw);
 
     authMsg = { kind: r.ok ? 'ok' : 'error', text: r.msg };
-    if (r.ok){ authMode = 'none'; loadBoard(); }
+    if (r.ok){
+      authMode = 'none';
+      authGateOpen = false;
+      loadBoard();
+    }
     render();
   }
 
@@ -2577,7 +2676,11 @@ window.Study = (function(){
   function init(){
     renderSelect();
     render();
-    if (window.Auth) window.Auth.onChange(function(){ render(); });
+    if (window.Auth) window.Auth.onChange(function(){
+      if (window.Auth.signedIn()) authGateOpen = false;
+      loadBoard();
+      render();
+    });
     ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
       const b = document.querySelector(sel);
       if (b) b.addEventListener('click', function(){ if (panelOpen){ panelOpen = false; render(); } });
@@ -2585,7 +2688,7 @@ window.Study = (function(){
   }
 
   return { init:init, doGoogle:doGoogle,
-           close: function(){ if (panelOpen){ panelOpen = false; render(); } },
+           close: function(){ if (panelOpen){ panelOpen = false; authGateOpen = false; render(); } },
            SECTIONS:SECTIONS, SECTION_ORDER:SECTION_ORDER,
            presets:presets, section:section, setSection:setSection,
            all:all, current:current, setCurrent:setCurrent,
@@ -2594,6 +2697,7 @@ window.Study = (function(){
            entries:log, sumSince:sumSince, bySubjectSince:bySubjectSince,
            togglePanel:togglePanel, setBoardSubject:setBoardSubject,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
+           openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
 })();
 
@@ -3057,7 +3161,10 @@ window.I18N = (function(){
       'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
       'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
-      'study.guest': "You're a guest — your time is saved on this device. Sign in to appear on the board.",
+      'study.guest': "You're a guest — your time is saved on this device. Sign in to unlock the leaderboard.",
+      'study.boardLocked': 'Sign in to see the leaderboard',
+      'study.boardGateTitle': 'Leaderboard is for members',
+      'study.boardGateMsg': 'Sign in or create an account to see weekly rankings and your place on the board.',
       'study.google': 'Continue with Google', 'study.or': 'or',
       'study.signin': 'Sign in', 'study.signup': 'Create account', 'study.back': 'Back',
       'study.signout': 'Sign out', 'study.rename': 'Rename',
@@ -3083,6 +3190,7 @@ window.I18N = (function(){
       'room.online': 'online', 'room.connecting': 'Connecting…',
       'room.failed': 'Connection failed — try again',
       'room.created': 'Room created',
+      'room.reclaimed': 'Back as host',
       'room.youHost': 'you are host',
       'room.perms': 'Who can control',
       'room.allowTimer': 'Others can control the timer',
@@ -3175,7 +3283,10 @@ window.I18N = (function(){
       'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
       'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
-      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour apparaître au classement.",
+      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",
+      'study.boardLocked': 'Connecte-toi pour voir le classement',
+      'study.boardGateTitle': 'Classement réservé aux membres',
+      'study.boardGateMsg': 'Connecte-toi ou crée un compte pour voir le classement de la semaine et ta place.',
       'study.google': 'Continuer avec Google', 'study.or': 'ou',
       'study.signin': 'Se connecter', 'study.signup': 'Créer un compte', 'study.back': 'Retour',
       'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
@@ -3201,6 +3312,7 @@ window.I18N = (function(){
       'room.online': 'en ligne', 'room.connecting': 'Connexion…',
       'room.failed': 'Échec de la connexion — réessaie',
       'room.created': 'Salle créée',
+      'room.reclaimed': 'De retour en tant qu’hôte',
       'room.youHost': 'tu es hôte',
       'room.perms': 'Qui peut contrôler',
       'room.allowTimer': 'Les autres peuvent contrôler le minuteur',
