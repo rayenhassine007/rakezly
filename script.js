@@ -1428,9 +1428,22 @@ window.Room = (function(){
   }
   function onLocalChange(){ push(); }
 
-  function join(c){
+  async function join(c){
     const cl = sb();
-    if (!cl){ toast('Shared rooms are unavailable right now'); return; }
+    if (!cl){
+      toast((window.SB && window.SB.lastReach && window.SB.lastReach() && window.SB.lastReach().message)
+        || 'Shared rooms are unavailable right now — see supabase/SETUP.md');
+      return;
+    }
+    if (window.SB && window.SB.ping){
+      try {
+        const reach = await window.SB.ping();
+        if (reach && !reach.ok){
+          toast(reach.message || 'Shared rooms are unavailable right now');
+          return;
+        }
+      } catch(e){}
+    }
     if (channel) leave(true);
     code = c; status = 'connecting'; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
