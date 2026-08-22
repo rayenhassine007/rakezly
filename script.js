@@ -613,6 +613,35 @@ function inSharedRoom(){
   return !!(window.Room && Room.inRoom && Room.inRoom());
 }
 
+// Hide Spotify / SoundCloud while in a room and show the YouTube-only note.
+function syncPlayerRoomMode(){
+  const inRoom = inSharedRoom();
+  document.querySelectorAll('.player-badge[data-src="spotify"], .player-badge[data-src="soundcloud"]').forEach(function(b){
+    b.hidden = inRoom;
+    b.style.display = inRoom ? 'none' : '';
+  });
+  const note = document.getElementById('playerRoomNote');
+  if (note) {
+    note.hidden = !inRoom;
+    if (inRoom && typeof t === 'function') note.textContent = t('player.roomYoutubeNote');
+  }
+  const empty = document.getElementById('playerEmpty');
+  if (empty && !document.getElementById('playerEmbedWrap').classList.contains('has-player')) {
+    const icon = empty.querySelector('.player-empty-icon');
+    const iconHtml = icon ? icon.outerHTML : '<div class="player-empty-icon">♫</div>';
+    empty.innerHTML = iconHtml + (inRoom
+      ? (typeof t === 'function' ? t('player.roomYoutubeNote') : 'Only YouTube is available in a shared room.')
+      : 'Paste a YouTube, Spotify or SoundCloud link to play.');
+  }
+  if (inRoom) {
+    document.querySelectorAll('.player-badge').forEach(function(b){ b.classList.remove('active-src'); });
+    const yt = document.querySelector('.player-badge[data-src="youtube"]');
+    if (yt) yt.classList.add('active-src');
+    const input = document.getElementById('playerUrlInput');
+    if (input) input.placeholder = 'https://www.youtube.com/watch?v=…';
+  }
+}
+
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
@@ -626,6 +655,7 @@ function togglePlayerPanel() {
   if (window.Room && Room.close) Room.close();
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
+  syncPlayerRoomMode();
 }
 
 // Only push music on explicit user actions — never from embed state
@@ -1765,7 +1795,10 @@ window.Room = (function(){
       return;
     }
 
-    if (!hostMissingSince) hostMissingSince = Date.now();
+    if (!hostMissingSince) {
+      hostMissingSince = Date.now();
+      toast(t('room.hostMissingToast'));
+    }
     const goneFor = Date.now() - hostMissingSince;
     if (goneFor < HOST_GRACE_MS) {
       updateUI();
@@ -2084,6 +2117,7 @@ window.Room = (function(){
   }
 
   function updateUI(){
+    if (typeof syncPlayerRoomMode === 'function') syncPlayerRoomMode();
     const btn = document.getElementById('roomFixedBtn');
     if (btn) btn.classList.toggle('active', status === 'joined');
     const panel = document.getElementById('roomPanel');
@@ -2114,9 +2148,13 @@ window.Room = (function(){
       const muteLabel = (typeof isLocalMuted === 'function' && isLocalMuted())
         ? t('player.unmute') : t('player.mute');
       const waiting = hostMissingSince && !(hostId && members.some(function(m){ return m.id === hostId; }));
-      const waitNote = waiting
-        ? '<div class="room-host-wait">' + esc(t('room.hostMissing')) + '</div>'
-        : '';
+      let waitNote = '';
+      if (waiting) {
+        const left = Math.max(1, Math.ceil((HOST_GRACE_MS - (Date.now() - hostMissingSince)) / 1000));
+        waitNote = '<div class="room-host-wait">' +
+          esc(t('room.hostMissingCountdown').replace('{s}', String(left))) +
+          '</div>';
+      }
       body.innerHTML =
         '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
@@ -3363,6 +3401,8 @@ window.I18N = (function(){
       'room.youHost': 'you are host',
       'room.youAreNowHost': 'You are now the host',
       'room.hostMissing': 'Host disconnected — waiting before passing the role…',
+      'room.hostMissingToast': 'Host left the room — next host in 35 seconds',
+      'room.hostMissingCountdown': 'Host disconnected — next host in {s}s',
       'room.people': 'In this room',
       'room.hostBadge': 'host',
       'room.you': 'you',
@@ -3384,6 +3424,7 @@ window.I18N = (function(){
       'player.mutedToast': 'Muted for you only — others still hear it',
       'player.unmutedToast': 'Unmuted',
       'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync — paste a YouTube URL',
+      'player.roomYoutubeNote': 'Only YouTube is available in a shared room.',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
       'player.load': 'Load', 'player.clear': 'Clear player',
@@ -3495,6 +3536,8 @@ window.I18N = (function(){
       'room.youHost': 'tu es hôte',
       'room.youAreNowHost': 'Tu es maintenant l’hôte',
       'room.hostMissing': 'Hôte déconnecté — transfert du rôle dans un instant…',
+      'room.hostMissingToast': 'L’hôte a quitté — prochain hôte dans 35 secondes',
+      'room.hostMissingCountdown': 'Hôte déconnecté — prochain hôte dans {s}s',
       'room.people': 'Dans la salle',
       'room.hostBadge': 'hôte',
       'room.you': 'toi',
@@ -3516,6 +3559,7 @@ window.I18N = (function(){
       'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
       'player.unmutedToast': 'Son rétabli',
       'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise — colle un lien YouTube',
+      'player.roomYoutubeNote': 'Seul YouTube est disponible dans une salle partagée.',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
       'player.load': 'Charger', 'player.clear': 'Vider le lecteur',

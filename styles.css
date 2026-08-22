@@ -952,6 +952,17 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   transition: all .18s var(--ease);
 }
 .player-badge.active-src { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.player-room-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  text-align: center;
+  margin: -2px 0 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-soft);
+}
+.player-room-note[hidden] { display: none !important; }
 
 .player-url-row   { display: flex; gap: 7px; }
 .player-url-input { flex: 1; min-width: 0; padding: 9px 11px; font-size: 12.5px; }
