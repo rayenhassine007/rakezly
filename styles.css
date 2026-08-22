@@ -714,6 +714,86 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .room-hint { font-size: 11px; line-height: 1.55; color: var(--text-faint); text-align: center; margin-top: 12px; }
 .room-err  { font-size: 12px; color: var(--danger); text-align: center; margin-top: 10px; }
 
+.room-perms {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke, rgba(255,255,255,.08));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.room-perms-title {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-bottom: 2px;
+}
+.room-perms-ro { gap: 4px; }
+.room-perm-line {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  text-align: center;
+}
+.room-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke, rgba(255,255,255,.1));
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.room-toggle:hover { border-color: var(--accent-soft); }
+.room-toggle-switch {
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(127,127,127,.35);
+  position: relative;
+  transition: background .15s ease;
+}
+.room-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s ease;
+}
+.room-toggle.is-on .room-toggle-switch { background: var(--accent); }
+.room-toggle.is-on .room-toggle-switch::after { transform: translateX(14px); }
+.room-toggle-label { flex: 1; min-width: 0; }
+.room-mute-btn { margin-top: 10px; }
+.room-mute-btn.is-on { color: var(--accent); border-color: var(--accent-soft); }
+
+.player-mute-row {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke, rgba(255,255,255,.1));
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.player-mute-row:hover { color: var(--text); border-color: var(--accent-soft); }
+.player-mute-row.is-muted { color: var(--accent); border-color: var(--accent-soft); }
+#ctrlMute.active { color: var(--accent); border-color: var(--accent); }
+
 
 /* ── 12. Music player popover ────────────────────────────────────────────── */
 

@@ -595,6 +595,17 @@ let toastTO;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTO);toastTO=setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ── MUSIC PLAYER PANEL ──────────────────────────────────────
+// While in a shared room, load/play/seek are broadcast (if allowed).
+// Mute is always local — it never leaves this browser.
+let currentPlayerRaw = '';
+let playerApplyingRemote = false;
+let localMusicMuted = false;
+let knownPositionSec = 0;
+let spotifyCtrl = null;
+let spotifyApi = null;
+let spotifyPlaying = false;
+window.onSpotifyIframeApiReady = function(api){ spotifyApi = api; };
+
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
@@ -606,15 +617,33 @@ function togglePlayerPanel() {
   document.getElementById('settingsFixedBtn').classList.remove('active');
   document.getElementById('themeFixedBtn').classList.remove('active');
   document.querySelector('.btn-bg-toggle').classList.remove('active');
+  if (window.Room && Room.close) Room.close();
   panel.classList.toggle('open', !isOpen);
   btn.classList.toggle('active', !isOpen);
 }
 
-function loadPlayerUrl() {
-  const raw = document.getElementById('playerUrlInput').value.trim();
+function notifyMusicLocal(){
+  if (playerApplyingRemote) return;
+  if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+}
+
+function guardMusicControl(){
+  if (window.Room && Room.inRoom && Room.inRoom() && Room.canControlMusic && !Room.canControlMusic()){
+    showToast(typeof t === 'function' ? t('room.musicLocked') : 'Only the host can control music right now');
+    return false;
+  }
+  return true;
+}
+
+function loadPlayerUrl(opt) {
+  const opts = opt || {};
+  const fromRemote = !!opts.fromRemote;
+  if (!fromRemote && !guardMusicControl()) return;
+
+  const raw = (opts.url != null ? opts.url : (document.getElementById('playerUrlInput').value || '')).trim();
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
-  if (!embedUrl) { showToast('That link is not supported'); return; }
+  if (!embedUrl) { if (!fromRemote) showToast('That link is not supported'); return; }
   const iframe   = document.getElementById('playerIframe');
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
@@ -623,36 +652,52 @@ function loadPlayerUrl() {
 
   // Reset state
   controls.classList.remove('visible');
-  scWidget = null;
+  scWidget = null; scWidgetReady = false;
+  ytPlayer = null; ytPlayerReady = false;
+  spotifyCtrl = null; spotifyPlaying = false;
+  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
+
+  document.getElementById('playerUrlInput').value = raw;
+  currentPlayerRaw = raw;
 
   iframe.src     = embedUrl.url;
   iframe.style.height = embedUrl.height + 'px';
   wrap.classList.add('has-player');
   empty.style.display = 'none';
   clearBtn.classList.add('visible');
+  controls.classList.add('visible');
+  updateCtrlLabels(embedUrl.src);
 
   // SoundCloud: kick off widget init — it retries internally until SC API is ready
   if (embedUrl.src === 'soundcloud') {
-    scWidget = null; scWidgetReady = false;
-    controls.classList.add('visible');
-    updateCtrlLabels('soundcloud');
-    initSCWidget();
+    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
   }
 
-  // YouTube: just show the embed, no controls needed
+  // YouTube
   if (embedUrl.src === 'youtube') {
-    ytPlayer = null; ytPlayerReady = false;
     const ytUrl = embedUrl.url + '&enablejsapi=1';
     iframe.src = ytUrl;
-    initYTPlayer();
+    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
+  }
+
+  // Spotify — iframe + Embed API when available
+  if (embedUrl.src === 'spotify') {
+    initSpotifyPlayer({ seekSec: knownPositionSec, playing: opts.playing, fromRemote: fromRemote });
   }
 
   // highlight badge
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
-  showToast('Player loaded');
-  localStorage.setItem('sf_player_url', raw);
+
+  if (!fromRemote) {
+    showToast('Player loaded');
+    localStorage.setItem('sf_player_url', raw);
+    notifyMusicLocal();
+  } else if (!opts.skipPersonal) {
+    // Room music should not overwrite the personal stash used on leave.
+  }
+  applyLocalMuteState();
 }
 
 function resolvePlayerEmbed(url) {
@@ -677,13 +722,13 @@ function resolvePlayerEmbed(url) {
       // Tracks/episodes: compact. Everything else (playlist/album/artist): tall enough to show shuffle+repeat footer
       const isTrack = path.startsWith('/track/') || path.startsWith('/episode/');
       const h = isTrack ? 152 : 460;
-      return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify' };
+      return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify', rawUrl: url };
     }
 
     // SoundCloud
     if (host === 'soundcloud.com') {
       const encoded = encodeURIComponent(url);
-      return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud' };
+      return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud', rawUrl: url };
     }
   } catch(e) {}
   return null;
@@ -691,7 +736,9 @@ function resolvePlayerEmbed(url) {
 
 let ytPlayer = null, ytPlayerReady = false, ytIsPlaying = false;
 
-function clearPlayer() {
+function clearPlayer(opt) {
+  const opts = opt || {};
+  if (!opts.fromRemote && !guardMusicControl()) return;
   const iframe   = document.getElementById('playerIframe');
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
@@ -704,12 +751,18 @@ function clearPlayer() {
   controls.classList.remove('visible');
   scWidget = null; scWidgetReady = false; scIsPlaying = false; scShuffleOn = false; scRepeatOn = false;
   ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
+  spotifyCtrl = null; spotifyPlaying = false;
+  currentPlayerRaw = '';
+  knownPositionSec = 0;
   document.getElementById('ctrlPlay').textContent = '▶';
   document.getElementById('ctrlShuffle').classList.remove('active');
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   document.getElementById('playerUrlInput').value = '';
-  localStorage.removeItem('sf_player_url');
-  showToast('Player cleared');
+  if (!opts.fromRemote) {
+    localStorage.removeItem('sf_player_url');
+    showToast('Player cleared');
+    notifyMusicLocal();
+  }
 }
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
@@ -724,10 +777,11 @@ function clearPlayer() {
   }
 })();
 
-function initYTPlayer() {
+function initYTPlayer(opt) {
+  const opts = opt || {};
   // Wait until YT API and iframe are ready
   if (typeof YT === 'undefined' || !YT.Player) {
-    setTimeout(initYTPlayer, 400); return;
+    setTimeout(function(){ initYTPlayer(opts); }, 400); return;
   }
   const iframe = document.getElementById('playerIframe');
   if (!iframe.src || !iframe.src.includes('youtube.com')) return;
@@ -736,21 +790,33 @@ function initYTPlayer() {
       events: {
         onReady: () => {
           ytPlayerReady = true;
-          document.getElementById('ctrlPlay').textContent = '⏸';
-          ytIsPlaying = true;
+          const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
+          if (seek > 0) { try { ytPlayer.seekTo(seek, true); } catch(e){} }
+          const wantPlay = opts.playing !== false;
+          try {
+            if (wantPlay) ytPlayer.playVideo();
+            else ytPlayer.pauseVideo();
+          } catch(e){}
+          ytIsPlaying = wantPlay;
+          document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+          applyLocalMuteState();
         },
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.PLAYING) {
             ytIsPlaying = true;
             document.getElementById('ctrlPlay').textContent = '⏸';
+            try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
+            if (!playerApplyingRemote) notifyMusicLocal();
           } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
             ytIsPlaying = false;
             document.getElementById('ctrlPlay').textContent = '▶';
+            try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
+            if (!playerApplyingRemote) notifyMusicLocal();
           }
         }
       }
     });
-  } catch(e) { setTimeout(initYTPlayer, 400); }
+  } catch(e) { setTimeout(function(){ initYTPlayer(opts); }, 400); }
 }
 
 function ytTogglePlay() {
@@ -760,20 +826,22 @@ function ytTogglePlay() {
 function ytSkipForward() {
   if (!ytPlayer || !ytPlayerReady) return;
   const t = ytPlayer.getCurrentTime();
-  ytPlayer.seekTo(Math.max(0, t + 10), true);
+  knownPositionSec = Math.max(0, t + 10);
+  ytPlayer.seekTo(knownPositionSec, true);
 }
 function ytSkipBackward() {
   if (!ytPlayer || !ytPlayerReady) return;
   const t = ytPlayer.getCurrentTime();
-  ytPlayer.seekTo(Math.max(0, t - 10), true);
+  knownPositionSec = Math.max(0, t - 10);
+  ytPlayer.seekTo(knownPositionSec, true);
 }
 function ytNextVideo() {
   if (!ytPlayer || !ytPlayerReady) return;
-  try { ytPlayer.nextVideo(); } catch(e) {}
+  try { ytPlayer.nextVideo(); } catch(e){}
 }
 function ytPrevVideo() {
   if (!ytPlayer || !ytPlayerReady) return;
-  try { ytPlayer.previousVideo(); } catch(e) {}
+  try { ytPlayer.previousVideo(); } catch(e){}
 }
 
 // ── UNIFIED CONTROL ROUTING ────────────────────────────────
@@ -782,24 +850,36 @@ function getActiveSrc() {
   return badge ? badge.dataset.src : null;
 }
 function ctrlPlayPause() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') ytTogglePlay();
   else if (src === 'soundcloud') scTogglePlay();
+  else if (src === 'spotify') spotifyTogglePlay();
+  else return;
+  setTimeout(notifyMusicLocal, 120);
 }
 function ctrlPrev() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipBackward(); showToast('−10s'); }
   else if (src === 'soundcloud') scPrev();
+  else if (src === 'spotify') spotifySkip(-10);
+  notifyMusicLocal();
 }
 function ctrlNext() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipForward(); showToast('+10s'); }
   else if (src === 'soundcloud') scNext();
+  else if (src === 'spotify') spotifySkip(10);
+  notifyMusicLocal();
 }
 function ctrlLeft() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytPrevVideo(); showToast('Previous video'); }
   else if (src === 'soundcloud') scShuffle();
+  notifyMusicLocal();
 }
 
 // Update button labels based on active source
@@ -807,10 +887,13 @@ function updateCtrlLabels(src) {
   const shuffle = document.getElementById('ctrlShuffle');
   const prev    = document.getElementById('ctrlPrev');
   const next    = document.getElementById('ctrlNext');
-  if (src === 'youtube') {
+  if (src === 'youtube' || src === 'spotify') {
     shuffle.title = 'Previous Video';  shuffle.textContent = '⏮⏮';
     prev.title    = '−10 seconds';     prev.textContent    = '−10s';
     next.title    = '+10 seconds';     next.textContent    = '+10s';
+    if (src === 'spotify') {
+      shuffle.title = 'Reload'; shuffle.textContent = '↻';
+    }
   } else {
     shuffle.title = 'Shuffle'; shuffle.textContent = '⇌';
     prev.title    = 'Previous'; prev.textContent   = '⏮';
@@ -822,10 +905,11 @@ function updateCtrlLabels(src) {
 let scWidget = null, scIsPlaying = false, scShuffleOn = false, scRepeatOn = false;
 let scTracks = [], scWidgetReady = false;
 
-function initSCWidget() {
+function initSCWidget(opt) {
+  const opts = opt || {};
   // Retry until the SC Widget API script has loaded
   if (typeof SC === 'undefined' || !window.SC || !window.SC.Widget) {
-    setTimeout(initSCWidget, 400);
+    setTimeout(function(){ initSCWidget(opts); }, 400);
     return;
   }
   const iframe = document.getElementById('playerIframe');
@@ -833,7 +917,7 @@ function initSCWidget() {
   if (!iframe.src || !iframe.src.includes('soundcloud.com')) return;
   try {
     scWidget = SC.Widget(iframe);
-  } catch(e) { setTimeout(initSCWidget, 400); return; }
+  } catch(e) { setTimeout(function(){ initSCWidget(opts); }, 400); return; }
 
   scWidgetReady = false;
 
@@ -841,17 +925,31 @@ function initSCWidget() {
     scWidgetReady = true;
     // Fetch track list for shuffle
     scWidget.getSounds(sounds => { scTracks = sounds || []; });
-    // Widget starts playing automatically — reflect that
-    scIsPlaying = true;
-    document.getElementById('ctrlPlay').textContent = '⏸';
+    const seekMs = Math.max(0, Math.floor((opts.seekSec || 0) * 1000));
+    if (seekMs > 0) { try { scWidget.seekTo(seekMs); } catch(e){} }
+    const wantPlay = opts.playing !== false;
+    try {
+      if (wantPlay) scWidget.play();
+      else scWidget.pause();
+    } catch(e){}
+    scIsPlaying = wantPlay;
+    document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+    applyLocalMuteState();
   });
   scWidget.bind(SC.Widget.Events.PLAY, () => {
     scIsPlaying = true;
     document.getElementById('ctrlPlay').textContent = '⏸';
+    if (!playerApplyingRemote) notifyMusicLocal();
   });
   scWidget.bind(SC.Widget.Events.PAUSE, () => {
     scIsPlaying = false;
     document.getElementById('ctrlPlay').textContent = '▶';
+    if (!playerApplyingRemote) notifyMusicLocal();
+  });
+  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, (data) => {
+    if (data && typeof data.currentPosition === 'number') {
+      knownPositionSec = data.currentPosition / 1000;
+    }
   });
   scWidget.bind(SC.Widget.Events.FINISH, () => {
     scIsPlaying = false;
@@ -862,6 +960,7 @@ function initSCWidget() {
     } else if (scShuffleOn && scTracks.length > 1) {
       scPlayRandom();
     }
+    if (!playerApplyingRemote) notifyMusicLocal();
   });
 }
 
@@ -894,6 +993,181 @@ function scToggleRepeat() {
   showToast(scRepeatOn ? 'Repeat on' : 'Repeat off');
 }
 
+// ── SPOTIFY EMBED API ──────────────────────────────────────
+function initSpotifyPlayer(opt){
+  const opts = opt || {};
+  const iframe = document.getElementById('playerIframe');
+  if (!iframe || !iframe.src || !iframe.src.includes('spotify.com')) return;
+  if (!spotifyApi) {
+    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
+    return;
+  }
+  try {
+    spotifyApi.createController(iframe, {}, function(ctrl){
+      spotifyCtrl = ctrl;
+      const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
+      const wantPlay = opts.playing !== false;
+      try {
+        if (seek > 0 && ctrl.seek) ctrl.seek(seek);
+        if (wantPlay && ctrl.play) ctrl.play();
+        else if (!wantPlay && ctrl.pause) ctrl.pause();
+      } catch(e){}
+      spotifyPlaying = wantPlay;
+      document.getElementById('ctrlPlay').textContent = wantPlay ? '⏸' : '▶';
+      if (ctrl.addListener) {
+        ctrl.addListener('playback_update', function(e){
+          const d = (e && e.data) || e || {};
+          if (typeof d.position === 'number') knownPositionSec = d.position / 1000;
+          if (typeof d.isPaused === 'boolean') {
+            spotifyPlaying = !d.isPaused;
+            document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
+          }
+        });
+      }
+      applyLocalMuteState();
+    });
+  } catch(e) {
+    setTimeout(function(){ initSpotifyPlayer(opts); }, 400);
+  }
+}
+function spotifyTogglePlay(){
+  if (!spotifyCtrl) return;
+  try {
+    if (spotifyPlaying) spotifyCtrl.pause();
+    else spotifyCtrl.play();
+    spotifyPlaying = !spotifyPlaying;
+    document.getElementById('ctrlPlay').textContent = spotifyPlaying ? '⏸' : '▶';
+  } catch(e){}
+}
+function spotifySkip(deltaSec){
+  if (!spotifyCtrl || !spotifyCtrl.seek) return;
+  knownPositionSec = Math.max(0, knownPositionSec + deltaSec);
+  try { spotifyCtrl.seek(knownPositionSec); } catch(e){}
+}
+
+// ── LOCAL MUTE (never synced) ──────────────────────────────
+function applyLocalMuteState(){
+  const btn = document.getElementById('ctrlMute');
+  const row = document.getElementById('playerMuteRow');
+  const label = document.getElementById('playerMuteLabel');
+  if (btn) {
+    btn.classList.toggle('active', localMusicMuted);
+    btn.textContent = localMusicMuted ? '🔇' : '🔊';
+  }
+  if (row) row.classList.toggle('is-muted', localMusicMuted);
+  if (label && typeof t === 'function') {
+    label.textContent = localMusicMuted ? t('player.unmute') : t('player.mute');
+  }
+  const src = getActiveSrc();
+  try {
+    if (src === 'youtube' && ytPlayer && ytPlayerReady) {
+      if (localMusicMuted) ytPlayer.mute(); else ytPlayer.unMute();
+    } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
+      scWidget.setVolume(localMusicMuted ? 0 : 100);
+    } else if (src === 'spotify' && spotifyCtrl) {
+      // Embed API has no reliable volume — pause locally while muted,
+      // without broadcasting, so the room keeps playing for others.
+      if (localMusicMuted && spotifyPlaying) {
+        playerApplyingRemote = true;
+        try { spotifyCtrl.pause(); } catch(e){}
+        playerApplyingRemote = false;
+      } else if (!localMusicMuted && spotifyPlaying === false && window.Room && Room.lastMusic && Room.lastMusic() && Room.lastMusic().playing) {
+        playerApplyingRemote = true;
+        try { spotifyCtrl.play(); } catch(e){}
+        playerApplyingRemote = false;
+      }
+    }
+  } catch(e){}
+}
+function toggleLocalMute(){
+  localMusicMuted = !localMusicMuted;
+  applyLocalMuteState();
+  showToast(localMusicMuted
+    ? (typeof t === 'function' ? t('player.mutedToast') : 'Muted for you only')
+    : (typeof t === 'function' ? t('player.unmutedToast') : 'Unmuted'));
+  if (window.Room && Room.refresh) Room.refresh();
+}
+function isLocalMuted(){ return localMusicMuted; }
+
+// ── MUSIC SNAPSHOT (for room sync) ─────────────────────────
+function getMusicSnapshot(){
+  const src = getActiveSrc();
+  let playing = false;
+  let pos = knownPositionSec;
+  try {
+    if (src === 'youtube' && ytPlayer && ytPlayerReady) {
+      playing = ytIsPlaying;
+      pos = ytPlayer.getCurrentTime() || pos;
+    } else if (src === 'soundcloud') {
+      playing = scIsPlaying;
+    } else if (src === 'spotify') {
+      playing = spotifyPlaying;
+    }
+  } catch(e){}
+  knownPositionSec = pos;
+  return {
+    url: currentPlayerRaw || '',
+    src: src || null,
+    playing: !!playing,
+    positionSec: Number(pos) || 0,
+    at: Date.now()
+  };
+}
+
+function applyMusicSnapshot(snap){
+  if (!snap) return;
+  playerApplyingRemote = true;
+  try {
+    const url = (snap.url || '').trim();
+    if (!url) {
+      if (currentPlayerRaw) clearPlayer({ fromRemote: true });
+      return;
+    }
+    // Adjust position for network lag while playing
+    let pos = Number(snap.positionSec) || 0;
+    if (snap.playing && snap.at) {
+      pos += Math.max(0, (Date.now() - snap.at) / 1000);
+    }
+    const same = currentPlayerRaw === url;
+    if (!same) {
+      loadPlayerUrl({
+        url: url, fromRemote: true, skipPersonal: true,
+        positionSec: pos, playing: !!snap.playing
+      });
+    } else {
+      // Same track — seek + play/pause
+      const src = getActiveSrc();
+      knownPositionSec = pos;
+      if (src === 'youtube' && ytPlayer && ytPlayerReady) {
+        try { ytPlayer.seekTo(pos, true); } catch(e){}
+        try {
+          if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
+          else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
+        } catch(e){}
+      } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
+        try { scWidget.seekTo(Math.floor(pos * 1000)); } catch(e){}
+        try {
+          if (snap.playing) { if (!scIsPlaying) scWidget.play(); }
+          else { if (scIsPlaying) scWidget.pause(); }
+        } catch(e){}
+      } else if (src === 'spotify' && spotifyCtrl) {
+        try { if (spotifyCtrl.seek) spotifyCtrl.seek(pos); } catch(e){}
+        if (!localMusicMuted) {
+          try {
+            if (snap.playing) spotifyCtrl.play();
+            else spotifyCtrl.pause();
+          } catch(e){}
+        }
+        spotifyPlaying = !!snap.playing;
+        document.getElementById('ctrlPlay').textContent = snap.playing ? '⏸' : '▶';
+      }
+      applyLocalMuteState();
+    }
+  } finally {
+    setTimeout(function(){ playerApplyingRemote = false; }, 400);
+  }
+}
+
 // Click badge to set placeholder example and highlight selection
 document.querySelectorAll('.player-badge').forEach(badge => {
   badge.addEventListener('click', () => {
@@ -910,8 +1184,9 @@ document.querySelectorAll('.player-badge').forEach(badge => {
   });
 });
 
-// Restore player on load
+// Restore player on load (skipped if joining a room via ?room=)
 (function restorePlayer() {
+  if (/[?&]room=/.test(location.search)) return;
   const saved = localStorage.getItem('sf_player_url');
   if (saved) {
     document.getElementById('playerUrlInput').value = saved;
@@ -1293,10 +1568,24 @@ window.Room = (function(){
 
   let channel = null, code = null;
   let applying = false, panelOpen = false, status = 'idle', peers = 1;
+  let isHost = false;
+  let hostId = null;
+  // When true, everyone may control; when false, only the host.
+  let allowTimer = true;
+  let allowMusic = true;
+  let lastTimerSnap = null;
+  let lastMusicSnap = null;
+  let personalStash = null; // { url } restored on leave
+  let musicTick = null;
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
   function sb(){ return window.SB.get(); }
+
+  function inRoom(){ return status === 'joined'; }
+  function canControlTimer(){ return !inRoom() || isHost || allowTimer; }
+  function canControlMusic(){ return !inRoom() || isHost || allowMusic; }
+  function lastMusic(){ return lastMusicSnap; }
 
   function genCode(){
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -1304,12 +1593,34 @@ window.Room = (function(){
     return s;
   }
 
-  function snapshot(){ return { mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running }; }
+  function snapshot(){
+    return {
+      mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running,
+      hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+    };
+  }
+
+  function musicSnapshot(){
+    if (typeof getMusicSnapshot === 'function') return getMusicSnapshot();
+    return { url: '', playing: false, positionSec: 0, at: Date.now() };
+  }
+
+  function applyMeta(s){
+    if (!s) return;
+    if (s.hostId) hostId = s.hostId;
+    if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+    if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+    isHost = (hostId === myId);
+  }
 
   function apply(s){
     if (!s) return;
     applying = true;
     try {
+      applyMeta(s);
+      lastTimerSnap = {
+        mode: s.mode, totalSecs: s.totalSecs, remainSecs: s.remainSecs, running: s.running
+      };
       if (typeof setTab === 'function') setTab(s.mode);
       mode = s.mode; totalSecs = s.totalSecs; remainSecs = s.remainSecs;
       const cc = mode==='work'?'wc':mode==='break'?'bc':'lc';
@@ -1326,6 +1637,13 @@ window.Room = (function(){
       }
     } catch(e){ console.warn('room apply', e); }
     applying = false;
+    updateUI();
+  }
+
+  function applyMusic(s){
+    if (!s) return;
+    lastMusicSnap = s;
+    if (typeof applyMusicSnapshot === 'function') applyMusicSnapshot(s);
   }
 
   function push(){
@@ -1333,16 +1651,114 @@ window.Room = (function(){
       try { channel.send({ type:'broadcast', event:'sync', payload: snapshot() }); } catch(e){}
     }
   }
-  function onLocalChange(){ push(); }
 
-  function join(c){
+  function pushMusic(){
+    if (channel && status === 'joined' && canControlMusic()) {
+      const payload = musicSnapshot();
+      lastMusicSnap = payload;
+      try { channel.send({ type:'broadcast', event:'music', payload: payload }); } catch(e){}
+    }
+  }
+
+  function pushFull(){
+    push();
+    if (canControlMusic() || isHost) pushMusic();
+  }
+
+  function onLocalChange(){
+    if (status !== 'joined') return;
+    if (!canControlTimer()){
+      toast(t('room.timerLocked'));
+      if (lastTimerSnap) apply(Object.assign({}, lastTimerSnap, {
+        hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+      }));
+      return;
+    }
+    push();
+  }
+
+  function onMusicLocalChange(){
+    if (status !== 'joined') return;
+    if (!canControlMusic()){
+      toast(t('room.musicLocked'));
+      if (lastMusicSnap) applyMusic(lastMusicSnap);
+      return;
+    }
+    pushMusic();
+  }
+
+  function setAllowTimer(on){
+    if (!isHost){ toast(t('room.hostOnly')); return; }
+    allowTimer = !!on;
+    push();
+    updateUI();
+  }
+  function setAllowMusic(on){
+    if (!isHost){ toast(t('room.hostOnly')); return; }
+    allowMusic = !!on;
+    push();
+    updateUI();
+  }
+  function toggleAllowTimer(){ setAllowTimer(!allowTimer); }
+  function toggleAllowMusic(){ setAllowMusic(!allowMusic); }
+
+  function startMusicTick(){
+    stopMusicTick();
+    musicTick = setInterval(function(){
+      if (status !== 'joined' || !canControlMusic()) return;
+      const snap = musicSnapshot();
+      if (snap && snap.url && snap.playing) pushMusic();
+    }, 8000);
+  }
+  function stopMusicTick(){
+    if (musicTick){ clearInterval(musicTick); musicTick = null; }
+  }
+
+  function stashPersonal(){
+    personalStash = {
+      url: (typeof currentPlayerRaw !== 'undefined' && currentPlayerRaw)
+        || localStorage.getItem('sf_player_url') || ''
+    };
+  }
+  function restorePersonal(){
+    const url = personalStash && personalStash.url;
+    personalStash = null;
+    if (url) {
+      if (typeof loadPlayerUrl === 'function') {
+        loadPlayerUrl({ url: url, fromRemote: true });
+        // fromRemote skips localStorage write and room notify — re-save personal
+        try { localStorage.setItem('sf_player_url', url); } catch(e){}
+      }
+    } else if (typeof clearPlayer === 'function') {
+      clearPlayer({ fromRemote: true });
+    }
+  }
+
+  function join(c, opts){
+    const created = opts && opts.created;
     const cl = sb();
     if (!cl){ toast('Shared rooms are unavailable right now'); return; }
     if (channel) leave(true);
+    if (created){
+      isHost = true;
+      hostId = myId;
+      allowTimer = true;
+      allowMusic = true;
+    } else {
+      isHost = false;
+      // hostId / allows arrive via sync
+    }
+    stashPersonal();
     code = c; status = 'connecting'; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
     channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
-    channel.on('broadcast', { event:'hello' }, function(){ push(); });   // reply to newcomers
+    channel.on('broadcast', { event:'music' }, function(m){ applyMusic(m.payload); });
+    channel.on('broadcast', { event:'hello' }, function(){
+      // Timer: anyone can echo. Music: only the host is authoritative,
+      // otherwise every peer would race with their personal player.
+      push();
+      if (isHost) pushMusic();
+    });
     channel.on('presence',  { event:'sync'  }, function(){
       try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
       updateUI();
@@ -1350,21 +1766,36 @@ window.Room = (function(){
     channel.subscribe(function(st){
       if (st === 'SUBSCRIBED'){
         status = 'joined';
-        try { channel.track({ at: Date.now() }); } catch(e){}
-        try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
-        setUrl(c); toast('Joined room '+c); updateUI();
+        try {
+          channel.track({ id: myId, host: isHost, at: Date.now() });
+        } catch(e){}
+        try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}
+        if (created) {
+          // Seed room music from whatever the host already had loaded
+          pushFull();
+        }
+        setUrl(c);
+        toast(created ? (t('room.created') || ('Room '+c)) : ('Joined room '+c));
+        startMusicTick();
+        updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
       }
     });
   }
 
-  function create(){ join(genCode()); }
+  function create(){ join(genCode(), { created: true }); }
 
   function leave(silent){
     const cl = sb();
+    stopMusicTick();
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
-    channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
+    channel = null; code = null; status = 'idle'; peers = 1;
+    isHost = false; hostId = null;
+    allowTimer = true; allowMusic = true;
+    lastTimerSnap = null; lastMusicSnap = null;
+    clearUrl();
+    restorePersonal();
     if (!silent) toast('Left the room');
     updateUI();
   }
@@ -1380,6 +1811,13 @@ window.Room = (function(){
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
 
+  function toggleHtml(id, on, label, onclick){
+    return '<button type="button" class="room-toggle'+(on?' is-on':'')+'" id="'+id+'" onclick="'+onclick+'">' +
+      '<span class="room-toggle-switch" aria-hidden="true"></span>' +
+      '<span class="room-toggle-label">'+esc(label)+'</span>' +
+      '</button>';
+  }
+
   function updateUI(){
     const btn = document.getElementById('roomFixedBtn');
     if (btn) btn.classList.toggle('active', status === 'joined');
@@ -1388,11 +1826,32 @@ window.Room = (function(){
     const body = document.getElementById('roomBody');
     if (!body) return;
     if (status === 'joined'){
+      let perms = '';
+      if (isHost){
+        perms =
+          '<div class="room-perms">' +
+            '<div class="room-perms-title">'+esc(t('room.perms'))+'</div>' +
+            toggleHtml('roomAllowTimer', allowTimer, t('room.allowTimer'), 'Room.toggleAllowTimer()') +
+            toggleHtml('roomAllowMusic', allowMusic, t('room.allowMusic'), 'Room.toggleAllowMusic()') +
+          '</div>';
+      } else {
+        perms =
+          '<div class="room-perms room-perms-ro">' +
+            '<div class="room-perm-line">'+(allowTimer ? esc(t('room.timerOpen')) : esc(t('room.timerLocked')))+'</div>' +
+            '<div class="room-perm-line">'+(allowMusic ? esc(t('room.musicOpen')) : esc(t('room.musicLocked')))+'</div>' +
+          '</div>';
+      }
+      const muteLabel = (typeof isLocalMuted === 'function' && isLocalMuted())
+        ? t('player.unmute') : t('player.mute');
       body.innerHTML =
         '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
-        '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+'</div>' +
+        '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+
+          (isHost ? ' · '+esc(t('room.youHost')) : '') +
+        '</div>' +
         '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">' + esc(t('room.copy')) + '</button></div>' +
+        perms +
+        '<button type="button" class="room-btn room-mute-btn'+(typeof isLocalMuted==='function'&&isLocalMuted()?' is-on':'')+'" onclick="toggleLocalMute()">'+esc(muteLabel)+'</button>' +
         '<div class="room-hint">' + esc(t('room.hint')) + '</div>' +
         '<button class="room-btn room-btn-leave" onclick="Room.leave()">' + esc(t('room.leave')) + '</button>';
     } else {
@@ -1434,10 +1893,20 @@ window.Room = (function(){
     })();
   })();
 
-  return { onLocalChange: onLocalChange, create: create, join: join, refresh: updateUI,
-           close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
-           joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
-           togglePanel: togglePanel };
+  return {
+    onLocalChange: onLocalChange,
+    onMusicLocalChange: onMusicLocalChange,
+    create: create, join: join, refresh: updateUI,
+    close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
+    joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
+    togglePanel: togglePanel,
+    inRoom: inRoom,
+    canControlTimer: canControlTimer,
+    canControlMusic: canControlMusic,
+    toggleAllowTimer: toggleAllowTimer,
+    toggleAllowMusic: toggleAllowMusic,
+    lastMusic: lastMusic
+  };
 })();
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -2498,9 +2967,24 @@ window.I18N = (function(){
       'room.title': 'Shared room', 'room.create': 'Create a room',
       'room.or': 'Or join with a code', 'room.join': 'Join', 'room.copy': 'Copy',
       'room.code': 'Room code', 'room.leave': 'Leave room',
-      'room.hint': 'Share the link or code — everyone controls the timer',
+      'room.hint': 'Share the link or code. Music and the timer stay in sync while you are in the room.',
       'room.online': 'online', 'room.connecting': 'Connecting…',
       'room.failed': 'Connection failed — try again',
+      'room.created': 'Room created',
+      'room.youHost': 'you are host',
+      'room.perms': 'Who can control',
+      'room.allowTimer': 'Others can control the timer',
+      'room.allowMusic': 'Others can control the music',
+      'room.timerOpen': 'Timer: everyone can control',
+      'room.musicOpen': 'Music: everyone can control',
+      'room.timerLocked': 'Only the host can control the timer',
+      'room.musicLocked': 'Only the host can control the music',
+      'room.hostOnly': 'Only the host can change that',
+      'player.mute': 'Mute for me',
+      'player.unmute': 'Unmute',
+      'player.muteTip': 'Mute only on this device',
+      'player.mutedToast': 'Muted for you only — others still hear it',
+      'player.unmutedToast': 'Unmuted',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
       'player.load': 'Load', 'player.clear': 'Clear player',
@@ -2601,9 +3085,24 @@ window.I18N = (function(){
       'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
       'room.or': 'Ou rejoindre avec un code', 'room.join': 'Rejoindre', 'room.copy': 'Copier',
       'room.code': 'Code de la salle', 'room.leave': 'Quitter la salle',
-      'room.hint': 'Partage le lien ou le code — tout le monde contrôle le minuteur',
+      'room.hint': 'Partage le lien ou le code. La musique et le minuteur restent synchronisés dans la salle.',
       'room.online': 'en ligne', 'room.connecting': 'Connexion…',
       'room.failed': 'Échec de la connexion — réessaie',
+      'room.created': 'Salle créée',
+      'room.youHost': 'tu es hôte',
+      'room.perms': 'Qui peut contrôler',
+      'room.allowTimer': 'Les autres peuvent contrôler le minuteur',
+      'room.allowMusic': 'Les autres peuvent contrôler la musique',
+      'room.timerOpen': 'Minuteur : tout le monde peut contrôler',
+      'room.musicOpen': 'Musique : tout le monde peut contrôler',
+      'room.timerLocked': 'Seul l’hôte peut contrôler le minuteur',
+      'room.musicLocked': 'Seul l’hôte peut contrôler la musique',
+      'room.hostOnly': 'Seul l’hôte peut changer ça',
+      'player.mute': 'Couper le son pour moi',
+      'player.unmute': 'Remettre le son',
+      'player.muteTip': 'Coupe le son seulement sur cet appareil',
+      'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
+      'player.unmutedToast': 'Son rétabli',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
       'player.load': 'Charger', 'player.clear': 'Vider le lecteur',

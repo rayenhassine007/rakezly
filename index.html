@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <script src="https://w.soundcloud.com/player/api.js" async></script>
+<script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Cinzel:wght@400;500;600&family=Josefin+Sans:wght@200;300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./styles.css">
@@ -282,7 +283,11 @@
     <button class="player-ctrl-btn" id="ctrlPrev" title="Previous" onclick="ctrlPrev()">⏮</button>
     <button class="player-ctrl-btn play-pause" id="ctrlPlay" title="Play / Pause" onclick="ctrlPlayPause()">▶</button>
     <button class="player-ctrl-btn" id="ctrlNext" title="Next" onclick="ctrlNext()">⏭</button>
+    <button class="player-ctrl-btn" id="ctrlMute" title="Mute for me" onclick="toggleLocalMute()" data-i18n-title="player.muteTip">🔇</button>
   </div>
+  <button type="button" class="player-mute-row" id="playerMuteRow" onclick="toggleLocalMute()">
+    <span id="playerMuteLabel" data-i18n="player.mute">Mute for me</span>
+  </button>
   <div class="player-empty" id="playerEmpty">
     <div class="player-empty-icon">♫</div>
     Paste a YouTube, Spotify or SoundCloud link to play.
