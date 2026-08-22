@@ -1251,13 +1251,92 @@ setInterval(updateClock, 1000);
 // ── SHARED SUPABASE CLIENT ────────────────────────────────────
 // One client for realtime rooms, auth, study sessions and goals — creating
 // several would give each its own auth/realtime state.
+// Credentials live in supabase-config.js (window.RAKEZLY_SUPABASE). The
+// defaults there currently point at a project ref that no longer resolves
+// in DNS — see supabase/SETUP.md → Recovering a missing project.
 window.SB = (function(){
-  const SB_URL = 'https://kucqirnkgrtebmowzwlw.supabase.co';
-  const SB_KEY = 'sb_publishable_JR6QoT02BlyKUok-EHjPMw_TH-dBT9P';
+  const cfg = (typeof window !== 'undefined' && window.RAKEZLY_SUPABASE) || {};
+  const SB_URL = String(cfg.url || '').replace(/\/$/, '');
+  const SB_KEY = String(cfg.key || '');
 
   let client = null;
+  // Cached connectivity probe: { ok, code, detail, message, at }
+  let reach = null;
+
+  function url(){ return SB_URL; }
+
+  function hostHint(){
+    try { return new URL(SB_URL).host; } catch(e){ return SB_URL || '(missing url)'; }
+  }
+
+  function unreachableMessage(){
+    return 'Cannot reach Supabase at ' + hostHint() +
+      '. The project is missing, paused, or the URL is wrong. ' +
+      'Restore or create a project, then update supabase-config.js (see supabase/SETUP.md).';
+  }
+
+  function classifyFetchFailure(err){
+    const msg = String((err && err.message) || err || '');
+    const name = (err && err.name) || '';
+    // Browsers surface DNS / dead hosts as TypeError "Failed to fetch"
+    // (Chrome), "NetworkError when attempting to fetch resource" (Firefox),
+    // or "Load failed" (Safari). AbortError is a timeout on our probe.
+    if (name === 'AbortError' || /aborted|timeout/i.test(msg)){
+      return { code: 'timeout', message: unreachableMessage() };
+    }
+    if (
+      name === 'TypeError' ||
+      /failed to fetch|networkerror|load failed|name not resolved|err_name_not_resolved|getaddrinfo|could not resolve|dns|network request failed/i.test(msg)
+    ){
+      return { code: 'host_unreachable', message: unreachableMessage() };
+    }
+    return { code: 'network', message: msg || unreachableMessage() };
+  }
+
+  // Hit Auth health. A live project answers; NXDOMAIN / paused-deleted
+  // hosts fail at fetch. Cached ~30s so sign-in retries stay snappy.
+  async function ping(opts){
+    const force = opts && opts.force;
+    if (reach && !force && (Date.now() - reach.at < 30000)) return reach;
+    if (!SB_URL || !SB_KEY){
+      reach = {
+        ok: false, code: 'misconfigured', detail: 'missing url or key',
+        message: 'Supabase URL/key not set. Paste them into supabase-config.js (see supabase/SETUP.md).',
+        at: Date.now()
+      };
+      return reach;
+    }
+    const health = SB_URL + '/auth/v1/health';
+    try {
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(function(){ try { ctrl.abort(); } catch(e){} }, 8000) : null;
+      const res = await fetch(health, {
+        method: 'GET',
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY },
+        signal: ctrl ? ctrl.signal : undefined
+      });
+      if (timer) clearTimeout(timer);
+      // Any HTTP response means DNS + TLS reached a Supabase host.
+      if (res.status === 404){
+        reach = {
+          ok: false, code: 'project_missing', detail: 'HTTP 404',
+          message: unreachableMessage(), at: Date.now()
+        };
+      } else {
+        reach = { ok: true, code: 'ok', detail: 'HTTP ' + res.status, at: Date.now() };
+      }
+    } catch(e){
+      const c = classifyFetchFailure(e);
+      reach = {
+        ok: false, code: c.code, detail: String((e && e.message) || e),
+        message: c.message, at: Date.now()
+      };
+    }
+    return reach;
+  }
 
   function get(){
+    if (!SB_URL || !SB_KEY) return null;
     if (!client && window.supabase && window.supabase.createClient) {
       client = window.supabase.createClient(SB_URL, SB_KEY, {
         auth: {
@@ -1276,16 +1355,23 @@ window.SB = (function(){
   }
 
   // The Supabase CDN script is async — run cb once the library shows up.
+  // If URL/key are missing, call back with null immediately so auth can settle.
   function ready(cb){
+    if (!SB_URL || !SB_KEY){ cb(null); return; }
     let tries = 0;
     (function wait(){
       const cl = get();
       if (cl) cb(cl);
       else if (tries++ < 60) setTimeout(wait, 150);
+      else cb(null);
     })();
   }
 
-  return { get: get, ready: ready };
+  return {
+    get: get, ready: ready, url: url, ping: ping,
+    classifyFetchFailure: classifyFetchFailure,
+    lastReach: function(){ return reach; }
+  };
 })();
 
 window.Room = (function(){
@@ -1493,14 +1579,38 @@ window.Auth = (function(){
   function init(){
     window.SB.ready(async function(cl){
       try {
+        // Surface a clear console warning early when the project host is dead.
+        try {
+          const reach = await window.SB.ping();
+          if (reach && !reach.ok){
+            console.warn('Supabase unreachable:', reach.message || reach.detail);
+          }
+        } catch(e){}
+
+        if (!cl){
+          settled = true; emit();
+          return;
+        }
+
         const q = new URLSearchParams(location.search);
         if (q.get('auth') === 'supabase' && q.get('code')){
-          const r = await cl.auth.exchangeCodeForSession(q.get('code'));
-          if (r.error) toast('Sign-in failed: ' + r.error.message);
+          try {
+            const r = await cl.auth.exchangeCodeForSession(q.get('code'));
+            if (r.error) toast('Sign-in failed: ' + r.error.message);
+          } catch(e){
+            const c = window.SB.classifyFetchFailure(e);
+            toast('Sign-in failed: ' + c.message);
+          }
           cleanUrl();
         }
-        const s = await cl.auth.getSession();
-        await setSession(s.data && s.data.session);
+        try {
+          const s = await cl.auth.getSession();
+          await setSession(s.data && s.data.session);
+        } catch(e){
+          // Host down — stay signed out rather than hanging the UI.
+          console.warn('auth getSession', e);
+          await setSession(null);
+        }
         cl.auth.onAuthStateChange(function(_evt, session){ setSession(session); });
       } catch(e){
         console.warn('auth init', e);
@@ -1509,34 +1619,86 @@ window.Auth = (function(){
     });
   }
 
+  async function ensureReachable(){
+    if (!window.SB || !window.SB.ping) return { ok: true };
+    const reach = await window.SB.ping();
+    if (reach && !reach.ok){
+      return { ok: false, msg: reach.message || t('study.authHostDown') };
+    }
+    return { ok: true };
+  }
+
+  function mapAuthCatch(e){
+    if (window.SB && window.SB.classifyFetchFailure){
+      return window.SB.classifyFetchFailure(e).message;
+    }
+    return (e && e.message) || t('study.unavailableAuth');
+  }
+
   async function google(){
+    const reach = await ensureReachable();
+    if (!reach.ok) return { error: { message: reach.msg } };
     const cl = window.SB.get();
     if (!cl) return { error: { message: t('study.unavailableAuth') } };
-    const r = await cl.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
-    });
-    return r;
+    try {
+      const r = await cl.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: location.origin + location.pathname + '?auth=supabase' }
+      });
+      if (r && r.error){
+        const msg = r.error.message || '';
+        if (/failed to fetch|networkerror|load failed/i.test(msg)){
+          return { error: { message: mapAuthCatch(r.error) } };
+        }
+      }
+      return r;
+    } catch(e){
+      return { error: { message: mapAuthCatch(e) } };
+    }
   }
 
   async function signUp(email, password, displayName){
+    const reach = await ensureReachable();
+    if (!reach.ok) return { ok:false, msg: reach.msg };
     const cl = window.SB.get();
-    if (!cl) return { ok:false, msg:'Sign-in is unavailable right now' };
-    const r = await cl.auth.signUp({
-      email: email, password: password,
-      options: { data: { display_name: displayName } }
-    });
-    if (r.error) return { ok:false, msg:r.error.message };
-    if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'Check your inbox to confirm your email' };
-    return { ok:true, msg:'Welcome, ' + displayName };
+    if (!cl) return { ok:false, msg: t('study.unavailableAuth') };
+    try {
+      const r = await cl.auth.signUp({
+        email: email, password: password,
+        options: { data: { display_name: displayName } }
+      });
+      if (r.error){
+        const msg = r.error.message || '';
+        if (/failed to fetch|networkerror|load failed/i.test(msg)){
+          return { ok:false, msg: mapAuthCatch(r.error) };
+        }
+        return { ok:false, msg: r.error.message };
+      }
+      if (r.data && r.data.user && !r.data.session) return { ok:true, msg:'Check your inbox to confirm your email' };
+      return { ok:true, msg:'Welcome, ' + displayName };
+    } catch(e){
+      return { ok:false, msg: mapAuthCatch(e) };
+    }
   }
 
   async function signIn(email, password){
+    const reach = await ensureReachable();
+    if (!reach.ok) return { ok:false, msg: reach.msg };
     const cl = window.SB.get();
-    if (!cl) return { ok:false, msg:'Sign-in is unavailable right now' };
-    const r = await cl.auth.signInWithPassword({ email: email, password: password });
-    if (r.error) return { ok:false, msg:r.error.message };
-    return { ok:true, msg:'Signed in' };
+    if (!cl) return { ok:false, msg: t('study.unavailableAuth') };
+    try {
+      const r = await cl.auth.signInWithPassword({ email: email, password: password });
+      if (r.error){
+        const msg = r.error.message || '';
+        if (/failed to fetch|networkerror|load failed/i.test(msg)){
+          return { ok:false, msg: mapAuthCatch(r.error) };
+        }
+        return { ok:false, msg: r.error.message };
+      }
+      return { ok:true, msg:'Signed in' };
+    } catch(e){
+      return { ok:false, msg: mapAuthCatch(e) };
+    }
   }
 
   async function signOut(){
@@ -1745,6 +1907,17 @@ window.Study = (function(){
     const cl = window.SB.get();
     if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
+    if (window.SB && window.SB.ping){
+      try {
+        const reach = await window.SB.ping();
+        if (reach && !reach.ok){
+          board = [];
+          boardErr = reach.message || t('study.authHostDown');
+          boardLoading = false; render();
+          return;
+        }
+      } catch(e){ /* fall through to RPC; classify there */ }
+    }
     const subj = boardSubject || null;
     try {
       const r = await cl.rpc('leaderboard_week', { p_subject: subj, p_limit: 25 });
@@ -1756,7 +1929,15 @@ window.Study = (function(){
         if (!s.error && s.data && s.data.length) standing = s.data[0];
       }
     } catch(e){
-      board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
+      board = [];
+      if (window.SB && window.SB.classifyFetchFailure){
+        const c = window.SB.classifyFetchFailure(e);
+        boardErr = (c.code === 'host_unreachable' || c.code === 'timeout' || c.code === 'network')
+          ? c.message
+          : ((e && e.message) ? e.message : t('study.unavailable'));
+      } else {
+        boardErr = (e && e.message) ? e.message : t('study.unavailable');
+      }
       // Full object, not just the message: during setup the useful part is
       // usually the Postgres hint/code (missing table, missing function,
       // RLS refusal), which never makes it into .message.
@@ -2492,6 +2673,7 @@ window.I18N = (function(){
       'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
       'study.renamePrompt': 'Display name (shown on the leaderboard)',
       'study.unavailableAuth': 'Sign-in is unavailable right now.',
+      'study.authHostDown': 'Cannot reach Supabase — the project may be paused or deleted. See supabase/SETUP.md to restore it.',
       'study.sectionSet': 'Section {section} — subjects updated',
       'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
 
@@ -2595,6 +2777,7 @@ window.I18N = (function(){
       'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
       'study.renamePrompt': 'Nom affiché (visible au classement)',
       'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
+      'study.authHostDown': 'Impossible de joindre Supabase — le projet est peut-être en pause ou supprimé. Voir supabase/SETUP.md.',
       'study.sectionSet': 'Section {section} — matières mises à jour',
       'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
 
@@ -3010,11 +3193,33 @@ async function checkSupabase(){
   const out = {};
   const cl = window.SB && window.SB.get();
 
+  out.config_url = (window.SB && window.SB.url) ? (window.SB.url() || '(empty — paste into supabase-config.js)') : '(missing)';
+
   if (!cl){
-    console.error('Supabase library did not load — check the CDN <script> tag in index.html.');
-    return { client: 'FAILED to load' };
+    const emptyCfg = !(window.SB && window.SB.url && window.SB.url());
+    out.client = emptyCfg
+      ? 'FAILED: URL/key empty — paste a live project into supabase-config.js (see SETUP.md)'
+      : 'FAILED: library did not load — check the CDN <script> in index.html';
+    console.error(out.client);
+    console.table(out);
+    return out;
   }
   out.client = 'OK loaded';
+
+  // Step 0: can we even reach the project host? NXDOMAIN / paused-deleted
+  // projects fail here with a clear recovery pointer.
+  if (window.SB.ping){
+    const reach = await window.SB.ping({ force: true });
+    if (!reach.ok){
+      out.step0_host = 'FAILED [' + (reach.code || 'unreachable') + ']: ' +
+        (reach.message || reach.detail) +
+        ' — create/restore a project and update supabase-config.js (SETUP.md → Recovering a missing project).';
+      console.table(out);
+      console.error(out.step0_host);
+      return out;
+    }
+    out.step0_host = 'OK ' + (reach.detail || '');
+  }
 
   async function probe(label, run){
     try {
@@ -3022,7 +3227,17 @@ async function checkSupabase(){
       out[label] = r.error ? ('FAILED: ' + r.error.message + (r.error.hint ? ' | hint: ' + r.error.hint : ''))
                            : 'OK';
       if (r.error) console.warn(label, r.error);
-    } catch(e){ out[label] = 'FAILED: ' + (e && e.message); }
+    } catch(e){
+      const mapped = (window.SB && window.SB.classifyFetchFailure)
+        ? window.SB.classifyFetchFailure(e)
+        : { message: (e && e.message) };
+      // Mid-probe network death → same recovery path as step0.
+      if (mapped.code === 'host_unreachable' || mapped.code === 'timeout'){
+        out[label] = 'FAILED: ' + mapped.message;
+      } else {
+        out[label] = 'FAILED: ' + (e && e.message);
+      }
+    }
   }
 
   await probe('step1_leaderboard_fn', () => cl.rpc('leaderboard_week', { p_subject: null, p_limit: 5 }));
@@ -3035,7 +3250,12 @@ async function checkSupabase(){
     out.step2_signed_in = (s.data && s.data.session)
       ? ('OK as ' + s.data.session.user.email)
       : 'not signed in (fine — sign in to test the board)';
-  } catch(e){ out.step2_signed_in = 'FAILED: ' + e.message; }
+  } catch(e){
+    const mapped = (window.SB && window.SB.classifyFetchFailure)
+      ? window.SB.classifyFetchFailure(e)
+      : { message: e.message };
+    out.step2_signed_in = 'FAILED: ' + mapped.message;
+  }
 
   const bad = Object.keys(out).filter(k => String(out[k]).indexOf('FAILED') === 0);
   console.table(out);

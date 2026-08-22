@@ -4,6 +4,11 @@ node_modules/
 # Build output (Vercel rebuilds this)
 dist/
 
+# Local secrets / overrides (use .env.example as the template)
+.env
+.env.local
+.env.*.local
+
 # Vite temp files
 vite.config.js.timestamp-*.mjs
 

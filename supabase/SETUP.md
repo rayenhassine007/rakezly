@@ -8,10 +8,63 @@ exactly two things:
 - **the weekly leaderboard**, which needs accounts to rank.
 
 Until the steps below are done, the Study panel will show a "Leaderboard
-unavailable" message and sign-in will fail. Nothing else is affected.
+unavailable" / host-unreachable message and sign-in will fail. Nothing else
+is affected.
 
-Your project: `kucqirnkgrtebmowzwlw`
-Dashboard: https://supabase.com/dashboard/project/kucqirnkgrtebmowzwlw
+---
+
+## Recovering a missing project (do this first)
+
+`supabase-config.js` ships with **empty** `url` / `key` on purpose. The old
+project hostname:
+
+`https://kucqirnkgrtebmowzwlw.supabase.co`
+
+no longer resolves in public DNS (**NXDOMAIN**) — deleted, paused past
+recovery, or the ref is wrong. **Email and Gmail login cannot work until
+you restore or create a live Supabase project and paste its URL +
+publishable key into the app (or set the Vercel env vars below).**
+
+### 1. Get a live project
+
+1. Open [https://supabase.com/dashboard](https://supabase.com/dashboard).
+2. If the old project still appears and can be restored / unpaused, do that.
+3. Otherwise **New project** → note the project URL
+   (`https://<project-ref>.supabase.co`) and the **anon / publishable** key
+   (Settings → API).
+
+### 2. Point the app at it
+
+Edit [`../supabase-config.js`](../supabase-config.js) and replace `url` and
+`key`:
+
+```js
+window.RAKEZLY_SUPABASE = {
+  url: 'https://YOUR-PROJECT-REF.supabase.co',
+  key: 'YOUR_PUBLISHABLE_OR_ANON_KEY'
+};
+```
+
+For Vite / Vercel you can instead set env vars (they override the file at
+dev/build time — see `vite.config.js`):
+
+- `VITE_SUPABASE_URL` (or `SUPABASE_URL`)
+- `VITE_SUPABASE_ANON_KEY` (or `SUPABASE_ANON_KEY`)
+
+Redeploy after changing env vars.
+
+### 3. Confirm the host is alive
+
+In the browser console on the site:
+
+```js
+await checkSupabase()
+```
+
+If `step0_host` still says FAILED, the URL is still wrong or DNS has not
+caught up. Fix credentials before continuing below.
+
+Then continue with steps 1–4 in this guide (schema, providers, redirect URLs).
 
 ---
 
@@ -72,10 +125,10 @@ off in the same panel.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
    create an **OAuth 2.0 Client ID** of type *Web application*.
-2. Under **Authorised redirect URIs** add exactly:
+2. Under **Authorised redirect URIs** add exactly (use **your** project ref):
 
    ```
-   https://kucqirnkgrtebmowzwlw.supabase.co/auth/v1/callback
+   https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback
    ```
 
 3. Copy the **Client ID** and **Client secret** into the Google provider in
@@ -115,11 +168,13 @@ first sign-in, as long as they are within the last 14 days.
 
 ## If something fails
 
-The panel shows the real Postgres error, and the full error object is logged
-to the browser console (**F12 → Console**). The usual ones:
+The panel shows the real error (or a clear “cannot reach Supabase” message
+when the host is dead). The full object is also logged to the browser
+console (**F12 → Console**). The usual ones:
 
 | Message | Cause |
 |---|---|
+| `Cannot reach Supabase at …` / Failed to fetch | Project deleted/paused or wrong URL — see **Recovering a missing project** |
 | `Could not find the function public.leaderboard_week` | Step 1 was not run, or failed partway |
 | `relation "public.study_sessions" does not exist` | Same — re-run `schema.sql` |
 | `new row violates row-level security policy` | Signed out, or the session is older than the 14-day upload window |
