@@ -1565,11 +1565,16 @@ window.SB = (function(){
 
 window.Room = (function(){
   const myId = Math.random().toString(36).slice(2, 10);
+  // How long the host can vanish (refresh / disconnect) before the next
+  // person who entered the room inherits hostship.
+  const HOST_GRACE_MS = 35000;
 
   let channel = null, code = null;
   let applying = false, panelOpen = false, status = 'idle', peers = 1;
   let isHost = false;
   let hostId = null;
+  let hostToken = null; // rotates on succession so an old host can't reclaim
+  let myJoinedAt = Date.now();
   // When true, everyone may control; when false, only the host.
   let allowTimer = true;
   let allowMusic = true;
@@ -1578,6 +1583,9 @@ window.Room = (function(){
   let personalStash = null; // { url } restored on leave
   let musicTick = null;
   let hostCheckTimer = null;
+  let hostWatch = null;
+  let hostMissingSince = null;
+  let members = []; // [{ id, name, joinedAt, host }]
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
@@ -1588,18 +1596,85 @@ window.Room = (function(){
   function canControlMusic(){ return !inRoom() || isHost || allowMusic; }
   function lastMusic(){ return lastMusicSnap; }
 
-  // Hostship survives refresh via sessionStorage. Without this, a reload
-  // mints a new myId, join() treats you as a guest, and if controls were
-  // locked to the host nobody can unlock them.
-  function hostKey(c){ return 'sf_room_owner_v2_' + String(c || '').toUpperCase(); }
-  function rememberHost(c){
-    try { sessionStorage.setItem(hostKey(c), '1'); } catch(e){}
+  // ── Display name (required for guests) ─────────────────────
+  function nameKey(){ return 'sf_room_display_name'; }
+  function getStoredName(){
+    try { return String(localStorage.getItem(nameKey()) || '').trim(); } catch(e){ return ''; }
+  }
+  function setStoredName(n){
+    try { localStorage.setItem(nameKey(), String(n || '').trim().slice(0, 24)); } catch(e){}
+  }
+  function displayName(){
+    const stored = getStoredName();
+    if (stored.length >= 2) return stored;
+    if (window.Auth && window.Auth.signedIn()) return String(window.Auth.name() || '').trim();
+    return '';
+  }
+  function needsName(){
+    if (window.Auth && window.Auth.signedIn()) return false;
+    return displayName().length < 2;
+  }
+  function saveNameFromInput(){
+    const el = document.getElementById('roomNameInput');
+    if (!el) return displayName();
+    const n = String(el.value || '').trim().slice(0, 24);
+    if (n.length >= 2) setStoredName(n);
+    return n;
+  }
+  function ensureNameOrToast(){
+    const n = saveNameFromInput();
+    if (window.Auth && window.Auth.signedIn()){
+      if (n.length >= 2) return n;
+      return displayName();
+    }
+    if (n.length < 2){
+      toast(t('room.needName'));
+      updateUI();
+      const el = document.getElementById('roomNameInput');
+      if (el) try { el.focus(); } catch(e){}
+      return null;
+    }
+    return n;
+  }
+
+  // ── Host token (survives refresh, invalidated on succession) ─
+  function hostKey(c){ return 'sf_room_owner_v3_' + String(c || '').toUpperCase(); }
+  function joinedKey(c){ return 'sf_room_joined_v1_' + String(c || '').toUpperCase(); }
+  function rememberHost(c, token){
+    try { sessionStorage.setItem(hostKey(c), token); } catch(e){}
   }
   function forgetHost(c){
     try { sessionStorage.removeItem(hostKey(c)); } catch(e){}
   }
-  function wasHost(c){
-    try { return sessionStorage.getItem(hostKey(c)) === '1'; } catch(e){ return false; }
+  function storedHostToken(c){
+    try { return sessionStorage.getItem(hostKey(c)) || ''; } catch(e){ return ''; }
+  }
+  function iOwnHostToken(c){
+    const mine = storedHostToken(c);
+    if (!mine) return false;
+    if (!hostToken) return true; // reconnecting before first sync
+    return mine === hostToken;
+  }
+  function newHostToken(){
+    return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+  function joinStamp(c, fresh){
+    try {
+      if (fresh) {
+        const v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+        return Number(v);
+      }
+      let v = sessionStorage.getItem(joinedKey(c));
+      if (!v){
+        v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+      }
+      return Number(v);
+    } catch(e){ return Date.now(); }
+  }
+  function forgetJoin(c){
+    try { sessionStorage.removeItem(joinedKey(c)); } catch(e){}
   }
 
   function genCode(){
@@ -1611,7 +1686,8 @@ window.Room = (function(){
   function snapshot(){
     return {
       mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running,
-      hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+      hostId: hostId, hostToken: hostToken,
+      allowTimer: allowTimer, allowMusic: allowMusic
     };
   }
 
@@ -1623,19 +1699,29 @@ window.Room = (function(){
   function trackPresence(){
     if (!channel) return;
     try {
-      channel.track({ id: myId, host: isHost, at: Date.now() });
+      channel.track({
+        id: myId,
+        name: displayName() || 'student',
+        joinedAt: myJoinedAt,
+        host: isHost,
+        at: Date.now()
+      });
     } catch(e){}
   }
 
-  // permanent: true  → real room owner (create / refresh reclaim) — written to sessionStorage
-  // permanent: false → temporary stand-in while the owner is gone — NEVER remembered,
-  //                    otherwise a refresh blip makes every peer a lasting "host".
+  // permanent: true → write/rotate host token (create or succession)
   function claimHost(opts){
     const permanent = !!(opts && opts.permanent);
     const openLocks = !!(opts && opts.openLocks);
+    const rotate = !!(opts && opts.rotateToken);
     isHost = true;
     hostId = myId;
-    if (permanent && code) rememberHost(code);
+    if (permanent && code){
+      if (rotate || !hostToken || !iOwnHostToken(code)){
+        hostToken = newHostToken();
+      }
+      rememberHost(code, hostToken);
+    }
     if (openLocks){ allowTimer = true; allowMusic = true; }
     trackPresence();
     if (status === 'joined') {
@@ -1655,25 +1741,51 @@ window.Room = (function(){
   function presentPeople(){
     if (!channel) return [];
     const out = [];
+    const seen = {};
     try {
       const state = channel.presenceState() || {};
       Object.keys(state).forEach(function(k){
         (state[k] || []).forEach(function(p){
-          if (p && p.id) out.push(p);
+          if (!p || !p.id || seen[p.id]) return;
+          seen[p.id] = 1;
+          out.push({
+            id: p.id,
+            name: String(p.name || 'student').slice(0, 24),
+            joinedAt: Number(p.joinedAt) || 0,
+            host: !!p.host
+          });
         });
       });
     } catch(e){}
+    out.sort(function(a, b){
+      if (a.joinedAt !== b.joinedAt) return a.joinedAt - b.joinedAt;
+      return String(a.id).localeCompare(String(b.id));
+    });
     return out;
   }
 
-  let hostMissingSince = null;
+  function refreshMembers(){
+    members = presentPeople();
+    peers = members.length || 1;
+  }
 
-  // If the recorded host is no longer in presence, the session owner reclaims.
-  // Anyone else may only become a temporary host after a short grace period
-  // (so a refresh doesn't crown every remaining peer).
+  // Next in join order after the missing host (or earliest if host unknown).
+  function successorId(people, missingHostId){
+    if (!people.length) return null;
+    if (missingHostId){
+      const idx = people.findIndex(function(p){ return p.id === missingHostId; });
+      // Host not in list — pick earliest joiner overall.
+      if (idx < 0) return people[0].id;
+    }
+    return people[0].id;
+  }
+
+  // If the host is gone for HOST_GRACE_MS, the next person who entered
+  // becomes the permanent host (new token so the old host can't steal it back).
   function ensureHostAlive(){
     if (status !== 'joined' || !channel) return;
-    const people = presentPeople();
+    refreshMembers();
+    const people = members;
     if (!people.length) return;
     const ids = people.map(function(p){ return p.id; });
     const hostHere = !!(hostId && ids.indexOf(hostId) !== -1);
@@ -1681,40 +1793,42 @@ window.Room = (function(){
     if (hostHere) {
       hostMissingSince = null;
       isHost = (hostId === myId);
-      // Do NOT rememberHost here — that was crowning temporary hosts forever.
       updateUI();
       return;
     }
 
-    // Dead / missing host
-    if (wasHost(code)) {
+    // Still the token holder and reconnecting — reclaim immediately.
+    if (code && iOwnHostToken(code)) {
       hostMissingSince = null;
-      claimHost({ permanent: true, openLocks: false });
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
       return;
     }
 
-    // Wait for the real host to finish refreshing before electing anyone.
     if (!hostMissingSince) hostMissingSince = Date.now();
-    if (Date.now() - hostMissingSince < 2800) return;
+    const goneFor = Date.now() - hostMissingSince;
+    if (goneFor < HOST_GRACE_MS) {
+      updateUI();
+      return;
+    }
 
-    const sorted = ids.slice().sort();
-    if (sorted[0] === myId) {
-      // Temporary only — open locks so the room isn't stuck, but leave
-      // sessionStorage alone so the original host can reclaim on return.
-      if (!(isHost && hostId === myId)) {
-        claimHost({ permanent: false, openLocks: true });
+    const next = successorId(people, hostId);
+    if (next === myId) {
+      if (!(isHost && hostId === myId && iOwnHostToken(code))) {
+        claimHost({ permanent: true, openLocks: true, rotateToken: true });
+        toast(t('room.youAreNowHost'));
       }
     } else {
-      yieldHost(sorted[0]);
+      yieldHost(next);
     }
   }
 
   function applyMeta(s){
     if (!s) return;
+    if (s.hostToken) hostToken = s.hostToken;
     const remoteHost = s.hostId || null;
+    const iAmOwner = !!(code && iOwnHostToken(code));
 
-    // Session owner always keeps hostship (survives stale pre-refresh ids).
-    if (code && wasHost(code)) {
+    if (iAmOwner) {
       hostId = myId;
       isHost = true;
       if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
@@ -1722,7 +1836,6 @@ window.Room = (function(){
       return;
     }
 
-    // Temporary host yields as soon as someone else claims host in a sync.
     if (remoteHost && remoteHost !== myId) {
       hostId = remoteHost;
       isHost = false;
@@ -1753,16 +1866,17 @@ window.Room = (function(){
       updateDisplay(); updateBar();
       const b = document.getElementById('startBtn');
       if (s.running){
-        if (!running) startTimer();               // sets label 'Pause' + starts ticker
+        if (!running) startTimer();
       } else {
-        if (running){ running = false; clearInterval(ticker); }   // stop ticker, no label churn
+        if (running){ running = false; clearInterval(ticker); }
         if (b){ b.textContent = (remainSecs >= totalSecs) ? t('timer.start') : t('timer.resume'); b.classList.remove('running'); }
         if (td) td.classList.toggle('blink', remainSecs < totalSecs);
       }
     } catch(e){ console.warn('room apply', e); }
     applying = false;
-    // After applying a stale "old host" sync, re-assert if we own the session.
-    if (code && wasHost(code) && hostId !== myId) claimHost({ permanent: true, openLocks: false });
+    if (code && iOwnHostToken(code) && hostId !== myId) {
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
+    }
     updateUI();
   }
 
@@ -1796,7 +1910,8 @@ window.Room = (function(){
     if (!canControlTimer()){
       toast(t('room.timerLocked'));
       if (lastTimerSnap) apply(Object.assign({}, lastTimerSnap, {
-        hostId: hostId, allowTimer: allowTimer, allowMusic: allowMusic
+        hostId: hostId, hostToken: hostToken,
+        allowTimer: allowTimer, allowMusic: allowMusic
       }));
       return;
     }
@@ -1839,6 +1954,13 @@ window.Room = (function(){
   function stopMusicTick(){
     if (musicTick){ clearInterval(musicTick); musicTick = null; }
   }
+  function startHostWatch(){
+    stopHostWatch();
+    hostWatch = setInterval(function(){ ensureHostAlive(); }, 5000);
+  }
+  function stopHostWatch(){
+    if (hostWatch){ clearInterval(hostWatch); hostWatch = null; }
+  }
 
   function stashPersonal(){
     personalStash = {
@@ -1852,7 +1974,6 @@ window.Room = (function(){
     if (url) {
       if (typeof loadPlayerUrl === 'function') {
         loadPlayerUrl({ url: url, fromRemote: true });
-        // fromRemote skips localStorage write and room notify — re-save personal
         try { localStorage.setItem('sf_player_url', url); } catch(e){}
       }
     } else if (typeof clearPlayer === 'function') {
@@ -1864,31 +1985,38 @@ window.Room = (function(){
     const created = opts && opts.created;
     const cl = sb();
     if (!cl){ toast('Shared rooms are unavailable right now'); return; }
+    if (!ensureNameOrToast()) return;
     if (channel) leave(true);
-    const reclaim = !created && wasHost(c);
-    if (created || reclaim){
+
+    myJoinedAt = joinStamp(c, !!created);
+    const reclaim = !created && iOwnHostToken(c);
+    if (created){
       isHost = true;
       hostId = myId;
-      rememberHost(c);
-      if (created){ allowTimer = true; allowMusic = true; }
+      hostToken = newHostToken();
+      rememberHost(c, hostToken);
+      allowTimer = true;
+      allowMusic = true;
+    } else if (reclaim){
+      isHost = true;
+      hostId = myId;
+      hostToken = storedHostToken(c) || hostToken;
     } else {
       isHost = false;
       hostId = null;
-      // allowTimer / allowMusic arrive via sync
     }
+
     stashPersonal();
-    code = c; status = 'connecting'; updateUI();
+    code = c; status = 'connecting'; hostMissingSince = null; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
     channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
     channel.on('broadcast', { event:'music' }, function(m){ applyMusic(m.payload); });
     channel.on('broadcast', { event:'hello' }, function(){
-      // Timer: anyone can echo. Music: only the host is authoritative,
-      // otherwise every peer would race with their personal player.
       push();
       if (isHost) pushMusic();
     });
     channel.on('presence',  { event:'sync'  }, function(){
-      try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
+      refreshMembers();
       ensureHostAlive();
       updateUI();
     });
@@ -1897,19 +2025,15 @@ window.Room = (function(){
         status = 'joined';
         trackPresence();
         try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}
-        if (created || reclaim) {
-          // Seed / re-assert host state after create or refresh
-          pushFull();
-        }
+        if (created || reclaim) pushFull();
         setUrl(c);
-        toast(created ? (t('room.created') || ('Room '+c))
-          : reclaim ? (t('room.reclaimed') || ('Back as host · '+c))
+        toast(created ? t('room.created')
+          : reclaim ? t('room.reclaimed')
           : ('Joined room '+c));
         startMusicTick();
+        startHostWatch();
         if (hostCheckTimer) clearTimeout(hostCheckTimer);
-        // Longer than the grace window so a refreshing host can reconnect
-        // before anyone else is elected.
-        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 3200);
+        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 1500);
         updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
@@ -1917,22 +2041,27 @@ window.Room = (function(){
     });
   }
 
-  function create(){ join(genCode(), { created: true }); }
+  function create(){
+    if (!ensureNameOrToast()) return;
+    join(genCode(), { created: true });
+  }
 
   function leave(silent){
     const cl = sb();
     const leavingCode = code;
+    const owned = leavingCode && iOwnHostToken(leavingCode);
     stopMusicTick();
+    stopHostWatch();
     if (hostCheckTimer){ clearTimeout(hostCheckTimer); hostCheckTimer = null; }
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
-    channel = null; code = null; status = 'idle'; peers = 1;
-    isHost = false; hostId = null;
+    channel = null; code = null; status = 'idle'; peers = 1; members = [];
+    isHost = false; hostId = null; hostToken = null;
     allowTimer = true; allowMusic = true;
     lastTimerSnap = null; lastMusicSnap = null;
-    // Intentional leave drops host claim; silent leave (re-join) keeps it
-    // so a refresh / reconnect can reclaim. Only the session owner has a
-    // stored claim — temporary stand-ins never wrote one.
-    if (!silent && leavingCode && wasHost(leavingCode)) forgetHost(leavingCode);
+    if (!silent && leavingCode){
+      if (owned) forgetHost(leavingCode);
+      forgetJoin(leavingCode);
+    }
     hostMissingSince = null;
     clearUrl();
     restorePersonal();
@@ -1958,6 +2087,41 @@ window.Room = (function(){
       '</button>';
   }
 
+  function membersHtml(){
+    const list = members.length ? members : presentPeople();
+    if (!list.length){
+      return '<div class="room-members-empty">' + esc(t('room.noMembers')) + '</div>';
+    }
+    return '<ul class="room-members">' + list.map(function(p){
+      const isMe = p.id === myId;
+      const isH = (hostId && p.id === hostId);
+      const hostBadge = isH ? '<span class="room-host-badge">' + esc(t('room.hostBadge')) + '</span>' : '';
+      const you = isMe ? '<span class="room-you-badge">' + esc(t('room.you')) + '</span>' : '';
+      return '<li class="room-member'+(isH?' is-host':'')+(isMe?' is-me':'')+'">' +
+               '<span class="room-member-name">'+esc(p.name || 'student')+'</span>' +
+               hostBadge + you +
+             '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function nameFieldHtml(){
+    const signedIn = window.Auth && window.Auth.signedIn();
+    const val = esc(displayName());
+    if (signedIn && displayName()){
+      return '<div class="room-name-row room-name-set">' +
+               '<span class="room-name-label">' + esc(t('room.yourName')) + '</span>' +
+               '<span class="room-name-value">'+val+'</span>' +
+             '</div>';
+    }
+    return '<div class="room-name-row">' +
+             '<label class="room-name-label" for="roomNameInput">' + esc(t('room.yourName')) + '</label>' +
+             '<input class="room-input" id="roomNameInput" type="text" maxlength="24" ' +
+               'placeholder="' + esc(t('room.namePlaceholder')) + '" value="'+val+'" ' +
+               'onkeydown="if(event.key===\'Enter\'){Room.saveName();}">' +
+           '</div>' +
+           (needsName() ? '<div class="room-name-hint">' + esc(t('room.needName')) + '</div>' : '');
+  }
+
   function updateUI(){
     const btn = document.getElementById('roomFixedBtn');
     if (btn) btn.classList.toggle('active', status === 'joined');
@@ -1965,6 +2129,11 @@ window.Room = (function(){
     if (panel) panel.classList.toggle('open', panelOpen);
     const body = document.getElementById('roomBody');
     if (!body) return;
+
+    // Preserve name/code inputs across re-renders when possible
+    const prevName = (document.getElementById('roomNameInput') || {}).value;
+    const prevCode = (document.getElementById('roomJoinInput') || {}).value;
+
     if (status === 'joined'){
       let perms = '';
       if (isHost){
@@ -1983,28 +2152,51 @@ window.Room = (function(){
       }
       const muteLabel = (typeof isLocalMuted === 'function' && isLocalMuted())
         ? t('player.unmute') : t('player.mute');
+      const waiting = hostMissingSince && !(hostId && members.some(function(m){ return m.id === hostId; }));
+      const waitNote = waiting
+        ? '<div class="room-host-wait">' + esc(t('room.hostMissing')) + '</div>'
+        : '';
       body.innerHTML =
         '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
         '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+
           (isHost ? ' · '+esc(t('room.youHost')) : '') +
         '</div>' +
+        waitNote +
         '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">' + esc(t('room.copy')) + '</button></div>' +
+        '<div class="room-sec-label">' + esc(t('room.people')) + '</div>' +
+        membersHtml() +
         perms +
         '<button type="button" class="room-btn room-mute-btn'+(typeof isLocalMuted==='function'&&isLocalMuted()?' is-on':'')+'" onclick="toggleLocalMute()">'+esc(muteLabel)+'</button>' +
         '<div class="room-hint">' + esc(t('room.hint')) + '</div>' +
         '<button class="room-btn room-btn-leave" onclick="Room.leave()">' + esc(t('room.leave')) + '</button>';
     } else {
       const connecting = (status === 'connecting');
+      const blocked = needsName() && !(window.Auth && window.Auth.signedIn());
+      const pendingRoom = (function(){
+        const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
+        return m ? m[1].toUpperCase() : '';
+      })();
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
+        nameFieldHtml() +
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting||blocked?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
         '<div class="room-or">' + esc(t('room.or')) + '</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">' + esc(t('room.join')) + '</button></div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8" value="'+(prevCode?esc(prevCode):(pendingRoom&&blocked?esc(pendingRoom):''))+'"><button class="room-btn" onclick="Room.joinFromInput()"'+(connecting||blocked?' disabled':'')+'>' + esc(t('room.join')) + '</button></div>' +
         (status === 'error' ? '<div class="room-err">' + esc(t('room.failed')) + '</div>' : '');
+      if (prevName && document.getElementById('roomNameInput') && !getStoredName()){
+        document.getElementById('roomNameInput').value = prevName;
+      }
     }
   }
 
+  function saveName(){
+    saveNameFromInput();
+    updateUI();
+    if (status === 'joined') trackPresence();
+  }
+
   function joinFromInput(){
+    if (!ensureNameOrToast()) return;
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
     if (v.length >= 4) join(v); else toast('That code is too short');
@@ -2016,22 +2208,38 @@ window.Room = (function(){
     const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  // close the room panel whenever another fixed panel button is clicked
   ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
-  // auto-join from ?room=CODE once the Supabase lib is ready
+  // auto-join from ?room=CODE once named + Supabase ready
   (function autoJoin(){
     const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
     if (!m) { updateUI(); return; }
     const c = m[1].toUpperCase();
+    panelOpen = true;
     let tries = 0;
     (function wait(){
-      if (window.supabase && window.supabase.createClient){ panelOpen = true; join(c); }
-      else if (tries++ < 40){ setTimeout(wait, 150); }
+      if (!(window.supabase && window.supabase.createClient)){
+        if (tries++ < 40) setTimeout(wait, 150);
+        else updateUI();
+        return;
+      }
+      if (needsName()){
+        updateUI(); // show name field; user joins manually after naming
+        return;
+      }
+      join(c);
     })();
   })();
+
+  if (window.Auth && window.Auth.onChange){
+    window.Auth.onChange(function(){ updateUI(); });
+  } else {
+    setTimeout(function(){
+      if (window.Auth && window.Auth.onChange) window.Auth.onChange(function(){ updateUI(); });
+    }, 0);
+  }
 
   return {
     onLocalChange: onLocalChange,
@@ -2039,7 +2247,7 @@ window.Room = (function(){
     create: create, join: join, refresh: updateUI,
     close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
     joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
-    togglePanel: togglePanel,
+    togglePanel: togglePanel, saveName: saveName,
     inRoom: inRoom,
     canControlTimer: canControlTimer,
     canControlMusic: canControlMusic,
@@ -3192,6 +3400,15 @@ window.I18N = (function(){
       'room.created': 'Room created',
       'room.reclaimed': 'Back as host',
       'room.youHost': 'you are host',
+      'room.youAreNowHost': 'You are now the host',
+      'room.hostMissing': 'Host disconnected — waiting before passing the role…',
+      'room.people': 'In this room',
+      'room.hostBadge': 'host',
+      'room.you': 'you',
+      'room.noMembers': 'No one else here yet',
+      'room.yourName': 'Your name',
+      'room.namePlaceholder': 'e.g. Amine',
+      'room.needName': 'Enter a name (at least 2 characters) before creating or joining a room',
       'room.perms': 'Who can control',
       'room.allowTimer': 'Others can control the timer',
       'room.allowMusic': 'Others can control the music',
@@ -3314,6 +3531,15 @@ window.I18N = (function(){
       'room.created': 'Salle créée',
       'room.reclaimed': 'De retour en tant qu’hôte',
       'room.youHost': 'tu es hôte',
+      'room.youAreNowHost': 'Tu es maintenant l’hôte',
+      'room.hostMissing': 'Hôte déconnecté — transfert du rôle dans un instant…',
+      'room.people': 'Dans la salle',
+      'room.hostBadge': 'hôte',
+      'room.you': 'toi',
+      'room.noMembers': 'Personne d’autre pour l’instant',
+      'room.yourName': 'Ton prénom',
+      'room.namePlaceholder': 'ex. Amine',
+      'room.needName': 'Entre un prénom (au moins 2 caractères) avant de créer ou rejoindre une salle',
       'room.perms': 'Qui peut contrôler',
       'room.allowTimer': 'Les autres peuvent contrôler le minuteur',
       'room.allowMusic': 'Les autres peuvent contrôler la musique',
