@@ -122,6 +122,7 @@ to the browser console (**F12 → Console**). The usual ones:
 
 | Message | Cause |
 |---|---|
+| `Could not find the 'study_path' column of 'profiles'` | Run `supabase/migrate-study-path.sql` in the SQL Editor (or re-run `schema.sql`) |
 | `Could not find the function public.leaderboard_week` | Step 1 was not run, or failed partway |
 | `relation "public.study_sessions" does not exist` | Same — re-run `schema.sql` |
 | `new row violates row-level security policy` | Signed out, or the session is older than the 14-day upload window |
