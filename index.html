@@ -181,52 +181,61 @@
 
   <!-- ─────────────── PLANNER VIEW ─────────────── -->
   <section class="planner" aria-label="Planner">
-
     <div class="pane planner-card">
-      <div class="pane-head">
-        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3M8 17.5h3M14 14h2.5"/></svg><h2 class="pane-title" data-i18n="plan.weekly">Weekly planner</h2></span>
-        <div class="pl-nav">
-          <button class="pl-btn" onclick="Planner.shiftWeek(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous week">‹</button>
-          <span class="pl-label" id="weekLabel"></span>
-          <button class="pl-btn" onclick="Planner.shiftWeek(1)" data-i18n-title="plan.next" title="Next" aria-label="Next week">›</button>
-          <button class="pl-btn pl-btn-wide" onclick="Planner.todayWeek()" data-i18n="plan.thisWeek">This week</button>
+      <div class="planner-tabs" role="tablist" aria-label="Planner range">
+        <span class="tab-indicator" aria-hidden="true"></span>
+        <button type="button" class="planner-tab active" role="tab" data-plan-tab="week"
+                aria-selected="true" onclick="Planner.setTab('week')" data-i18n="plan.weeklyTab">Weekly</button>
+        <button type="button" class="planner-tab" role="tab" data-plan-tab="month"
+                aria-selected="false" onclick="Planner.setTab('month')" data-i18n="plan.monthlyTab">Monthly</button>
+      </div>
+
+      <div class="planner-panel" id="planWeekPanel" data-plan-panel="week">
+        <div class="pane-head">
+          <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3M8 17.5h3M14 14h2.5"/></svg><h2 class="pane-title" data-i18n="plan.weekly">Weekly planner</h2></span>
+          <div class="pl-nav">
+            <button class="pl-btn" onclick="Planner.shiftWeek(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous week">‹</button>
+            <span class="pl-label" id="weekLabel"></span>
+            <button class="pl-btn" onclick="Planner.shiftWeek(1)" data-i18n-title="plan.next" title="Next" aria-label="Next week">›</button>
+            <button class="pl-btn pl-btn-wide" onclick="Planner.todayWeek()" data-i18n="plan.thisWeek">This week</button>
+          </div>
         </div>
-      </div>
 
-      <div class="pl-toolbar">
-        <span class="pl-range-label" data-i18n="plan.from">From</span>
-        <select class="pl-select" id="planFrom" onchange="Planner.setRange('from', this.value)" aria-label="Start hour"></select>
-        <span class="pl-range-label" data-i18n="plan.to">to</span>
-        <select class="pl-select" id="planTo" onchange="Planner.setRange('to', this.value)" aria-label="End hour"></select>
-        <span class="pl-spacer"></span>
-        <button class="pl-btn pl-btn-wide" onclick="Planner.clearWeek()" data-i18n="plan.clear">Clear this week</button>
-        <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
-      </div>
-
-      <div class="pl-grid pl-week" id="weekGrid"></div>
-    </div>
-
-    <div class="pane planner-card">
-      <div class="pane-head">
-        <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="17.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg><h2 class="pane-title" data-i18n="plan.monthly">Monthly planner</h2></span>
-        <div class="pl-nav">
-          <button class="pl-btn" onclick="Planner.shiftMonth(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous month">‹</button>
-          <span class="pl-label" id="monthLabel"></span>
-          <button class="pl-btn" onclick="Planner.shiftMonth(1)" data-i18n-title="plan.next" title="Next" aria-label="Next month">›</button>
-          <button class="pl-btn pl-btn-wide" onclick="Planner.todayMonth()" data-i18n="plan.today">Today</button>
+        <div class="pl-toolbar pl-toolbar-week">
+          <span class="pl-range-label" data-i18n="plan.from">From</span>
+          <select class="pl-select" id="planFrom" onchange="Planner.setRange('from', this.value)" aria-label="Start hour"></select>
+          <span class="pl-range-label" data-i18n="plan.to">to</span>
+          <select class="pl-select" id="planTo" onchange="Planner.setRange('to', this.value)" aria-label="End hour"></select>
+          <span class="pl-spacer"></span>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.clearWeek()" data-i18n="plan.clear">Clear this week</button>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
         </div>
+
+        <div class="pl-grid pl-week" id="weekGrid"></div>
       </div>
 
-      <div class="pl-toolbar">
-        <span class="pl-spacer"></span>
-        <button class="pl-btn pl-btn-wide" onclick="Planner.clearMonth()" data-i18n="plan.clearMonth">Clear this month</button>
-        <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
+      <div class="planner-panel" id="planMonthPanel" data-plan-panel="month" hidden>
+        <div class="pane-head">
+          <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="17.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg><h2 class="pane-title" data-i18n="plan.monthly">Monthly planner</h2></span>
+          <div class="pl-nav">
+            <button class="pl-btn" onclick="Planner.shiftMonth(-1)" data-i18n-title="plan.prev" title="Previous" aria-label="Previous month">‹</button>
+            <span class="pl-label" id="monthLabel"></span>
+            <button class="pl-btn" onclick="Planner.shiftMonth(1)" data-i18n-title="plan.next" title="Next" aria-label="Next month">›</button>
+            <button class="pl-btn pl-btn-wide" onclick="Planner.todayMonth()" data-i18n="plan.today">Today</button>
+          </div>
+        </div>
+
+        <div class="pl-toolbar">
+          <span class="pl-spacer"></span>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.clearMonth()" data-i18n="plan.clearMonth">Clear this month</button>
+          <button class="pl-btn pl-btn-wide" onclick="Planner.print()" data-i18n="plan.print">Print</button>
+        </div>
+
+        <div class="pl-grid pl-month" id="monthGrid"></div>
       </div>
 
-      <div class="pl-grid pl-month" id="monthGrid"></div>
       <p class="goals-hint" data-i18n="plan.hint">Add each task with +. Everything saves automatically on this device.</p>
     </div>
-
   </section>
 
   <!-- ─────────────── STATS VIEW ─────────────── -->

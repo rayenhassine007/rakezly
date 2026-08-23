@@ -3474,7 +3474,7 @@ window.Goals = (function(){
   function isGoalDragBlocked(el){
     if (!el) return true;
     return !!el.closest(
-      'button, input, textarea, select, a, .goal-edit, .goal-actions, .goal-drag'
+      'button, input, textarea, select, a, .goal-edit, .goal-actions'
     );
   }
 
@@ -3484,7 +3484,63 @@ window.Goals = (function(){
       el.classList.remove('goal-drop-target', 'is-dragging');
       el.style.transform = '';
       el.style.zIndex = '';
+      el.style.pointerEvents = '';
     });
+  }
+
+  function releaseGoalPointer(drag){
+    if (!drag || !drag.row) return;
+    try {
+      if (drag.row.hasPointerCapture && drag.row.hasPointerCapture(drag.pointerId)){
+        drag.row.releasePointerCapture(drag.pointerId);
+      }
+    } catch(err){}
+  }
+
+  function endPtrDrag(){
+    if (!ptrDrag) return;
+    const drag = ptrDrag;
+    ptrDrag = null;
+    document.body.classList.remove('goal-dragging');
+    releaseGoalPointer(drag);
+    const moved = drag.dragging;
+    if (moved && drag.overId) reorderGoals(drag.id, drag.overId);
+    clearDropTargets(drag.list);
+    reorderDragId = null;
+    if (moved){
+      setTimeout(function(){ goalDragSuppressClick = false; }, 40);
+    } else {
+      goalDragSuppressClick = false;
+    }
+  }
+
+  function onGoalPointerMove(e){
+    if (!ptrDrag || e.pointerId !== ptrDrag.pointerId) return;
+    const dy = e.clientY - ptrDrag.startY;
+    const dx = e.clientX - ptrDrag.startX;
+    if (!ptrDrag.dragging){
+      if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+      ptrDrag.dragging = true;
+      goalDragSuppressClick = true;
+      reorderDragId = ptrDrag.id;
+      ptrDrag.row.classList.add('is-dragging');
+      document.body.classList.add('goal-dragging');
+    }
+    e.preventDefault();
+    ptrDrag.row.style.transform = 'translateY(' + dy + 'px)';
+    ptrDrag.row.style.zIndex = '3';
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const target = el && el.closest('.goal-item');
+    ptrDrag.list.querySelectorAll('.goal-item').forEach(function(item){
+      item.classList.toggle('goal-drop-target',
+        !!(target && item === target && item.dataset.goalId !== ptrDrag.id));
+    });
+    ptrDrag.overId = (target && target.dataset.goalId !== ptrDrag.id) ? target.dataset.goalId : null;
+  }
+
+  function onGoalPointerUp(e){
+    if (!ptrDrag || e.pointerId !== ptrDrag.pointerId) return;
+    endPtrDrag();
   }
 
   function bindGoalList(){
@@ -3494,86 +3550,31 @@ window.Goals = (function(){
     list.addEventListener('click', onGoalListClick);
     list.addEventListener('keydown', onGoalListKeydown);
 
-    list.addEventListener('dragstart', function(e){
-      const row = e.target.closest('.goal-item');
-      if (!row || row.classList.contains('done') || row.classList.contains('editing')){
-        e.preventDefault(); return;
-      }
-      if (isGoalDragBlocked(e.target)){ e.preventDefault(); return; }
-      reorderDragId = row.dataset.goalId;
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', reorderDragId); } catch(err){}
-      row.classList.add('is-dragging');
-      goalDragSuppressClick = true;
-    });
-    list.addEventListener('dragend', function(){
-      reorderDragId = null;
-      clearDropTargets(list);
-      setTimeout(function(){ goalDragSuppressClick = false; }, 0);
-    });
-    list.addEventListener('dragover', function(e){
-      if (!reorderDragId) return;
-      e.preventDefault();
-      const row = e.target.closest('.goal-item');
-      list.querySelectorAll('.goal-item').forEach(function(el){
-        el.classList.toggle('goal-drop-target', !!(row && el === row && el.dataset.goalId !== reorderDragId));
-      });
-    });
-    list.addEventListener('drop', function(e){
-      e.preventDefault();
-      const row = e.target.closest('.goal-item');
-      if (row && reorderDragId && row.dataset.goalId !== reorderDragId){
-        reorderGoals(reorderDragId, row.dataset.goalId);
-      }
-      reorderDragId = null;
-      clearDropTargets(list);
-    });
-
+    // Pointer-only reorder — HTML5 drag + pointer capture fought each other
+    // and could leave the page unable to receive clicks after a hold.
     list.addEventListener('pointerdown', function(e){
       if (e.button !== 0) return;
       const row = e.target.closest('.goal-item');
       if (!row || row.classList.contains('done') || row.classList.contains('editing')) return;
       if (isGoalDragBlocked(e.target)) return;
+      if (ptrDrag) endPtrDrag();
       ptrDrag = {
         id: row.dataset.goalId, row: row, list: list,
         startY: e.clientY, startX: e.clientX, overId: null, dragging: false,
         pointerId: e.pointerId
       };
+      try { row.setPointerCapture(e.pointerId); } catch(err){}
     });
-    list.addEventListener('pointermove', function(e){
-      if (!ptrDrag) return;
-      const dy = e.clientY - ptrDrag.startY;
-      const dx = e.clientX - ptrDrag.startX;
-      if (!ptrDrag.dragging){
-        if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
-        ptrDrag.dragging = true;
-        goalDragSuppressClick = true;
-        ptrDrag.row.classList.add('is-dragging');
-        try { ptrDrag.row.setPointerCapture(ptrDrag.pointerId); } catch(err){}
-      }
-      e.preventDefault();
-      ptrDrag.row.style.transform = 'translateY(' + dy + 'px)';
-      ptrDrag.row.style.zIndex = '3';
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const target = el && el.closest('.goal-item');
-      ptrDrag.list.querySelectorAll('.goal-item').forEach(function(item){
-        item.classList.toggle('goal-drop-target',
-          !!(target && item === target && item.dataset.goalId !== ptrDrag.id));
-      });
-      ptrDrag.overId = (target && target.dataset.goalId !== ptrDrag.id) ? target.dataset.goalId : null;
+    list.addEventListener('pointermove', onGoalPointerMove);
+    list.addEventListener('pointerup', onGoalPointerUp);
+    list.addEventListener('pointercancel', onGoalPointerUp);
+    list.addEventListener('lostpointercapture', function(e){
+      if (ptrDrag && e.pointerId === ptrDrag.pointerId) endPtrDrag();
     });
-    function endPtrDrag(e){
-      if (!ptrDrag) return;
-      const moved = ptrDrag.dragging;
-      if (moved && ptrDrag.overId) reorderGoals(ptrDrag.id, ptrDrag.overId);
-      clearDropTargets(ptrDrag.list);
-      ptrDrag = null;
-      if (moved){
-        setTimeout(function(){ goalDragSuppressClick = false; }, 0);
-      }
-    }
-    list.addEventListener('pointerup', endPtrDrag);
-    list.addEventListener('pointercancel', endPtrDrag);
+    window.addEventListener('blur', function(){ if (ptrDrag) endPtrDrag(); });
+    document.addEventListener('visibilitychange', function(){
+      if (document.hidden && ptrDrag) endPtrDrag();
+    });
   }
 
   // Which goal should receive the next finished pomodoro?
@@ -3683,8 +3684,7 @@ window.Goals = (function(){
                  '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
                '</div>' +
              '</div>');
-          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'"' +
-                   (!g.done && !isEditing ? ' draggable="true"' : '') + '>' +
+          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'">' +
                    '<span class="goal-drag" aria-hidden="true">' +
                      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h2M9 12h2M9 18h2M13 6h2M13 12h2M13 18h2"/></svg>' +
                    '</span>' +
@@ -4058,6 +4058,7 @@ window.I18N = (function(){
       'set.language': 'Language',
 
       'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
+      'plan.weeklyTab': 'Weekly', 'plan.monthlyTab': 'Monthly',
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
       'plan.thisWeek': 'This week', 'plan.today': 'Today',
       'plan.prev': 'Previous', 'plan.next': 'Next',
@@ -4227,6 +4228,7 @@ window.I18N = (function(){
       'set.language': 'Langue',
 
       'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
+      'plan.weeklyTab': 'Hebdo', 'plan.monthlyTab': 'Mensuel',
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',
       'plan.thisWeek': 'Cette semaine', 'plan.today': "Aujourd'hui",
       'plan.prev': 'Précédent', 'plan.next': 'Suivant',
@@ -4319,14 +4321,20 @@ window.I18N = (function(){
 // Local-first — everything is keyed by ISO week / month in localStorage.
 window.Planner = (function(){
   const K_WEEK = 'sf_plan_week', K_MONTH = 'sf_plan_month', K_RANGE = 'sf_plan_range';
+  const K_TAB = 'sf_plan_tab';
+  const COMPACT_MQ = '(max-width: 820px)';
 
   let weekRef = null;    // any date inside the shown week
   let monthRef = null;   // any date inside the shown month
   let saveTimer = null;
+  let tab = 'week';
+  let selectedMonthDay = null; // day number for phone month agenda
+  let compactMq = null;
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+  function isCompact(){ return compactMq ? compactMq.matches : false; }
 
   function readJSON(k){
     try { const v = JSON.parse(localStorage.getItem(k)); return v && typeof v === 'object' ? v : {}; }
@@ -4358,10 +4366,10 @@ window.Planner = (function(){
     r[which] = Math.max(0, Math.min(23, parseInt(val) || 0));
     if (r.to <= r.from) r.to = Math.min(23, r.from + 1);
     writeJSON(K_RANGE, r);
-    render();
+    render({ animate: false });
   }
 
-  // ── persistence (debounced so typing isn't a write per keystroke) ──
+  // ── persistence ──
   // Cells store newline-separated tasks so older freeform notes still load.
   function parseTasks(raw){
     if (!raw) return [];
@@ -4400,19 +4408,30 @@ window.Planner = (function(){
     stash(K_MONTH, monthKey(monthRef), el.dataset.cell, el.value);
   }
 
-  function taskListHtml(tasks){
+  function taskListHtml(tasks, opts){
+    opts = opts || {};
     if (!tasks.length) return '<ul class="pl-tasks"></ul>';
     return '<ul class="pl-tasks">' + tasks.map(function(task, idx){
-      return '<li class="pl-task">' +
-               '<span class="pl-task-text">'+esc(task)+'</span>' +
-               '<button type="button" class="pl-task-del" data-pl-action="remove" data-pl-index="'+idx+'" ' +
+      const text = typeof task === 'string' ? task : task.text;
+      const cell = typeof task === 'string' ? null : task.cell;
+      const hour = typeof task === 'string' ? null : task.hour;
+      const index = typeof task === 'string' ? idx : task.index;
+      const hourHtml = (opts.showHour && hour != null)
+        ? '<span class="pl-task-hour">' + String(hour).padStart(2,'0') + ':00</span>'
+        : '';
+      const cellAttr = cell != null ? ' data-cell="'+esc(String(cell))+'"' : '';
+      return '<li class="pl-task"'+cellAttr+'>' +
+               hourHtml +
+               '<span class="pl-task-text">'+esc(text)+'</span>' +
+               '<button type="button" class="pl-task-del" data-pl-action="remove" data-pl-index="'+index+'" ' +
                  'aria-label="'+esc(t('plan.removeTask'))+'" title="'+esc(t('plan.removeTask'))+'">×</button>' +
              '</li>';
     }).join('') + '</ul>';
   }
 
-  function taskAddHtml(){
-    return '<div class="pl-task-add">' +
+  function taskAddHtml(cell){
+    const cellAttr = cell != null ? ' data-cell="'+esc(String(cell))+'"' : '';
+    return '<div class="pl-task-add"'+cellAttr+'>' +
              '<input class="pl-task-input" type="text" maxlength="120" ' +
                'placeholder="'+esc(t('plan.addTask'))+'" aria-label="'+esc(t('plan.addTask'))+'">' +
              '<button type="button" class="pl-task-add-btn" data-pl-action="add" ' +
@@ -4436,27 +4455,59 @@ window.Planner = (function(){
     setCellTasks(store, bucket, cell, tasks);
   }
 
+  // Flatten all hour (+ day-all) tasks for one weekday index.
+  function weekDayEntries(data, dayIndex, from, to){
+    const out = [];
+    const allKey = dayIndex + '-all';
+    parseTasks(data[allKey]).forEach(function(text, index){
+      out.push({ text: text, cell: allKey, hour: null, index: index });
+    });
+    for (let h = from; h <= to; h++){
+      const cell = dayIndex + '-' + h;
+      parseTasks(data[cell]).forEach(function(text, index){
+        out.push({ text: text, cell: cell, hour: h, index: index });
+      });
+    }
+    return out;
+  }
+
+  function dayHasMonthTasks(data, dayNum){
+    return parseTasks(data[dayNum]).length > 0;
+  }
+
+  function resolveCell(el){
+    const withCell = el.closest('[data-cell]');
+    return withCell ? withCell.getAttribute('data-cell') : null;
+  }
+
   function onPlannerClick(e){
+    const pickDay = e.target.closest('[data-pl-pick-day]');
+    if (pickDay){
+      selectedMonthDay = parseInt(pickDay.getAttribute('data-pl-pick-day'), 10);
+      render({ animate: false });
+      return;
+    }
+
     const btn = e.target.closest('[data-pl-action]');
     if (!btn) return;
-    const box = btn.closest('[data-cell]');
-    if (!box) return;
+    const cell = resolveCell(btn);
+    if (cell == null) return;
     e.preventDefault();
-    const cell = box.getAttribute('data-cell');
-    const isWeek = !!box.closest('#weekGrid');
+    const isWeek = !!btn.closest('#weekGrid');
     const store = isWeek ? K_WEEK : K_MONTH;
     const bucket = isWeek ? weekKey(weekRef) : monthKey(monthRef);
     const action = btn.getAttribute('data-pl-action');
 
     if (action === 'add'){
-      const input = box.querySelector('.pl-task-input');
+      const box = btn.closest('.pl-task-add') || btn.closest('[data-cell]');
+      const input = box && box.querySelector('.pl-task-input');
       if (!addTask(store, bucket, cell, input ? input.value : '')) return;
-      render();
+      render({ animate: false });
       return;
     }
     if (action === 'remove'){
       removeTask(store, bucket, cell, parseInt(btn.getAttribute('data-pl-index'), 10));
-      render();
+      render({ animate: false });
     }
   }
 
@@ -4465,51 +4516,87 @@ window.Planner = (function(){
     const input = e.target.closest('.pl-task-input');
     if (!input) return;
     e.preventDefault();
-    const box = input.closest('[data-cell]');
-    if (!box) return;
-    const cell = box.getAttribute('data-cell');
-    const isWeek = !!box.closest('#weekGrid');
+    const cell = resolveCell(input);
+    if (cell == null) return;
+    const isWeek = !!input.closest('#weekGrid');
     const store = isWeek ? K_WEEK : K_MONTH;
     const bucket = isWeek ? weekKey(weekRef) : monthKey(monthRef);
     if (!addTask(store, bucket, cell, input.value)) return;
-    render();
+    render({ animate: false });
+  }
+
+  // ── tabs ──
+  function setTab(next){
+    tab = (next === 'month') ? 'month' : 'week';
+    try { localStorage.setItem(K_TAB, tab); } catch(e){}
+    updateTabsUI();
+  }
+
+  function updateTabsUI(){
+    const weekPanel = document.getElementById('planWeekPanel');
+    const monthPanel = document.getElementById('planMonthPanel');
+    if (weekPanel) weekPanel.hidden = tab !== 'week';
+    if (monthPanel) monthPanel.hidden = tab !== 'month';
+    const tabs = document.querySelector('.planner-tabs');
+    if (!tabs) return;
+    tabs.querySelectorAll('.planner-tab').forEach(function(btn){
+      const key = btn.getAttribute('data-plan-tab');
+      const active = key === tab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    if (typeof updateTabIndicator === 'function') updateTabIndicator(tabs);
   }
 
   // ── navigation ──
-  function shiftWeek(n){ weekRef.setDate(weekRef.getDate() + n*7); render(); }
-  function shiftMonth(n){ monthRef.setMonth(monthRef.getMonth() + n, 1); render(); }
-  function todayWeek(){ weekRef = new Date(); render(); }
-  function todayMonth(){ monthRef = new Date(); render(); }
+  function shiftWeek(n){ weekRef.setDate(weekRef.getDate() + n*7); render({ animate: true }); }
+  function shiftMonth(n){
+    monthRef.setMonth(monthRef.getMonth() + n, 1);
+    selectedMonthDay = null;
+    render({ animate: true });
+  }
+  function todayWeek(){ weekRef = new Date(); render({ animate: true }); }
+  function todayMonth(){
+    monthRef = new Date();
+    selectedMonthDay = monthRef.getDate();
+    render({ animate: true });
+  }
 
   function clearWeek(){
     const all = readJSON(K_WEEK); delete all[weekKey(weekRef)]; writeJSON(K_WEEK, all);
-    render(); toast(t('plan.cleared'));
+    render({ animate: false }); toast(t('plan.cleared'));
   }
   function clearMonth(){
     const all = readJSON(K_MONTH); delete all[monthKey(monthRef)]; writeJSON(K_MONTH, all);
-    render(); toast(t('plan.cleared'));
+    selectedMonthDay = null;
+    render({ animate: false }); toast(t('plan.cleared'));
   }
 
   function printView(){ window.print(); }
 
-  // ── rendering ──
-  function renderWeek(){
-    const host = document.getElementById('weekGrid');
-    const label = document.getElementById('weekLabel');
-    if (!host) return;
-
-    const start = startOfWeek(weekRef);
-    const data = readJSON(K_WEEK)[weekKey(weekRef)] || {};
-    const r = range();
-    const today = new Date();
-
-    if (label){
-      const end = new Date(start); end.setDate(end.getDate() + 6);
-      const f = { day: 'numeric', month: 'short' };
-      label.textContent = start.toLocaleDateString(locale(), f) + ' – ' +
-                          end.toLocaleDateString(locale(), Object.assign({ year: 'numeric' }, f));
+  function fillHourSelects(r){
+    const fromSel = document.getElementById('planFrom');
+    const toSel = document.getElementById('planTo');
+    if (fromSel && !fromSel.dataset.built){
+      let o = '';
+      for (let h = 0; h < 24; h++) o += '<option value="'+h+'">' + String(h).padStart(2,'0') + ':00</option>';
+      fromSel.innerHTML = o; toSel.innerHTML = o;
+      fromSel.dataset.built = toSel.dataset.built = '1';
     }
+    if (fromSel) fromSel.value = String(r.from);
+    if (toSel) toSel.value = String(r.to);
+  }
 
+  function bumpSwap(host, animate){
+    if (!host || !animate){
+      if (host) host.classList.remove('swap');
+      return;
+    }
+    host.classList.remove('swap'); void host.offsetWidth; host.classList.add('swap');
+  }
+
+  // ── rendering ──
+  function renderWeekDesktop(host, start, data, r, today){
     let head = '<div class="pl-cell pl-corner"></div>';
     for (let i = 0; i < 7; i++){
       const d = new Date(start); d.setDate(d.getDate() + i);
@@ -4534,46 +4621,66 @@ window.Planner = (function(){
                 '</div>';
       }
     }
-
+    host.className = 'pl-grid pl-week';
     host.innerHTML = head + body;
-    host.classList.remove('swap'); void host.offsetWidth; host.classList.add('swap');
-
-    const fromSel = document.getElementById('planFrom');
-    const toSel = document.getElementById('planTo');
-    if (fromSel && !fromSel.dataset.built){
-      let o = '';
-      for (let h = 0; h < 24; h++) o += '<option value="'+h+'">' + String(h).padStart(2,'0') + ':00</option>';
-      fromSel.innerHTML = o; toSel.innerHTML = o;
-      fromSel.dataset.built = toSel.dataset.built = '1';
-    }
-    if (fromSel) fromSel.value = String(r.from);
-    if (toSel) toSel.value = String(r.to);
   }
 
-  function renderMonth(){
-    const host = document.getElementById('monthGrid');
-    const label = document.getElementById('monthLabel');
+  // Phone-style agenda: stacked days with tasks (like a calendar app week list).
+  function renderWeekAgenda(host, start, data, r, today){
+    let out = '';
+    for (let i = 0; i < 7; i++){
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      const isToday = sameDay(d, today);
+      const entries = weekDayEntries(data, i, r.from, r.to);
+      const addCell = i + '-all';
+      out += '<article class="pl-agenda-day' + (isToday ? ' is-today' : '') + '">' +
+               '<header class="pl-agenda-head">' +
+                 '<span class="pl-agenda-dow">' + esc(d.toLocaleDateString(locale(), { weekday: 'short' })) + '</span>' +
+                 '<span class="pl-agenda-num">' + d.getDate() + '</span>' +
+                 '<span class="pl-agenda-full">' + esc(d.toLocaleDateString(locale(), { month: 'short', weekday: 'long' })) + '</span>' +
+               '</header>' +
+               taskListHtml(entries, { showHour: true }) +
+               taskAddHtml(addCell) +
+             '</article>';
+    }
+    host.className = 'pl-agenda pl-week-agenda';
+    host.innerHTML = out;
+  }
+
+  function renderWeek(opts){
+    const host = document.getElementById('weekGrid');
+    const label = document.getElementById('weekLabel');
     if (!host) return;
 
-    const first = new Date(monthRef.getFullYear(), monthRef.getMonth(), 1);
-    const data = readJSON(K_MONTH)[monthKey(monthRef)] || {};
+    const start = startOfWeek(weekRef);
+    const data = readJSON(K_WEEK)[weekKey(weekRef)] || {};
+    const r = range();
     const today = new Date();
 
     if (label){
-      label.textContent = first.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+      const end = new Date(start); end.setDate(end.getDate() + 6);
+      const f = { day: 'numeric', month: 'short' };
+      label.textContent = start.toLocaleDateString(locale(), f) + ' – ' +
+                          end.toLocaleDateString(locale(), Object.assign({ year: 'numeric' }, f));
     }
 
+    if (isCompact()) renderWeekAgenda(host, start, data, r, today);
+    else renderWeekDesktop(host, start, data, r, today);
+
+    bumpSwap(host, opts && opts.animate);
+    fillHourSelects(r);
+
+    const toolbar = document.querySelector('.pl-toolbar-week');
+    if (toolbar) toolbar.classList.toggle('is-compact-hidden', isCompact());
+  }
+
+  function renderMonthDesktop(host, first, data, today, daysInMonth, lead, cells){
     let out = '';
     const wkStart = startOfWeek(first);
     for (let i = 0; i < 7; i++){
       const d = new Date(wkStart); d.setDate(d.getDate() + i);
       out += '<div class="pl-cell pl-head">' + esc(d.toLocaleDateString(locale(), { weekday: 'short' })) + '</div>';
     }
-
-    const daysInMonth = new Date(monthRef.getFullYear(), monthRef.getMonth() + 1, 0).getDate();
-    const lead = (first.getDay() + 6) % 7;               // Monday-first offset
-    const cells = Math.ceil((lead + daysInMonth) / 7) * 7;
-
     for (let i = 0; i < cells; i++){
       const dayNum = i - lead + 1;
       if (dayNum < 1 || dayNum > daysInMonth){
@@ -4589,16 +4696,107 @@ window.Planner = (function(){
                taskAddHtml() +
              '</div>';
     }
+    host.className = 'pl-grid pl-month';
     host.innerHTML = out;
-    host.classList.remove('swap'); void host.offsetWidth; host.classList.add('swap');
   }
 
-  function render(){ renderWeek(); renderMonth(); }
+  // Phone calendar: month grid of day numbers + selected-day agenda below.
+  function renderMonthPhone(host, first, data, today, daysInMonth, lead, cells){
+    if (selectedMonthDay == null || selectedMonthDay < 1 || selectedMonthDay > daysInMonth){
+      const inThisMonth = today.getMonth() === first.getMonth() &&
+                          today.getFullYear() === first.getFullYear();
+      selectedMonthDay = inThisMonth ? today.getDate() : 1;
+    }
+
+    const wkStart = startOfWeek(first);
+    let grid = '<div class="pl-cal-dows">';
+    for (let i = 0; i < 7; i++){
+      const d = new Date(wkStart); d.setDate(d.getDate() + i);
+      grid += '<span class="pl-cal-dow">' + esc(d.toLocaleDateString(locale(), { weekday: 'narrow' })) + '</span>';
+    }
+    grid += '</div><div class="pl-cal-grid">';
+
+    for (let i = 0; i < cells; i++){
+      const dayNum = i - lead + 1;
+      if (dayNum < 1 || dayNum > daysInMonth){
+        grid += '<span class="pl-cal-cell is-empty"></span>';
+        continue;
+      }
+      const d = new Date(monthRef.getFullYear(), monthRef.getMonth(), dayNum);
+      const isToday = sameDay(d, today);
+      const selected = dayNum === selectedMonthDay;
+      const has = dayHasMonthTasks(data, dayNum);
+      grid += '<button type="button" class="pl-cal-cell' +
+                (isToday ? ' is-today' : '') +
+                (selected ? ' is-selected' : '') +
+                (has ? ' has-tasks' : '') +
+              '" data-pl-pick-day="' + dayNum + '" aria-label="' + dayNum + '">' +
+                '<span class="pl-cal-num">' + dayNum + '</span>' +
+                (has ? '<span class="pl-cal-dot" aria-hidden="true"></span>' : '') +
+              '</button>';
+    }
+    grid += '</div>';
+
+    const selDate = new Date(monthRef.getFullYear(), monthRef.getMonth(), selectedMonthDay);
+    const tasks = parseTasks(data[selectedMonthDay]);
+    const detail =
+      '<div class="pl-cal-detail" data-cell="' + selectedMonthDay + '">' +
+        '<div class="pl-cal-detail-head">' +
+          esc(selDate.toLocaleDateString(locale(), { weekday: 'long', month: 'long', day: 'numeric' })) +
+        '</div>' +
+        taskListHtml(tasks) +
+        taskAddHtml() +
+      '</div>';
+
+    host.className = 'pl-cal-month';
+    host.innerHTML = grid + detail;
+  }
+
+  function renderMonth(opts){
+    const host = document.getElementById('monthGrid');
+    const label = document.getElementById('monthLabel');
+    if (!host) return;
+
+    const first = new Date(monthRef.getFullYear(), monthRef.getMonth(), 1);
+    const data = readJSON(K_MONTH)[monthKey(monthRef)] || {};
+    const today = new Date();
+
+    if (label){
+      label.textContent = first.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+    }
+
+    const daysInMonth = new Date(monthRef.getFullYear(), monthRef.getMonth() + 1, 0).getDate();
+    const lead = (first.getDay() + 6) % 7;
+    const cells = Math.ceil((lead + daysInMonth) / 7) * 7;
+
+    if (isCompact()) renderMonthPhone(host, first, data, today, daysInMonth, lead, cells);
+    else renderMonthDesktop(host, first, data, today, daysInMonth, lead, cells);
+
+    bumpSwap(host, opts && opts.animate);
+  }
+
+  function render(opts){
+    opts = opts || {};
+    renderWeek(opts);
+    renderMonth(opts);
+    updateTabsUI();
+  }
 
   function init(){
     weekRef = new Date();
     monthRef = new Date();
-    render();
+    selectedMonthDay = (new Date()).getDate();
+    try {
+      const saved = localStorage.getItem(K_TAB);
+      tab = (saved === 'month') ? 'month' : 'week';
+    } catch(e){ tab = 'week'; }
+
+    compactMq = window.matchMedia(COMPACT_MQ);
+    const onMq = function(){ render({ animate: false }); };
+    if (compactMq.addEventListener) compactMq.addEventListener('change', onMq);
+    else if (compactMq.addListener) compactMq.addListener(onMq);
+
+    render({ animate: false });
     const weekHost = document.getElementById('weekGrid');
     const monthHost = document.getElementById('monthGrid');
     if (weekHost && !weekHost.dataset.bound){
@@ -4611,10 +4809,10 @@ window.Planner = (function(){
       monthHost.addEventListener('click', onPlannerClick);
       monthHost.addEventListener('keydown', onPlannerKeydown);
     }
-    if (window.I18N) I18N.onChange(function(){ render(); });
+    if (window.I18N) I18N.onChange(function(){ render({ animate: false }); });
   }
 
-  return { init:init, render:render,
+  return { init:init, render:render, setTab:setTab,
            onWeekInput:onWeekInput, onMonthInput:onMonthInput,
            shiftWeek:shiftWeek, shiftMonth:shiftMonth,
            todayWeek:todayWeek, todayMonth:todayMonth,
@@ -4627,7 +4825,7 @@ window.Planner = (function(){
 function updateTabIndicator(container){
   if (!container) return;
   const ind = container.querySelector('.tab-indicator');
-  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active, .stats-tab.active');
+  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active, .stats-tab.active, .planner-tab.active');
   if (!ind || !active) return;
   const cr = container.getBoundingClientRect();
   const ar = active.getBoundingClientRect();
@@ -4638,7 +4836,7 @@ function updateTabIndicator(container){
 }
 
 function updateAllTabIndicators(){
-  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch, .stats-tabs').forEach(updateTabIndicator);
+  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch, .stats-tabs, .planner-tabs').forEach(updateTabIndicator);
 }
 
 function animateModeSwitch(){
@@ -4656,6 +4854,7 @@ function showView(name){
   document.body.classList.toggle('view-planner', name === 'planner');
   document.body.classList.toggle('view-stats', name === 'stats');
   if (name === 'stats' && window.Stats) Stats.onShow();
+  if (name === 'planner' && window.Planner && Planner.render) Planner.render({ animate: false });
   document.querySelectorAll('[data-view]').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
