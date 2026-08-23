@@ -550,18 +550,42 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .goal-dot.filled { background: var(--accent); }
 .goal-prog { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
-.goal-edit-btn {
-  flex: none; width: 22px; height: 22px; padding: 4px;
-  color: var(--text-faint); opacity: 0;
-  transition: all .18s var(--ease);
+.goal-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+}
+.goal-edit-btn,
+.goal-del {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .18s var(--ease), color .18s var(--ease);
 }
 .goal-edit-btn svg {
-  width: 100%; height: 100%; fill: none; stroke: currentColor;
+  width: 14px; height: 14px; fill: none; stroke: currentColor;
   stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
-.goal-item:hover .goal-edit-btn, .goal-item.editing .goal-edit-btn { opacity: 1; }
+.goal-edit-btn { color: var(--text-faint); }
+.goal-del {
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+}
+.goal-item:hover .goal-actions .goal-edit-btn,
+.goal-item:hover .goal-actions .goal-del,
+.goal-item.editing .goal-edit-btn { opacity: 1; }
 .goal-edit-btn:hover { color: var(--accent); }
-.goal-item.done .goal-edit-btn { display: none; }
+.goal-del:hover { color: var(--danger); }
+.goal-item.done .goal-actions { display: none; }
 
 .goal-edit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .goal-edit-title { width: 100%; padding: 8px 10px; font-size: 13px; }
@@ -579,14 +603,6 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 }
 .goal-edit-save { width: auto; padding: 6px 12px; font-size: 11.5px; }
 .goal-edit-cancel { font-size: 11.5px; padding: 4px 2px; }
-
-.goal-del {
-  flex: none; color: var(--text-faint); font-size: 16px; line-height: 1;
-  padding: 0 2px; opacity: 0; transition: all .18s var(--ease);
-}
-.goal-item:hover .goal-del { opacity: 1; }
-.goal-item.editing .goal-del { display: none; }
-.goal-del:hover { color: var(--danger); }
 
 .goal-add-row { display: flex; gap: 6px; margin-top: 12px; }
 .goal-input   { flex: 1; min-width: 0; padding: 9px 11px; font-size: 13px; }
@@ -1299,20 +1315,6 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .mode-switch .tab-indicator { background: var(--accent); }
 .mode-tabs .tab-indicator { background: var(--accent-soft); }
 
-/* View switch: crossfade the stage when changing Focus / Planner / Stats. */
-::view-transition-old(root) {
-  animation: viewExit .24s var(--ease) both;
-}
-::view-transition-new(root) {
-  animation: viewEnter .34s var(--ease) both;
-}
-@keyframes viewExit {
-  to { opacity: 0; transform: translateY(-8px) scale(.992); }
-}
-@keyframes viewEnter {
-  from { opacity: 0; transform: translateY(10px) scale(.992); }
-}
-
 /* Timer mode tabs: gentle pulse when switching Focus / Break / Long or Pomodoro / Chrono. */
 @keyframes modeSwitchBump {
   0%   { opacity: 1; transform: scale(1); }
@@ -1322,15 +1324,6 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .timer-display.mode-switch-bump,
 .chrono-display.mode-switch-bump {
   animation: modeSwitchBump .32s var(--ease);
-}
-
-.stage.view-switch-out {
-  opacity: 0;
-  transform: translateY(-8px) scale(.992);
-  transition: opacity .24s var(--ease), transform .24s var(--ease);
-}
-.stage.view-switch-in {
-  animation: viewEnter .34s var(--ease) both;
 }
 
 /* Only one view is on screen at a time. */

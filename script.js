@@ -1,16 +1,61 @@
 // ── SETTINGS PANEL ───────────────────────────────────────────
 let settingsPanelOpen = false;
+
+function closeBgPanel(){
+  bgPanelOpen = false;
+  const p = document.getElementById('bgPanel');
+  if (p) p.classList.remove('open');
+  const b = document.querySelector('.btn-bg-toggle');
+  if (b) b.classList.remove('active');
+}
+
+function closeSettingsPanel(){
+  settingsPanelOpen = false;
+  const p = document.getElementById('settingsSlidePanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('settingsFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closeThemePanel(){
+  const p = document.getElementById('themePanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('themeFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closePlayerPanel(){
+  const p = document.getElementById('playerPanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('playerFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closeStudyPanel(){
+  if (window.Study && Study.close) Study.close();
+}
+
+function closeRoomPanel(){
+  if (window.Room && Room.close) Room.close();
+}
+
+function closeDockPopovers(except){
+  if (except !== 'bg') closeBgPanel();
+  if (except !== 'settings') closeSettingsPanel();
+  if (except !== 'theme') closeThemePanel();
+  if (except !== 'player') closePlayerPanel();
+  if (except !== 'study') closeStudyPanel();
+  if (except !== 'room') closeRoomPanel();
+}
+
 function toggleSettingsPanel() {
-  settingsPanelOpen = !settingsPanelOpen;
-  document.getElementById('settingsSlidePanel').classList.toggle('open', settingsPanelOpen);
-  document.getElementById('settingsFixedBtn').classList.toggle('active', settingsPanelOpen);
-  if (bgPanelOpen) toggleBgPanel();
-  // close theme panel
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  // close player panel
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
+  const panel = document.getElementById('settingsSlidePanel');
+  const btn = document.getElementById('settingsFixedBtn');
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'settings' : null);
+  settingsPanelOpen = willOpen;
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
 }
 // ── FULLSCREEN ────────────────────────────────────────────────
 function toggleFS() {
@@ -205,19 +250,14 @@ function applyBgFromRecord(rec, theme) {
 }
 
 function toggleBgPanel() {
-  bgPanelOpen = !bgPanelOpen;
-  document.getElementById('bgPanel').classList.toggle('open', bgPanelOpen);
-  document.querySelector('.btn-bg-toggle').classList.toggle('active', bgPanelOpen);
-  if (bgPanelOpen) updateRemoveDefaultBtnVisibility();
-  // close settings panel
-  settingsPanelOpen = false;
-  document.getElementById('settingsSlidePanel').classList.remove('open');
-  document.getElementById('settingsFixedBtn').classList.remove('active');
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  // close player panel
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
+  const panel = document.getElementById('bgPanel');
+  const btn = document.querySelector('.btn-bg-toggle');
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'bg' : null);
+  bgPanelOpen = willOpen;
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
+  if (willOpen) updateRemoveDefaultBtnVisibility();
 }
 
 
@@ -650,18 +690,10 @@ function syncPlayerRoomMode(){
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
-  const isOpen = panel.classList.contains('open');
-  document.getElementById('bgPanel').classList.remove('open');
-  bgPanelOpen = false;
-  settingsPanelOpen = false;
-  document.getElementById('settingsSlidePanel').classList.remove('open');
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('settingsFixedBtn').classList.remove('active');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  document.querySelector('.btn-bg-toggle').classList.remove('active');
-  if (window.Room && Room.close) Room.close();
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'player' : null);
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
   syncPlayerRoomMode();
 }
 
@@ -1380,17 +1412,10 @@ function setTheme(t) {
 function toggleThemePanel() {
   const panel = document.getElementById('themePanel');
   const btn = document.getElementById('themeFixedBtn');
-  const isOpen = panel.classList.contains('open');
-  document.getElementById('bgPanel').classList.remove('open');
-  bgPanelOpen = false;
-  settingsPanelOpen = false;
-  document.getElementById('settingsSlidePanel').classList.remove('open');
-  document.getElementById('settingsFixedBtn').classList.remove('active');
-  document.querySelector('.btn-bg-toggle').classList.remove('active');
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'theme' : null);
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
 }
 
 // ── PROGRESS ANIMALS ─────────────────────────────────────────
@@ -2226,11 +2251,7 @@ window.Room = (function(){
   }
 
   function closeOtherPanels(){
-    ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('open'); });
-    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('active'); });
-    const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
-    // Close via Study.close so its panelOpen flag stays in sync with the DOM.
-    if (window.Study && Study.close) Study.close();
+    if (typeof closeDockPopovers === 'function') closeDockPopovers('room');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
   ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
@@ -3008,14 +3029,7 @@ window.Study = (function(){
   }
 
   function closeOtherPanels(){
-    ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){
-      const e = document.getElementById(id); if (e) e.classList.remove('open');
-    });
-    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){
-      const e = document.getElementById(id); if (e) e.classList.remove('active');
-    });
-    const bg = document.querySelector('.btn-bg-toggle'); if (bg) bg.classList.remove('active');
-    if (window.Room && Room.close) Room.close();
+    if (typeof closeDockPopovers === 'function') closeDockPopovers('study');
   }
 
   function togglePanel(){
@@ -3534,11 +3548,13 @@ window.Goals = (function(){
                    '<button type="button" class="goal-check" data-goal-action="toggle" data-goal-id="'+g.id+'" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
                    mainBlock +
                    (!isEditing
-                     ? ('<button type="button" class="goal-edit-btn" data-goal-action="edit" data-goal-id="'+g.id+'" ' +
-                          'aria-label="'+esc(t('goals.edit'))+'" title="'+esc(t('goals.edit'))+'">' +
-                          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 000-2.12l-2.38-2.38a1.5 1.5 0 00-2.12 0L4 15.5V20z"/><path d="M13.5 6.5l2 2"/></svg>' +
-                        '</button>' +
-                        '<button type="button" class="goal-del" data-goal-action="remove" data-goal-id="'+g.id+'" title="remove">×</button>')
+                     ? ('<div class="goal-actions">' +
+                          '<button type="button" class="goal-edit-btn" data-goal-action="edit" data-goal-id="'+g.id+'" ' +
+                            'aria-label="'+esc(t('goals.edit'))+'" title="'+esc(t('goals.edit'))+'">' +
+                            '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 000-2.12l-2.38-2.38a1.5 1.5 0 00-2.12 0L4 15.5V20z"/><path d="M13.5 6.5l2 2"/></svg>' +
+                          '</button>' +
+                          '<button type="button" class="goal-del" data-goal-action="remove" data-goal-id="'+g.id+'" title="remove" aria-label="remove">×</button>' +
+                        '</div>')
                      : '') +
                  '</div>';
         }).join('');
@@ -4379,32 +4395,15 @@ function animateModeSwitch(){
 }
 
 function showView(name){
-  const stage = document.querySelector('.stage');
-  const apply = function(){
-    document.body.classList.toggle('view-planner', name === 'planner');
-    document.body.classList.toggle('view-stats', name === 'stats');
-    if (name === 'stats' && window.Stats) Stats.render();
-    document.querySelectorAll('[data-view]').forEach(function(b){
-      b.classList.toggle('active', b.getAttribute('data-view') === name);
-    });
-    try { localStorage.setItem('sf_view', name); } catch(e){}
-    window.scrollTo(0, 0);
-    updateAllTabIndicators();
-  };
-  if (typeof document.startViewTransition === 'function'){
-    document.startViewTransition(apply);
-  } else if (stage){
-    stage.classList.add('view-switch-out');
-    setTimeout(function(){
-      apply();
-      stage.classList.remove('view-switch-out');
-      stage.classList.add('view-switch-in');
-      stage.addEventListener('animationend', function done(){
-        stage.classList.remove('view-switch-in');
-        stage.removeEventListener('animationend', done);
-      });
-    }, 180);
-  } else apply();
+  document.body.classList.toggle('view-planner', name === 'planner');
+  document.body.classList.toggle('view-stats', name === 'stats');
+  if (name === 'stats' && window.Stats) Stats.render();
+  document.querySelectorAll('[data-view]').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-view') === name);
+  });
+  try { localStorage.setItem('sf_view', name); } catch(e){}
+  window.scrollTo(0, 0);
+  updateAllTabIndicators();
 }
 
 
@@ -4522,33 +4521,7 @@ async function checkSupabase(){
 // the class — otherwise their state would drift from the DOM and the next
 // click on their button would need pressing twice.
 function closeAllPanels(){
-  const settings = document.getElementById('settingsSlidePanel');
-  if (settings){
-    settings.classList.remove('open');
-    const b = document.getElementById('settingsFixedBtn');
-    if (b) b.classList.remove('active');
-  }
-  if (typeof settingsPanelOpen !== 'undefined') settingsPanelOpen = false;
-
-  const bg = document.getElementById('bgPanel');
-  if (bg){
-    bg.classList.remove('open');
-    const b = document.querySelector('.btn-bg-toggle');
-    if (b) b.classList.remove('active');
-  }
-  if (typeof bgPanelOpen !== 'undefined') bgPanelOpen = false;
-
-  ['themePanel', 'playerPanel'].forEach(function(id){
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-  });
-  ['themeFixedBtn', 'playerFixedBtn'].forEach(function(id){
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
-
-  if (window.Study && Study.close) Study.close();
-  if (window.Room && Room.close) Room.close();
+  if (typeof closeDockPopovers === 'function') closeDockPopovers();
 }
 
 // Where the click started has to be recorded in the CAPTURE phase, before
