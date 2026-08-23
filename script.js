@@ -4526,6 +4526,14 @@ window.Planner = (function(){
     tab = (next === 'month') ? 'month' : 'week';
     try { localStorage.setItem(K_TAB, tab); } catch(e){}
     updateTabsUI();
+    // Touch/DevTools leave :focus on the tab; clear it so only the pill shows.
+    if (document.activeElement && document.activeElement.classList.contains('planner-tab')){
+      document.activeElement.blur();
+    }
+    requestAnimationFrame(function(){
+      const tabs = document.querySelector('.planner-tabs');
+      if (tabs && typeof updateTabIndicator === 'function') updateTabIndicator(tabs);
+    });
   }
 
   function updateTabsUI(){
@@ -4857,6 +4865,8 @@ function showView(name){
   try { localStorage.setItem('sf_view', name); } catch(e){}
   window.scrollTo(0, 0);
   updateAllTabIndicators();
+  // Planner was display:none — measure the pill again after layout.
+  requestAnimationFrame(function(){ updateAllTabIndicators(); });
 }
 
 
