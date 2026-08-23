@@ -3937,7 +3937,7 @@ window.I18N = (function(){
 
       'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
       'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
-      'goals.hint': 'Tap a goal to focus it — drag anywhere on a goal to reorder.',
+      'goals.hint': 'Tap a goal to focus it — edit/delete buttons are always visible on phones.',
       'goals.empty': 'Nothing yet — add what you want to finish today',
       'goals.complete': 'Goal complete: {title}',
       'goals.added': "Added to today's goals",
@@ -4061,8 +4061,11 @@ window.I18N = (function(){
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
       'plan.thisWeek': 'This week', 'plan.today': 'Today',
       'plan.prev': 'Previous', 'plan.next': 'Next',
-      'plan.dayPlaceholder': 'Plan for this day…',
-      'plan.hint': 'Everything you type saves automatically on this device.',
+      'plan.dayPlaceholder': 'Add a task…',
+      'plan.addTask': 'Add a task…',
+      'plan.add': 'Add',
+      'plan.removeTask': 'Remove task',
+      'plan.hint': 'Add each task with +. Everything saves automatically on this device.',
       'plan.cleared': 'Planner cleared',
       'plan.clear': 'Clear this week', 'plan.clearMonth': 'Clear this month',
 
@@ -4102,7 +4105,7 @@ window.I18N = (function(){
 
       'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
       'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
-      'goals.hint': 'Touche un objectif pour le cibler — glisse n’importe où sur la ligne pour réordonner.',
+      'goals.hint': 'Touche un objectif pour le cibler — les boutons modifier/supprimer restent visibles sur téléphone.',
       'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
       'goals.complete': 'Objectif atteint : {title}',
       'goals.added': 'Ajouté aux objectifs du jour',
@@ -4227,8 +4230,11 @@ window.I18N = (function(){
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',
       'plan.thisWeek': 'Cette semaine', 'plan.today': "Aujourd'hui",
       'plan.prev': 'Précédent', 'plan.next': 'Suivant',
-      'plan.dayPlaceholder': 'Plan pour ce jour…',
-      'plan.hint': 'Tout ce que tu écris est enregistré automatiquement sur cet appareil.',
+      'plan.dayPlaceholder': 'Ajouter une tâche…',
+      'plan.addTask': 'Ajouter une tâche…',
+      'plan.add': 'Ajouter',
+      'plan.removeTask': 'Supprimer la tâche',
+      'plan.hint': 'Ajoute chaque tâche avec +. Tout est enregistré automatiquement sur cet appareil.',
       'plan.cleared': 'Planning effacé',
       'plan.clear': 'Effacer la semaine', 'plan.clearMonth': 'Effacer le mois',
 
@@ -4356,6 +4362,27 @@ window.Planner = (function(){
   }
 
   // ── persistence (debounced so typing isn't a write per keystroke) ──
+  // Cells store newline-separated tasks so older freeform notes still load.
+  function parseTasks(raw){
+    if (!raw) return [];
+    return String(raw).split(/\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+  function serializeTasks(list){
+    return (list || []).join('\n');
+  }
+  function getCellTasks(store, bucket, cell){
+    const all = readJSON(store);
+    return parseTasks(all[bucket] && all[bucket][cell]);
+  }
+  function setCellTasks(store, bucket, cell, tasks){
+    const all = readJSON(store);
+    if (!all[bucket]) all[bucket] = {};
+    const text = serializeTasks(tasks);
+    if (text) all[bucket][cell] = text;
+    else delete all[bucket][cell];
+    writeJSON(store, all);
+  }
+
   function stash(store, bucket, cell, value){
     clearTimeout(saveTimer);
     const all = readJSON(store);
@@ -4363,17 +4390,89 @@ window.Planner = (function(){
     if (value.trim()) all[bucket][cell] = value;
     else delete all[bucket][cell];
     saveTimer = setTimeout(function(){ writeJSON(store, all); }, 250);
-    // keep the in-memory copy current for an immediate re-render
     writeJSON(store, all);
   }
 
   function onWeekInput(el){
     stash(K_WEEK, weekKey(weekRef), el.dataset.cell, el.value);
-    el.classList.toggle('has-content', !!el.value.trim());
   }
   function onMonthInput(el){
     stash(K_MONTH, monthKey(monthRef), el.dataset.cell, el.value);
-    el.classList.toggle('has-content', !!el.value.trim());
+  }
+
+  function taskListHtml(tasks){
+    if (!tasks.length) return '<ul class="pl-tasks"></ul>';
+    return '<ul class="pl-tasks">' + tasks.map(function(task, idx){
+      return '<li class="pl-task">' +
+               '<span class="pl-task-text">'+esc(task)+'</span>' +
+               '<button type="button" class="pl-task-del" data-pl-action="remove" data-pl-index="'+idx+'" ' +
+                 'aria-label="'+esc(t('plan.removeTask'))+'" title="'+esc(t('plan.removeTask'))+'">×</button>' +
+             '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function taskAddHtml(){
+    return '<div class="pl-task-add">' +
+             '<input class="pl-task-input" type="text" maxlength="120" ' +
+               'placeholder="'+esc(t('plan.addTask'))+'" aria-label="'+esc(t('plan.addTask'))+'">' +
+             '<button type="button" class="pl-task-add-btn" data-pl-action="add" ' +
+               'aria-label="'+esc(t('plan.add'))+'" title="'+esc(t('plan.add'))+'">+</button>' +
+           '</div>';
+  }
+
+  function addTask(store, bucket, cell, title){
+    const clean = String(title || '').trim().slice(0, 120);
+    if (!clean) return false;
+    const tasks = getCellTasks(store, bucket, cell);
+    tasks.push(clean);
+    setCellTasks(store, bucket, cell, tasks);
+    return true;
+  }
+
+  function removeTask(store, bucket, cell, index){
+    const tasks = getCellTasks(store, bucket, cell);
+    if (index < 0 || index >= tasks.length) return;
+    tasks.splice(index, 1);
+    setCellTasks(store, bucket, cell, tasks);
+  }
+
+  function onPlannerClick(e){
+    const btn = e.target.closest('[data-pl-action]');
+    if (!btn) return;
+    const box = btn.closest('[data-cell]');
+    if (!box) return;
+    e.preventDefault();
+    const cell = box.getAttribute('data-cell');
+    const isWeek = !!box.closest('#weekGrid');
+    const store = isWeek ? K_WEEK : K_MONTH;
+    const bucket = isWeek ? weekKey(weekRef) : monthKey(monthRef);
+    const action = btn.getAttribute('data-pl-action');
+
+    if (action === 'add'){
+      const input = box.querySelector('.pl-task-input');
+      if (!addTask(store, bucket, cell, input ? input.value : '')) return;
+      render();
+      return;
+    }
+    if (action === 'remove'){
+      removeTask(store, bucket, cell, parseInt(btn.getAttribute('data-pl-index'), 10));
+      render();
+    }
+  }
+
+  function onPlannerKeydown(e){
+    if (e.key !== 'Enter') return;
+    const input = e.target.closest('.pl-task-input');
+    if (!input) return;
+    e.preventDefault();
+    const box = input.closest('[data-cell]');
+    if (!box) return;
+    const cell = box.getAttribute('data-cell');
+    const isWeek = !!box.closest('#weekGrid');
+    const store = isWeek ? K_WEEK : K_MONTH;
+    const bucket = isWeek ? weekKey(weekRef) : monthKey(monthRef);
+    if (!addTask(store, bucket, cell, input.value)) return;
+    render();
   }
 
   // ── navigation ──
@@ -4428,10 +4527,11 @@ window.Planner = (function(){
         const d = new Date(start); d.setDate(d.getDate() + i);
         const cell = i + '-' + h;
         const isToday = sameDay(d, today);
-        const filled = (data[cell] || '').trim() ? ' has-content' : '';
-        body += '<textarea class="pl-cell pl-slot' + (isToday ? ' is-today' : '') + filled + '" ' +
-                  'data-cell="' + cell + '" rows="1" ' +
-                  'oninput="Planner.onWeekInput(this)">' + esc(data[cell] || '') + '</textarea>';
+        const tasks = parseTasks(data[cell]);
+        body += '<div class="pl-cell pl-slot-box' + (isToday ? ' is-today' : '') + '" data-cell="' + cell + '">' +
+                  taskListHtml(tasks) +
+                  taskAddHtml() +
+                '</div>';
       }
     }
 
@@ -4482,12 +4582,11 @@ window.Planner = (function(){
       }
       const d = new Date(monthRef.getFullYear(), monthRef.getMonth(), dayNum);
       const isToday = sameDay(d, today);
-      out += '<div class="pl-cell pl-day' + (isToday ? ' is-today' : '') + '">' +
+      const tasks = parseTasks(data[dayNum]);
+      out += '<div class="pl-cell pl-day' + (isToday ? ' is-today' : '') + '" data-cell="' + dayNum + '">' +
                '<span class="pl-daynum">' + dayNum + '</span>' +
-               '<textarea class="pl-note' + ((data[dayNum]||'').trim() ? ' has-content' : '') +
-                 '" data-cell="' + dayNum + '" rows="1" ' +
-                 'placeholder="' + esc(t('plan.dayPlaceholder')) + '" ' +
-                 'oninput="Planner.onMonthInput(this)">' + esc(data[dayNum] || '') + '</textarea>' +
+               taskListHtml(tasks) +
+               taskAddHtml() +
              '</div>';
     }
     host.innerHTML = out;
@@ -4500,6 +4599,18 @@ window.Planner = (function(){
     weekRef = new Date();
     monthRef = new Date();
     render();
+    const weekHost = document.getElementById('weekGrid');
+    const monthHost = document.getElementById('monthGrid');
+    if (weekHost && !weekHost.dataset.bound){
+      weekHost.dataset.bound = '1';
+      weekHost.addEventListener('click', onPlannerClick);
+      weekHost.addEventListener('keydown', onPlannerKeydown);
+    }
+    if (monthHost && !monthHost.dataset.bound){
+      monthHost.dataset.bound = '1';
+      monthHost.addEventListener('click', onPlannerClick);
+      monthHost.addEventListener('keydown', onPlannerKeydown);
+    }
     if (window.I18N) I18N.onChange(function(){ render(); });
   }
 
