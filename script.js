@@ -4958,4 +4958,7 @@ window.addEventListener('resize', function(){
   clearTimeout(window._tabIndTO);
   window._tabIndTO = setTimeout(updateAllTabIndicators, 100);
 });
-if (window.I18N) I18N.onChange(function(){ requestAnimationFrame(updateAllTabIndicators); });
+if (window.I18N) I18N.onChange(function(){
+  updateClock();
+  requestAnimationFrame(updateAllTabIndicators);
+});
