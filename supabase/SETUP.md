@@ -28,7 +28,7 @@ This creates:
 
 | Object | What it does |
 |---|---|
-| `profiles` | One row per student; `display_name` is the only thing others ever see |
+| `profiles` | One row per student; `display_name` for the leaderboard, `study_path` (json) for what they study |
 | `study_sessions` | One row per finished focus session |
 | `goals` | Daily checklist, mirrored from the device when signed in |
 | `leaderboard_week()` | Returns weekly rankings — aggregates only |
@@ -36,8 +36,10 @@ This creates:
 | `handle_new_user()` | Creates a profile automatically on sign-up |
 
 Row Level Security is on for all three tables: a student can only ever read
-their own rows. The leaderboard is served by `SECURITY DEFINER` functions
-that return totals, never anyone's individual sessions.
+their own rows. The leaderboard ranks **total study time this week** (all
+subjects combined) via `SECURITY DEFINER` functions that return aggregates
+only, never anyone's individual sessions. Run the latest `schema.sql` to add
+the `study_path` column if upgrading an existing project.
 
 ### Check it worked
 
@@ -120,6 +122,7 @@ to the browser console (**F12 → Console**). The usual ones:
 
 | Message | Cause |
 |---|---|
+| `Could not find the 'study_path' column of 'profiles'` | Run `supabase/migrate-study-path.sql` in the SQL Editor (or re-run `schema.sql`) |
 | `Could not find the function public.leaderboard_week` | Step 1 was not run, or failed partway |
 | `relation "public.study_sessions" does not exist` | Same — re-run `schema.sql` |
 | `new row violates row-level security policy` | Signed out, or the session is older than the 14-day upload window |

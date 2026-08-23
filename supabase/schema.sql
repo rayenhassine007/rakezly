@@ -21,10 +21,13 @@
 create table if not exists public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   display_name text        not null,
-  section      text,
+  section      text,        -- legacy; unused by the app
+  study_path   jsonb,
   created_at   timestamptz not null default now(),
   constraint profiles_display_name_len check (char_length(display_name) between 2 and 24)
 );
+
+alter table public.profiles add column if not exists study_path jsonb;
 
 alter table public.profiles enable row level security;
 
@@ -185,7 +188,7 @@ as $$
   from totals t
   left join public.profiles p on p.id = t.user_id
   order by t.minutes desc, p.display_name asc
-  limit greatest(1, least(coalesce(p_limit, 50), 100));
+  limit greatest(1, least(coalesce(p_limit, 50), 500));
 $$;
 
 revoke all on function public.leaderboard_week(text, integer) from public;

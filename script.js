@@ -1,16 +1,61 @@
 // ── SETTINGS PANEL ───────────────────────────────────────────
 let settingsPanelOpen = false;
+
+function closeBgPanel(){
+  bgPanelOpen = false;
+  const p = document.getElementById('bgPanel');
+  if (p) p.classList.remove('open');
+  const b = document.querySelector('.btn-bg-toggle');
+  if (b) b.classList.remove('active');
+}
+
+function closeSettingsPanel(){
+  settingsPanelOpen = false;
+  const p = document.getElementById('settingsSlidePanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('settingsFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closeThemePanel(){
+  const p = document.getElementById('themePanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('themeFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closePlayerPanel(){
+  const p = document.getElementById('playerPanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('playerFixedBtn');
+  if (b) b.classList.remove('active');
+}
+
+function closeStudyPanel(){
+  if (window.Study && Study.closeStudy) Study.closeStudy();
+}
+
+function closeRoomPanel(){
+  if (window.Room && Room.close) Room.close();
+}
+
+function closeDockPopovers(except){
+  if (except !== 'bg') closeBgPanel();
+  if (except !== 'settings') closeSettingsPanel();
+  if (except !== 'theme') closeThemePanel();
+  if (except !== 'player') closePlayerPanel();
+  if (except !== 'study') closeStudyPanel();
+  if (except !== 'room') closeRoomPanel();
+}
+
 function toggleSettingsPanel() {
-  settingsPanelOpen = !settingsPanelOpen;
-  document.getElementById('settingsSlidePanel').classList.toggle('open', settingsPanelOpen);
-  document.getElementById('settingsFixedBtn').classList.toggle('active', settingsPanelOpen);
-  if (bgPanelOpen) toggleBgPanel();
-  // close theme panel
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  // close player panel
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
+  const panel = document.getElementById('settingsSlidePanel');
+  const btn = document.getElementById('settingsFixedBtn');
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'settings' : null);
+  settingsPanelOpen = willOpen;
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
 }
 // ── FULLSCREEN ────────────────────────────────────────────────
 function toggleFS() {
@@ -205,16 +250,14 @@ function applyBgFromRecord(rec, theme) {
 }
 
 function toggleBgPanel() {
-  bgPanelOpen = !bgPanelOpen;
-  document.getElementById('bgPanel').classList.toggle('open', bgPanelOpen);
-  document.querySelector('.btn-bg-toggle').classList.toggle('active', bgPanelOpen);
-  if (bgPanelOpen) updateRemoveDefaultBtnVisibility();
-  // close theme panel
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  // close player panel
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
+  const panel = document.getElementById('bgPanel');
+  const btn = document.querySelector('.btn-bg-toggle');
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'bg' : null);
+  bgPanelOpen = willOpen;
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
+  if (willOpen) updateRemoveDefaultBtnVisibility();
 }
 
 
@@ -579,13 +622,15 @@ function advance(){
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
-function setTab(m){
+function setTab(m, animate){
   m = m==='brk' ? 'break' : m==='lng' ? 'long' : m;
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+  if (animate) animateModeSwitch();
+  updateAllTabIndicators();
 }
 function switchMode(m){
   if (window.Chrono) Chrono.exit();
-  stopTimer(); setTab(m); initTimer(m); renderCycles(); saveTimerState();
+  stopTimer(); setTab(m, true); initTimer(m); renderCycles(); saveTimerState();
   if(window.Room)Room.onLocalChange();
 }
 
@@ -595,64 +640,177 @@ let toastTO;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTO);toastTO=setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ── MUSIC PLAYER PANEL ──────────────────────────────────────
+// Shared rooms sync YouTube only (reliable play/pause/seek).
+// Spotify / SoundCloud still work alone, as simple local embeds.
+// Mute is always local — it never leaves this browser.
+let currentPlayerRaw = '';
+let currentPlayerSrc = null;
+let playerApplyingRemote = false;
+let localMusicMuted = false;
+let knownPositionSec = 0;
+let spotifyCtrl = null;
+let spotifyPlaying = false;
+let musicNotifyTimer = null;
+let scInitTries = 0;
+let ytInitTries = 0;
+
+function inSharedRoom(){
+  return !!(window.Room && Room.inRoom && Room.inRoom());
+}
+
+// Hide Spotify / SoundCloud while in a room and show the YouTube-only note.
+function syncPlayerRoomMode(){
+  const inRoom = inSharedRoom();
+  document.querySelectorAll('.player-badge[data-src="spotify"], .player-badge[data-src="soundcloud"]').forEach(function(b){
+    b.hidden = inRoom;
+    b.style.display = inRoom ? 'none' : '';
+  });
+  const note = document.getElementById('playerRoomNote');
+  if (note) {
+    note.hidden = !inRoom;
+    if (inRoom && typeof t === 'function') note.textContent = t('player.roomYoutubeNote');
+  }
+  const empty = document.getElementById('playerEmpty');
+  if (empty && !document.getElementById('playerEmbedWrap').classList.contains('has-player')) {
+    const icon = empty.querySelector('.player-empty-icon');
+    const iconHtml = icon ? icon.outerHTML : '<div class="player-empty-icon">♫</div>';
+    empty.innerHTML = iconHtml + (inRoom
+      ? (typeof t === 'function' ? t('player.roomYoutubeNote') : 'Only YouTube is available in a shared room.')
+      : 'Paste a YouTube, Spotify or SoundCloud link to play.');
+  }
+  if (inRoom) {
+    document.querySelectorAll('.player-badge').forEach(function(b){ b.classList.remove('active-src'); });
+    const yt = document.querySelector('.player-badge[data-src="youtube"]');
+    if (yt) yt.classList.add('active-src');
+    const input = document.getElementById('playerUrlInput');
+    if (input) input.placeholder = 'https://www.youtube.com/watch?v=…';
+  }
+}
+
 function togglePlayerPanel() {
   const panel = document.getElementById('playerPanel');
   const btn   = document.getElementById('playerFixedBtn');
-  const isOpen = panel.classList.contains('open');
-  // Close all other panels
-  document.getElementById('bgPanel').classList.remove('open');
-  document.getElementById('settingsSlidePanel').classList.remove('open');
-  document.getElementById('themePanel').classList.remove('open');
-  document.getElementById('settingsFixedBtn').classList.remove('active');
-  document.getElementById('themeFixedBtn').classList.remove('active');
-  document.querySelector('.btn-bg-toggle').classList.remove('active');
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'player' : null);
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
+  syncPlayerRoomMode();
 }
 
-function loadPlayerUrl() {
-  const raw = document.getElementById('playerUrlInput').value.trim();
+// Only push music on explicit user actions — never from embed state
+// events (those caused sync loops that froze Clear / controls).
+function notifyMusicLocal(){
+  if (playerApplyingRemote || !inSharedRoom()) return;
+  clearTimeout(musicNotifyTimer);
+  musicNotifyTimer = setTimeout(function(){
+    if (playerApplyingRemote) return;
+    if (window.Room && Room.onMusicLocalChange) Room.onMusicLocalChange();
+  }, 200);
+}
+
+function guardMusicControl(){
+  if (inSharedRoom() && Room.canControlMusic && !Room.canControlMusic()){
+    showToast(typeof t === 'function' ? t('room.musicLocked') : 'Only the host can control music right now');
+    return false;
+  }
+  return true;
+}
+
+// YT.Player replaces the <iframe> node. Always tear it down and ensure a
+// fresh iframe exists before loading another source — otherwise Clear and
+// Spotify/SoundCloud loads silently break.
+function ensurePlayerIframe(){
+  const wrap = document.getElementById('playerEmbedWrap');
+  if (!wrap) return null;
+  let iframe = document.getElementById('playerIframe');
+  if (!iframe || iframe.tagName !== 'IFRAME') {
+    wrap.innerHTML = '<iframe id="playerIframe" allow="autoplay; encrypted-media; clipboard-write" allowfullscreen title="Music player"></iframe>';
+    iframe = document.getElementById('playerIframe');
+  }
+  return iframe;
+}
+
+function destroyPlayers(){
+  try {
+    if (ytPlayer) {
+      if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+      if (typeof ytPlayer.destroy === 'function') ytPlayer.destroy();
+    }
+  } catch(e){}
+  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
+  scWidget = null; scWidgetReady = false; scIsPlaying = false;
+  scShuffleOn = false; scRepeatOn = false; scTracks = [];
+  spotifyCtrl = null; spotifyPlaying = false;
+  scInitTries = 0; ytInitTries = 0;
+  const iframe = ensurePlayerIframe();
+  if (iframe) {
+    try { iframe.src = 'about:blank'; } catch(e){}
+  }
+}
+
+function loadPlayerUrl(opt) {
+  const opts = opt || {};
+  const fromRemote = !!opts.fromRemote;
+  if (!fromRemote && !guardMusicControl()) return;
+
+  const raw = (opts.url != null ? opts.url : (document.getElementById('playerUrlInput').value || '')).trim();
   if (!raw) return;
   const embedUrl = resolvePlayerEmbed(raw);
-  if (!embedUrl) { showToast('That link is not supported'); return; }
-  const iframe   = document.getElementById('playerIframe');
+  if (!embedUrl) { if (!fromRemote) showToast('That link is not supported'); return; }
+
+  // Shared rooms: YouTube only — Spotify/SoundCloud embeds can't be synced
+  // reliably and were breaking Clear / controls.
+  if (inSharedRoom() && embedUrl.src !== 'youtube') {
+    if (!fromRemote) {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
+    return;
+  }
+
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
 
-  // Reset state
-  controls.classList.remove('visible');
-  scWidget = null;
+  destroyPlayers();
+  const iframe = ensurePlayerIframe();
+  if (!iframe) return;
 
-  iframe.src     = embedUrl.url;
+  knownPositionSec = opts.positionSec != null ? Number(opts.positionSec) || 0 : 0;
+  document.getElementById('playerUrlInput').value = raw;
+  currentPlayerRaw = raw;
+  currentPlayerSrc = embedUrl.src;
+
   iframe.style.height = embedUrl.height + 'px';
   wrap.classList.add('has-player');
   empty.style.display = 'none';
   clearBtn.classList.add('visible');
 
-  // SoundCloud: kick off widget init — it retries internally until SC API is ready
-  if (embedUrl.src === 'soundcloud') {
-    scWidget = null; scWidgetReady = false;
-    controls.classList.add('visible');
-    updateCtrlLabels('soundcloud');
-    initSCWidget();
-  }
-
-  // YouTube: just show the embed, no controls needed
-  if (embedUrl.src === 'youtube') {
-    ytPlayer = null; ytPlayerReady = false;
-    const ytUrl = embedUrl.url + '&enablejsapi=1';
-    iframe.src = ytUrl;
-    initYTPlayer();
-  }
-
-  // highlight badge
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
   const match = document.querySelector(`.player-badge[data-src="${embedUrl.src}"]`);
   if (match) match.classList.add('active-src');
-  showToast('Player loaded');
-  localStorage.setItem('sf_player_url', raw);
+  updateCtrlLabels(embedUrl.src);
+
+  if (embedUrl.src === 'youtube') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url + (embedUrl.url.indexOf('?') >= 0 ? '&' : '?') + 'enablejsapi=1&origin=' + encodeURIComponent(location.origin);
+    initYTPlayer({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'soundcloud') {
+    controls.classList.add('visible');
+    iframe.src = embedUrl.url;
+    initSCWidget({ seekSec: knownPositionSec, playing: opts.playing });
+  } else if (embedUrl.src === 'spotify') {
+    // Local-only embed — no IFrame API (it fought the DOM and froze the panel).
+    controls.classList.remove('visible');
+    iframe.src = embedUrl.url;
+  }
+
+  if (!fromRemote) {
+    showToast('Player loaded');
+    localStorage.setItem('sf_player_url', raw);
+    notifyMusicLocal();
+  }
+  applyLocalMuteState();
 }
 
 function resolvePlayerEmbed(url) {
@@ -660,7 +818,6 @@ function resolvePlayerEmbed(url) {
     const u = new URL(url);
     const host = u.hostname.replace('www.', '');
 
-    // YouTube
     if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com' || host === 'music.youtube.com') {
       let vid = u.searchParams.get('v');
       let list = u.searchParams.get('list');
@@ -671,19 +828,16 @@ function resolvePlayerEmbed(url) {
       if (list) return { url: `https://www.youtube.com/embed/videoseries?list=${list}&autoplay=1`, height: 230, src: 'youtube', rawUrl: url };
     }
 
-    // Spotify
     if (host === 'open.spotify.com') {
       const path = u.pathname;
-      // Tracks/episodes: compact. Everything else (playlist/album/artist): tall enough to show shuffle+repeat footer
       const isTrack = path.startsWith('/track/') || path.startsWith('/episode/');
       const h = isTrack ? 152 : 460;
-      return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify' };
+      return { url: `https://open.spotify.com/embed${path}?utm_source=generator&theme=0`, height: h, src: 'spotify', rawUrl: url };
     }
 
-    // SoundCloud
     if (host === 'soundcloud.com') {
       const encoded = encodeURIComponent(url);
-      return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud' };
+      return { url: `https://w.soundcloud.com/player/?url=${encoded}&auto_play=true&color=%23c084fc&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false&buying=false&liking=false&download=false&sharing=false`, height: 166, src: 'soundcloud', rawUrl: url };
     }
   } catch(e) {}
   return null;
@@ -691,30 +845,38 @@ function resolvePlayerEmbed(url) {
 
 let ytPlayer = null, ytPlayerReady = false, ytIsPlaying = false;
 
-function clearPlayer() {
-  const iframe   = document.getElementById('playerIframe');
+function clearPlayer(opt) {
+  const opts = opt || {};
+  if (!opts.fromRemote && !guardMusicControl()) return;
+
+  destroyPlayers();
   const wrap     = document.getElementById('playerEmbedWrap');
   const empty    = document.getElementById('playerEmpty');
   const clearBtn = document.getElementById('playerClearBtn');
   const controls = document.getElementById('playerControls');
-  iframe.src = '';
-  wrap.classList.remove('has-player');
-  empty.style.display = '';
-  clearBtn.classList.remove('visible');
-  controls.classList.remove('visible');
-  scWidget = null; scWidgetReady = false; scIsPlaying = false; scShuffleOn = false; scRepeatOn = false;
-  ytPlayer = null; ytPlayerReady = false; ytIsPlaying = false;
-  document.getElementById('ctrlPlay').textContent = '▶';
-  document.getElementById('ctrlShuffle').classList.remove('active');
+  if (wrap) wrap.classList.remove('has-player');
+  if (empty) empty.style.display = '';
+  if (clearBtn) clearBtn.classList.remove('visible');
+  if (controls) controls.classList.remove('visible');
+  currentPlayerRaw = '';
+  currentPlayerSrc = null;
+  knownPositionSec = 0;
+  const playBtn = document.getElementById('ctrlPlay');
+  if (playBtn) playBtn.textContent = '▶';
+  const shuffle = document.getElementById('ctrlShuffle');
+  if (shuffle) shuffle.classList.remove('active');
   document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
-  document.getElementById('playerUrlInput').value = '';
-  localStorage.removeItem('sf_player_url');
-  showToast('Player cleared');
+  const input = document.getElementById('playerUrlInput');
+  if (input) input.value = '';
+  if (!opts.fromRemote) {
+    localStorage.removeItem('sf_player_url');
+    showToast('Player cleared');
+    notifyMusicLocal();
+  }
 }
 
 // ── YOUTUBE PLAYER API ────────────────────────────────────
 
-// Load YT IFrame API script once
 (function loadYTScript() {
   if (!document.getElementById('yt-iframe-api')) {
     const tag = document.createElement('script');
@@ -724,33 +886,51 @@ function clearPlayer() {
   }
 })();
 
-function initYTPlayer() {
-  // Wait until YT API and iframe are ready
+function initYTPlayer(opt) {
+  const opts = opt || {};
   if (typeof YT === 'undefined' || !YT.Player) {
-    setTimeout(initYTPlayer, 400); return;
+    if (ytInitTries++ > 40) return;
+    setTimeout(function(){ initYTPlayer(opts); }, 400); return;
   }
   const iframe = document.getElementById('playerIframe');
-  if (!iframe.src || !iframe.src.includes('youtube.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('youtube.com') < 0) return;
+  ytInitTries = 0;
   try {
     ytPlayer = new YT.Player('playerIframe', {
       events: {
-        onReady: () => {
+        onReady: function() {
           ytPlayerReady = true;
-          document.getElementById('ctrlPlay').textContent = '⏸';
-          ytIsPlaying = true;
+          const seek = opts.seekSec != null ? Number(opts.seekSec) : 0;
+          if (seek > 0) { try { ytPlayer.seekTo(seek, true); } catch(e){} }
+          const wantPlay = opts.playing !== false;
+          try {
+            if (wantPlay) ytPlayer.playVideo();
+            else ytPlayer.pauseVideo();
+          } catch(e){}
+          ytIsPlaying = wantPlay;
+          const b = document.getElementById('ctrlPlay');
+          if (b) b.textContent = wantPlay ? '⏸' : '▶';
+          applyLocalMuteState();
         },
-        onStateChange: (e) => {
+        onStateChange: function(e) {
           if (e.data === YT.PlayerState.PLAYING) {
             ytIsPlaying = true;
-            document.getElementById('ctrlPlay').textContent = '⏸';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '⏸';
+            try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
           } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
             ytIsPlaying = false;
-            document.getElementById('ctrlPlay').textContent = '▶';
+            const b = document.getElementById('ctrlPlay');
+            if (b) b.textContent = '▶';
+            try { knownPositionSec = ytPlayer.getCurrentTime() || knownPositionSec; } catch(err){}
           }
         }
       }
     });
-  } catch(e) { setTimeout(initYTPlayer, 400); }
+  } catch(e) {
+    if (ytInitTries++ > 40) return;
+    setTimeout(function(){ initYTPlayer(opts); }, 400);
+  }
 }
 
 function ytTogglePlay() {
@@ -760,53 +940,68 @@ function ytTogglePlay() {
 function ytSkipForward() {
   if (!ytPlayer || !ytPlayerReady) return;
   const t = ytPlayer.getCurrentTime();
-  ytPlayer.seekTo(Math.max(0, t + 10), true);
+  knownPositionSec = Math.max(0, t + 10);
+  ytPlayer.seekTo(knownPositionSec, true);
 }
 function ytSkipBackward() {
   if (!ytPlayer || !ytPlayerReady) return;
   const t = ytPlayer.getCurrentTime();
-  ytPlayer.seekTo(Math.max(0, t - 10), true);
+  knownPositionSec = Math.max(0, t - 10);
+  ytPlayer.seekTo(knownPositionSec, true);
 }
 function ytNextVideo() {
   if (!ytPlayer || !ytPlayerReady) return;
-  try { ytPlayer.nextVideo(); } catch(e) {}
+  try { ytPlayer.nextVideo(); } catch(e){}
 }
 function ytPrevVideo() {
   if (!ytPlayer || !ytPlayerReady) return;
-  try { ytPlayer.previousVideo(); } catch(e) {}
+  try { ytPlayer.previousVideo(); } catch(e){}
 }
 
 // ── UNIFIED CONTROL ROUTING ────────────────────────────────
 function getActiveSrc() {
+  if (currentPlayerSrc) return currentPlayerSrc;
   const badge = document.querySelector('.player-badge.active-src');
   return badge ? badge.dataset.src : null;
 }
 function ctrlPlayPause() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') ytTogglePlay();
   else if (src === 'soundcloud') scTogglePlay();
+  else return;
+  notifyMusicLocal();
 }
 function ctrlPrev() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipBackward(); showToast('−10s'); }
   else if (src === 'soundcloud') scPrev();
+  else return;
+  notifyMusicLocal();
 }
 function ctrlNext() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytSkipForward(); showToast('+10s'); }
   else if (src === 'soundcloud') scNext();
+  else return;
+  notifyMusicLocal();
 }
 function ctrlLeft() {
+  if (!guardMusicControl()) return;
   const src = getActiveSrc();
   if (src === 'youtube') { ytPrevVideo(); showToast('Previous video'); }
   else if (src === 'soundcloud') scShuffle();
+  else return;
+  notifyMusicLocal();
 }
 
-// Update button labels based on active source
 function updateCtrlLabels(src) {
   const shuffle = document.getElementById('ctrlShuffle');
   const prev    = document.getElementById('ctrlPrev');
   const next    = document.getElementById('ctrlNext');
+  if (!shuffle || !prev || !next) return;
   if (src === 'youtube') {
     shuffle.title = 'Previous Video';  shuffle.textContent = '⏮⏮';
     prev.title    = '−10 seconds';     prev.textContent    = '−10s';
@@ -822,41 +1017,60 @@ function updateCtrlLabels(src) {
 let scWidget = null, scIsPlaying = false, scShuffleOn = false, scRepeatOn = false;
 let scTracks = [], scWidgetReady = false;
 
-function initSCWidget() {
-  // Retry until the SC Widget API script has loaded
+function initSCWidget(opt) {
+  const opts = opt || {};
   if (typeof SC === 'undefined' || !window.SC || !window.SC.Widget) {
-    setTimeout(initSCWidget, 400);
+    if (scInitTries++ > 40) return;
+    setTimeout(function(){ initSCWidget(opts); }, 400);
     return;
   }
   const iframe = document.getElementById('playerIframe');
-  // Guard: if iframe src is gone (user cleared), stop
-  if (!iframe.src || !iframe.src.includes('soundcloud.com')) return;
+  if (!iframe || !iframe.src || iframe.src.indexOf('soundcloud.com') < 0) return;
+  scInitTries = 0;
   try {
     scWidget = SC.Widget(iframe);
-  } catch(e) { setTimeout(initSCWidget, 400); return; }
+  } catch(e) {
+    if (scInitTries++ > 40) return;
+    setTimeout(function(){ initSCWidget(opts); }, 400);
+    return;
+  }
 
   scWidgetReady = false;
 
-  scWidget.bind(SC.Widget.Events.READY, () => {
+  scWidget.bind(SC.Widget.Events.READY, function() {
     scWidgetReady = true;
-    // Fetch track list for shuffle
-    scWidget.getSounds(sounds => { scTracks = sounds || []; });
-    // Widget starts playing automatically — reflect that
+    scWidget.getSounds(function(sounds){ scTracks = sounds || []; });
+    const seekMs = Math.max(0, Math.floor((opts.seekSec || 0) * 1000));
+    if (seekMs > 0) { try { scWidget.seekTo(seekMs); } catch(e){} }
+    const wantPlay = opts.playing !== false;
+    try {
+      if (wantPlay) scWidget.play();
+      else scWidget.pause();
+    } catch(e){}
+    scIsPlaying = wantPlay;
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = wantPlay ? '⏸' : '▶';
+    applyLocalMuteState();
+  });
+  scWidget.bind(SC.Widget.Events.PLAY, function() {
     scIsPlaying = true;
-    document.getElementById('ctrlPlay').textContent = '⏸';
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '⏸';
   });
-  scWidget.bind(SC.Widget.Events.PLAY, () => {
-    scIsPlaying = true;
-    document.getElementById('ctrlPlay').textContent = '⏸';
-  });
-  scWidget.bind(SC.Widget.Events.PAUSE, () => {
+  scWidget.bind(SC.Widget.Events.PAUSE, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
   });
-  scWidget.bind(SC.Widget.Events.FINISH, () => {
+  scWidget.bind(SC.Widget.Events.PLAY_PROGRESS, function(data) {
+    if (data && typeof data.currentPosition === 'number') {
+      knownPositionSec = data.currentPosition / 1000;
+    }
+  });
+  scWidget.bind(SC.Widget.Events.FINISH, function() {
     scIsPlaying = false;
-    document.getElementById('ctrlPlay').textContent = '▶';
-    // Auto-advance: repeat or shuffle
+    const b = document.getElementById('ctrlPlay');
+    if (b) b.textContent = '▶';
     if (scRepeatOn) {
       scWidget.seekTo(0); scWidget.play();
     } else if (scShuffleOn && scTracks.length > 1) {
@@ -885,16 +1099,106 @@ function scPlayRandom() {
 }
 function scShuffle() {
   scShuffleOn = !scShuffleOn;
-  document.getElementById('ctrlShuffle').classList.toggle('active', scShuffleOn);
+  const el = document.getElementById('ctrlShuffle');
+  if (el) el.classList.toggle('active', scShuffleOn);
   showToast(scShuffleOn ? 'Shuffle on' : 'Shuffle off');
 }
 function scToggleRepeat() {
   scRepeatOn = !scRepeatOn;
-  document.getElementById('ctrlRepeat').classList.toggle('active', scRepeatOn);
+  const el = document.getElementById('ctrlRepeat');
+  if (el) el.classList.toggle('active', scRepeatOn);
   showToast(scRepeatOn ? 'Repeat on' : 'Repeat off');
 }
 
-// Click badge to set placeholder example and highlight selection
+// ── LOCAL MUTE (never synced) ──────────────────────────────
+function applyLocalMuteState(){
+  const btn = document.getElementById('ctrlMute');
+  const row = document.getElementById('playerMuteRow');
+  const label = document.getElementById('playerMuteLabel');
+  if (btn) {
+    btn.classList.toggle('active', localMusicMuted);
+    btn.textContent = localMusicMuted ? '🔇' : '🔊';
+  }
+  if (row) row.classList.toggle('is-muted', localMusicMuted);
+  if (label && typeof t === 'function') {
+    label.textContent = localMusicMuted ? t('player.unmute') : t('player.mute');
+  }
+  const src = getActiveSrc();
+  try {
+    if (src === 'youtube' && ytPlayer && ytPlayerReady) {
+      if (localMusicMuted) ytPlayer.mute(); else ytPlayer.unMute();
+    } else if (src === 'soundcloud' && scWidget && scWidgetReady) {
+      scWidget.setVolume(localMusicMuted ? 0 : 100);
+    }
+  } catch(e){}
+}
+function toggleLocalMute(){
+  localMusicMuted = !localMusicMuted;
+  applyLocalMuteState();
+  showToast(localMusicMuted
+    ? (typeof t === 'function' ? t('player.mutedToast') : 'Muted for you only')
+    : (typeof t === 'function' ? t('player.unmutedToast') : 'Unmuted'));
+  if (window.Room && Room.refresh) Room.refresh();
+}
+function isLocalMuted(){ return localMusicMuted; }
+
+// ── MUSIC SNAPSHOT (for room sync — YouTube only) ──────────
+function getMusicSnapshot(){
+  const src = getActiveSrc();
+  let playing = false;
+  let pos = knownPositionSec;
+  try {
+    if (src === 'youtube' && ytPlayer && ytPlayerReady) {
+      playing = ytIsPlaying;
+      pos = ytPlayer.getCurrentTime() || pos;
+    }
+  } catch(e){}
+  knownPositionSec = pos;
+  return {
+    url: (src === 'youtube') ? (currentPlayerRaw || '') : '',
+    src: (src === 'youtube') ? 'youtube' : null,
+    playing: !!playing,
+    positionSec: Number(pos) || 0,
+    at: Date.now()
+  };
+}
+
+function applyMusicSnapshot(snap){
+  if (!snap) return;
+  playerApplyingRemote = true;
+  try {
+    const url = (snap.url || '').trim();
+    if (!url) {
+      if (currentPlayerRaw) clearPlayer({ fromRemote: true });
+      return;
+    }
+    const embed = resolvePlayerEmbed(url);
+    if (!embed || embed.src !== 'youtube') return;
+
+    let pos = Number(snap.positionSec) || 0;
+    if (snap.playing && snap.at) {
+      pos += Math.max(0, (Date.now() - snap.at) / 1000);
+    }
+    const same = currentPlayerRaw === url && currentPlayerSrc === 'youtube';
+    if (!same) {
+      loadPlayerUrl({
+        url: url, fromRemote: true, skipPersonal: true,
+        positionSec: pos, playing: !!snap.playing
+      });
+    } else if (ytPlayer && ytPlayerReady) {
+      knownPositionSec = pos;
+      try { ytPlayer.seekTo(pos, true); } catch(e){}
+      try {
+        if (snap.playing) { if (!ytIsPlaying) ytPlayer.playVideo(); }
+        else { if (ytIsPlaying) ytPlayer.pauseVideo(); }
+      } catch(e){}
+      applyLocalMuteState();
+    }
+  } finally {
+    setTimeout(function(){ playerApplyingRemote = false; }, 800);
+  }
+}
+
 document.querySelectorAll('.player-badge').forEach(badge => {
   badge.addEventListener('click', () => {
     const examples = {
@@ -904,14 +1208,16 @@ document.querySelectorAll('.player-badge').forEach(badge => {
     };
     const src = badge.dataset.src;
     document.getElementById('playerUrlInput').placeholder = examples[src] || 'paste link here...';
-    // Highlight the clicked badge
     document.querySelectorAll('.player-badge').forEach(b => b.classList.remove('active-src'));
     badge.classList.add('active-src');
+    if (inSharedRoom() && src !== 'youtube') {
+      showToast(typeof t === 'function' ? t('player.roomYoutubeOnly') : 'In a shared room, use a YouTube link');
+    }
   });
 });
 
-// Restore player on load
 (function restorePlayer() {
+  if (/[?&]room=/.test(location.search)) return;
   const saved = localStorage.getItem('sf_player_url');
   if (saved) {
     document.getElementById('playerUrlInput').value = saved;
@@ -972,6 +1278,7 @@ function init(){
   if (_gbord !== null) { const v = parseInt(_gbord); document.getElementById('glassBordSlider').value = v; setGlassBorder(v); }
 
   loadQuote();
+  startQuoteRotation();
 }
 
 const QUOTES = [
@@ -986,10 +1293,38 @@ const QUOTES = [
   {t:"One hour of focused work is worth more than a day of distraction.", a:"— Anonymous"},
   {t:"Small steps every day lead to giant leaps over time.", a:"— Anonymous"},
 ];
-function loadQuote(){
-  const q=QUOTES[Math.floor(Math.random()*QUOTES.length)];
-  document.getElementById('quoteText').textContent='"'+q.t+'"';
-  document.getElementById('quoteAuthor').textContent=q.a;
+let quoteIndex = -1;
+let quoteTimer = null;
+
+function loadQuote(animate){
+  const card = document.querySelector('.quote-card');
+  const textEl = document.getElementById('quoteText');
+  const authorEl = document.getElementById('quoteAuthor');
+  if (!textEl || !authorEl) return;
+
+  function applyQuote(){
+    let next = Math.floor(Math.random() * QUOTES.length);
+    if (QUOTES.length > 1){
+      while (next === quoteIndex) next = Math.floor(Math.random() * QUOTES.length);
+    }
+    quoteIndex = next;
+    const q = QUOTES[quoteIndex];
+    textEl.textContent = '"' + q.t + '"';
+    authorEl.textContent = q.a;
+    if (card) card.classList.remove('fading');
+  }
+
+  if (animate && card){
+    card.classList.add('fading');
+    setTimeout(applyQuote, 400);
+  } else {
+    applyQuote();
+  }
+}
+
+function startQuoteRotation(){
+  if (quoteTimer) clearInterval(quoteTimer);
+  quoteTimer = setInterval(function(){ loadQuote(true); }, 5 * 60 * 1000);
 }
 
 // ── THEME ─────────────────────────────────────────────────────
@@ -1106,15 +1441,10 @@ function setTheme(t) {
 function toggleThemePanel() {
   const panel = document.getElementById('themePanel');
   const btn = document.getElementById('themeFixedBtn');
-  const isOpen = panel.classList.contains('open');
-  document.getElementById('bgPanel').classList.remove('open');
-  document.getElementById('settingsSlidePanel').classList.remove('open');
-  document.getElementById('settingsFixedBtn').classList.remove('active');
-  document.querySelector('.btn-bg-toggle').classList.remove('active');
-  document.getElementById('playerPanel').classList.remove('open');
-  document.getElementById('playerFixedBtn').classList.remove('active');
-  panel.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'theme' : null);
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
 }
 
 // ── PROGRESS ANIMALS ─────────────────────────────────────────
@@ -1218,13 +1548,11 @@ function updateClock() {
 
   let h = now.getHours();
   const m = now.getMinutes();
-  const s = now.getSeconds();
   const ampm = h24 ? '' : (h >= 12 ? 'PM' : 'AM');
   if (!h24) h = h % 12 || 12;
 
   document.getElementById('clockHours').textContent = String(h).padStart(2, '0');
   document.getElementById('clockMins').textContent  = String(m).padStart(2, '0');
-  document.getElementById('clockSecs').textContent  = String(s).padStart(2, '0');
   document.getElementById('clockAmpm').textContent  = ampm;
 
   const el = document.getElementById('liveDate');
@@ -1240,8 +1568,16 @@ function updateClock() {
     }
   }
 }
-updateClock();
-setInterval(updateClock, 1000);
+function scheduleClock(){
+  updateClock();
+  const now = new Date();
+  const ms = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+  setTimeout(function(){
+    updateClock();
+    setInterval(updateClock, 60000);
+  }, Math.max(0, ms));
+}
+scheduleClock();
 
 
 // ── SHARED ROOM (Supabase Realtime) ───────────────────────────
@@ -1290,13 +1626,123 @@ window.SB = (function(){
 
 window.Room = (function(){
   const myId = Math.random().toString(36).slice(2, 10);
+  // How long the host can vanish (refresh / disconnect) before the next
+  // person who entered the room inherits hostship.
+  const HOST_GRACE_MS = 35000;
 
   let channel = null, code = null;
   let applying = false, panelOpen = false, status = 'idle', peers = 1;
+  let isHost = false;
+  let hostId = null;
+  let hostToken = null; // rotates on succession so an old host can't reclaim
+  let myJoinedAt = Date.now();
+  // When true, everyone may control; when false, only the host.
+  let allowTimer = true;
+  let allowMusic = true;
+  let lastTimerSnap = null;
+  let lastMusicSnap = null;
+  let personalStash = null; // { url } restored on leave
+  let musicTick = null;
+  let hostCheckTimer = null;
+  let hostWatch = null;
+  let hostMissingSince = null;
+  let members = []; // [{ id, name, joinedAt, host }]
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
   function sb(){ return window.SB.get(); }
+
+  function inRoom(){ return status === 'joined'; }
+  function canControlTimer(){ return !inRoom() || isHost || allowTimer; }
+  function canControlMusic(){ return !inRoom() || isHost || allowMusic; }
+  function lastMusic(){ return lastMusicSnap; }
+
+  // ── Display name (required for guests) ─────────────────────
+  function nameKey(){ return 'sf_room_display_name'; }
+  function getStoredName(){
+    try { return String(localStorage.getItem(nameKey()) || '').trim(); } catch(e){ return ''; }
+  }
+  function setStoredName(n){
+    try { localStorage.setItem(nameKey(), String(n || '').trim().slice(0, 24)); } catch(e){}
+  }
+  function displayName(){
+    // Signed-in profile always wins over a leftover guest nickname.
+    if (window.Auth && window.Auth.signedIn()) {
+      const authName = String(window.Auth.name() || '').trim();
+      if (authName.length >= 2) return authName;
+    }
+    return getStoredName();
+  }
+  function needsName(){
+    if (window.Auth && window.Auth.signedIn()) return false;
+    return displayName().length < 2;
+  }
+  function saveNameFromInput(){
+    // Guests only — signed-in users keep their Auth display name.
+    if (window.Auth && window.Auth.signedIn()) return displayName();
+    const el = document.getElementById('roomNameInput');
+    if (!el) return displayName();
+    const n = String(el.value || '').trim().slice(0, 24);
+    if (n.length >= 2) setStoredName(n);
+    return n;
+  }
+  function ensureNameOrToast(){
+    if (window.Auth && window.Auth.signedIn()){
+      const n = displayName();
+      if (n.length >= 2) return n;
+      toast(t('room.needName'));
+      updateUI();
+      return null;
+    }
+    const n = saveNameFromInput();
+    if (n.length < 2){
+      toast(t('room.needName'));
+      updateUI();
+      const el = document.getElementById('roomNameInput');
+      if (el) try { el.focus(); } catch(e){}
+      return null;
+    }
+    return n;
+  }
+
+  // ── Host token (survives refresh, invalidated on succession) ─
+  function hostKey(c){ return 'sf_room_owner_v3_' + String(c || '').toUpperCase(); }
+  function joinedKey(c){ return 'sf_room_joined_v1_' + String(c || '').toUpperCase(); }
+  function rememberHost(c, token){
+    try { sessionStorage.setItem(hostKey(c), token); } catch(e){}
+  }
+  function forgetHost(c){
+    try { sessionStorage.removeItem(hostKey(c)); } catch(e){}
+  }
+  function storedHostToken(c){
+    try { return sessionStorage.getItem(hostKey(c)) || ''; } catch(e){ return ''; }
+  }
+  function iOwnHostToken(c){
+    const mine = storedHostToken(c);
+    if (!mine || !hostToken) return false;
+    return mine === hostToken;
+  }
+  function newHostToken(){
+    return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+  function joinStamp(c, fresh){
+    try {
+      if (fresh) {
+        const v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+        return Number(v);
+      }
+      let v = sessionStorage.getItem(joinedKey(c));
+      if (!v){
+        v = String(Date.now());
+        sessionStorage.setItem(joinedKey(c), v);
+      }
+      return Number(v);
+    } catch(e){ return Date.now(); }
+  }
+  function forgetJoin(c){
+    try { sessionStorage.removeItem(joinedKey(c)); } catch(e){}
+  }
 
   function genCode(){
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -1304,12 +1750,184 @@ window.Room = (function(){
     return s;
   }
 
-  function snapshot(){ return { mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running }; }
+  function snapshot(){
+    return {
+      mode: mode, totalSecs: totalSecs, remainSecs: remainSecs, running: running,
+      hostId: hostId, hostToken: hostToken,
+      allowTimer: allowTimer, allowMusic: allowMusic
+    };
+  }
+
+  function musicSnapshot(){
+    if (typeof getMusicSnapshot === 'function') return getMusicSnapshot();
+    return { url: '', playing: false, positionSec: 0, at: Date.now() };
+  }
+
+  function trackPresence(){
+    if (!channel) return;
+    try {
+      channel.track({
+        id: myId,
+        name: displayName() || 'student',
+        joinedAt: myJoinedAt,
+        host: isHost,
+        at: Date.now()
+      });
+    } catch(e){}
+  }
+
+  // permanent: true → write/rotate host token (create or succession)
+  function claimHost(opts){
+    const permanent = !!(opts && opts.permanent);
+    const openLocks = !!(opts && opts.openLocks);
+    const rotate = !!(opts && opts.rotateToken);
+    isHost = true;
+    hostId = myId;
+    if (permanent && code){
+      if (rotate || !hostToken || !iOwnHostToken(code)){
+        hostToken = newHostToken();
+      }
+      rememberHost(code, hostToken);
+    }
+    if (openLocks){ allowTimer = true; allowMusic = true; }
+    trackPresence();
+    if (status === 'joined') {
+      push();
+      pushMusic();
+    }
+    updateUI();
+  }
+
+  function yieldHost(newHostId){
+    isHost = false;
+    if (newHostId) hostId = newHostId;
+    trackPresence();
+    updateUI();
+  }
+
+  function presentPeople(){
+    if (!channel) return [];
+    const out = [];
+    const seen = {};
+    try {
+      const state = channel.presenceState() || {};
+      Object.keys(state).forEach(function(k){
+        (state[k] || []).forEach(function(p){
+          if (!p || !p.id || seen[p.id]) return;
+          seen[p.id] = 1;
+          out.push({
+            id: p.id,
+            name: String(p.name || 'student').slice(0, 24),
+            joinedAt: Number(p.joinedAt) || 0,
+            host: !!p.host
+          });
+        });
+      });
+    } catch(e){}
+    out.sort(function(a, b){
+      if (a.joinedAt !== b.joinedAt) return a.joinedAt - b.joinedAt;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return out;
+  }
+
+  function refreshMembers(){
+    members = presentPeople();
+    peers = members.length || 1;
+  }
+
+  // Next in join order after the missing host (or earliest if host unknown).
+  function successorId(people, missingHostId){
+    if (!people.length) return null;
+    if (missingHostId){
+      const idx = people.findIndex(function(p){ return p.id === missingHostId; });
+      // Host not in list — pick earliest joiner overall.
+      if (idx < 0) return people[0].id;
+    }
+    return people[0].id;
+  }
+
+  // If the host is gone for HOST_GRACE_MS, the next person who entered
+  // becomes the permanent host (new token so the old host can't steal it back).
+  function ensureHostAlive(){
+    if (status !== 'joined' || !channel) return;
+    refreshMembers();
+    const people = members;
+    if (!people.length) return;
+    const ids = people.map(function(p){ return p.id; });
+    const hostHere = !!(hostId && ids.indexOf(hostId) !== -1);
+
+    if (hostHere) {
+      hostMissingSince = null;
+      isHost = (hostId === myId);
+      updateUI();
+      return;
+    }
+
+    // Still the token holder and reconnecting — reclaim immediately.
+    if (code && iOwnHostToken(code)) {
+      hostMissingSince = null;
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
+      return;
+    }
+
+    if (!hostMissingSince) {
+      hostMissingSince = Date.now();
+      toast(t('room.hostMissingToast'));
+    }
+    const goneFor = Date.now() - hostMissingSince;
+    if (goneFor < HOST_GRACE_MS) {
+      updateUI();
+      return;
+    }
+
+    const next = successorId(people, hostId);
+    if (next === myId) {
+      if (!(isHost && hostId === myId && iOwnHostToken(code))) {
+        claimHost({ permanent: true, openLocks: true, rotateToken: true });
+        toast(t('room.youAreNowHost'));
+      }
+    } else {
+      yieldHost(next);
+    }
+  }
+
+  function applyMeta(s){
+    if (!s) return;
+    if (s.hostToken) hostToken = s.hostToken;
+    const remoteHost = s.hostId || null;
+    const iAmOwner = !!(code && iOwnHostToken(code));
+
+    if (iAmOwner) {
+      hostId = myId;
+      isHost = true;
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      return;
+    }
+
+    if (remoteHost && remoteHost !== myId) {
+      hostId = remoteHost;
+      isHost = false;
+      if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+      if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+      return;
+    }
+
+    if (remoteHost) hostId = remoteHost;
+    if (typeof s.allowTimer === 'boolean') allowTimer = s.allowTimer;
+    if (typeof s.allowMusic === 'boolean') allowMusic = s.allowMusic;
+    isHost = (hostId === myId);
+  }
 
   function apply(s){
     if (!s) return;
     applying = true;
     try {
+      applyMeta(s);
+      lastTimerSnap = {
+        mode: s.mode, totalSecs: s.totalSecs, remainSecs: s.remainSecs, running: s.running
+      };
       if (typeof setTab === 'function') setTab(s.mode);
       mode = s.mode; totalSecs = s.totalSecs; remainSecs = s.remainSecs;
       const cc = mode==='work'?'wc':mode==='break'?'bc':'lc';
@@ -1318,14 +1936,24 @@ window.Room = (function(){
       updateDisplay(); updateBar();
       const b = document.getElementById('startBtn');
       if (s.running){
-        if (!running) startTimer();               // sets label 'Pause' + starts ticker
+        if (!running) startTimer();
       } else {
-        if (running){ running = false; clearInterval(ticker); }   // stop ticker, no label churn
+        if (running){ running = false; clearInterval(ticker); }
         if (b){ b.textContent = (remainSecs >= totalSecs) ? t('timer.start') : t('timer.resume'); b.classList.remove('running'); }
         if (td) td.classList.toggle('blink', remainSecs < totalSecs);
       }
     } catch(e){ console.warn('room apply', e); }
     applying = false;
+    if (code && iOwnHostToken(code) && hostId !== myId) {
+      claimHost({ permanent: true, openLocks: false, rotateToken: false });
+    }
+    updateUI();
+  }
+
+  function applyMusic(s){
+    if (!s) return;
+    lastMusicSnap = s;
+    if (typeof applyMusicSnapshot === 'function') applyMusicSnapshot(s);
   }
 
   function push(){
@@ -1333,38 +1961,188 @@ window.Room = (function(){
       try { channel.send({ type:'broadcast', event:'sync', payload: snapshot() }); } catch(e){}
     }
   }
-  function onLocalChange(){ push(); }
 
-  function join(c){
+  function pushMusic(){
+    if (channel && status === 'joined' && canControlMusic()) {
+      const payload = musicSnapshot();
+      lastMusicSnap = payload;
+      try { channel.send({ type:'broadcast', event:'music', payload: payload }); } catch(e){}
+    }
+  }
+
+  function pushFull(){
+    push();
+    if (canControlMusic() || isHost) pushMusic();
+  }
+
+  function onLocalChange(){
+    if (status !== 'joined') return;
+    if (!canControlTimer()){
+      toast(t('room.timerLocked'));
+      if (lastTimerSnap) apply(Object.assign({}, lastTimerSnap, {
+        hostId: hostId, hostToken: hostToken,
+        allowTimer: allowTimer, allowMusic: allowMusic
+      }));
+      return;
+    }
+    push();
+  }
+
+  function onMusicLocalChange(){
+    if (status !== 'joined') return;
+    if (!canControlMusic()){
+      toast(t('room.musicLocked'));
+      if (lastMusicSnap) applyMusic(lastMusicSnap);
+      return;
+    }
+    pushMusic();
+  }
+
+  function setAllowTimer(on){
+    if (!isHost){ toast(t('room.hostOnly')); return; }
+    allowTimer = !!on;
+    push();
+    updateUI();
+  }
+  function setAllowMusic(on){
+    if (!isHost){ toast(t('room.hostOnly')); return; }
+    allowMusic = !!on;
+    push();
+    updateUI();
+  }
+  function toggleAllowTimer(){ setAllowTimer(!allowTimer); }
+  function toggleAllowMusic(){ setAllowMusic(!allowMusic); }
+
+  function startMusicTick(){
+    stopMusicTick();
+    musicTick = setInterval(function(){
+      if (status !== 'joined' || !canControlMusic()) return;
+      const snap = musicSnapshot();
+      if (snap && snap.url && snap.playing) pushMusic();
+    }, 8000);
+  }
+  function stopMusicTick(){
+    if (musicTick){ clearInterval(musicTick); musicTick = null; }
+  }
+  function startHostWatch(){
+    stopHostWatch();
+    hostWatch = setInterval(function(){
+      ensureHostAlive();
+      // Refresh the countdown label every tick while waiting.
+      if (hostMissingSince && status === 'joined') updateUI();
+    }, 1000);
+  }
+  function stopHostWatch(){
+    if (hostWatch){ clearInterval(hostWatch); hostWatch = null; }
+  }
+
+  function stashPersonal(){
+    personalStash = {
+      url: (typeof currentPlayerRaw !== 'undefined' && currentPlayerRaw)
+        || localStorage.getItem('sf_player_url') || ''
+    };
+  }
+  function restorePersonal(){
+    const url = personalStash && personalStash.url;
+    personalStash = null;
+    if (url) {
+      if (typeof loadPlayerUrl === 'function') {
+        loadPlayerUrl({ url: url, fromRemote: true });
+        try { localStorage.setItem('sf_player_url', url); } catch(e){}
+      }
+    } else if (typeof clearPlayer === 'function') {
+      clearPlayer({ fromRemote: true });
+    }
+  }
+
+  function join(c, opts){
+    const created = opts && opts.created;
     const cl = sb();
     if (!cl){ toast('Shared rooms are unavailable right now'); return; }
+    if (!ensureNameOrToast()) return;
     if (channel) leave(true);
-    code = c; status = 'connecting'; updateUI();
+
+    myJoinedAt = joinStamp(c, !!created);
+    const reclaim = !created && iOwnHostToken(c);
+    if (created){
+      isHost = true;
+      hostId = myId;
+      hostToken = newHostToken();
+      rememberHost(c, hostToken);
+      allowTimer = true;
+      allowMusic = true;
+    } else if (reclaim){
+      isHost = true;
+      hostId = myId;
+      hostToken = storedHostToken(c) || hostToken;
+    } else {
+      isHost = false;
+      hostId = null;
+    }
+
+    stashPersonal();
+    // Shared rooms only sync YouTube — drop Spotify/SoundCloud embeds on entry.
+    if (typeof currentPlayerSrc !== 'undefined' && currentPlayerSrc && currentPlayerSrc !== 'youtube') {
+      if (typeof clearPlayer === 'function') clearPlayer({ fromRemote: true });
+    }
+    code = c; status = 'connecting'; hostMissingSince = null; updateUI();
     channel = cl.channel('room:'+c, { config: { broadcast: { self:false }, presence: { key: myId } } });
     channel.on('broadcast', { event:'sync'  }, function(m){ apply(m.payload); });
-    channel.on('broadcast', { event:'hello' }, function(){ push(); });   // reply to newcomers
+    channel.on('broadcast', { event:'music' }, function(m){ applyMusic(m.payload); });
+    channel.on('broadcast', { event:'hello' }, function(){
+      push();
+      if (isHost) pushMusic();
+    });
     channel.on('presence',  { event:'sync'  }, function(){
-      try { peers = Object.keys(channel.presenceState()).length || 1; } catch(e){ peers = 1; }
+      refreshMembers();
+      ensureHostAlive();
       updateUI();
     });
     channel.subscribe(function(st){
       if (st === 'SUBSCRIBED'){
         status = 'joined';
-        try { channel.track({ at: Date.now() }); } catch(e){}
-        try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}  // request current state
-        setUrl(c); toast('Joined room '+c); updateUI();
+        trackPresence();
+        try { channel.send({ type:'broadcast', event:'hello', payload:{} }); } catch(e){}
+        if (created || reclaim) pushFull();
+        setUrl(c);
+        toast(created ? t('room.created')
+          : reclaim ? t('room.reclaimed')
+          : ('Joined room '+c));
+        startMusicTick();
+        startHostWatch();
+        if (hostCheckTimer) clearTimeout(hostCheckTimer);
+        hostCheckTimer = setTimeout(function(){ ensureHostAlive(); }, 1500);
+        updateUI();
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
         status = 'error'; updateUI(); toast('Could not connect to the room');
       }
     });
   }
 
-  function create(){ join(genCode()); }
+  function create(){
+    if (!ensureNameOrToast()) return;
+    join(genCode(), { created: true });
+  }
 
   function leave(silent){
     const cl = sb();
+    const leavingCode = code;
+    const owned = leavingCode && iOwnHostToken(leavingCode);
+    stopMusicTick();
+    stopHostWatch();
+    if (hostCheckTimer){ clearTimeout(hostCheckTimer); hostCheckTimer = null; }
     if (channel && cl){ try { cl.removeChannel(channel); } catch(e){} }
-    channel = null; code = null; status = 'idle'; peers = 1; clearUrl();
+    channel = null; code = null; status = 'idle'; peers = 1; members = [];
+    isHost = false; hostId = null; hostToken = null;
+    allowTimer = true; allowMusic = true;
+    lastTimerSnap = null; lastMusicSnap = null;
+    if (!silent && leavingCode){
+      if (owned) forgetHost(leavingCode);
+      forgetJoin(leavingCode);
+    }
+    hostMissingSince = null;
+    clearUrl();
+    restorePersonal();
     if (!silent) toast('Left the room');
     updateUI();
   }
@@ -1380,64 +2158,189 @@ window.Room = (function(){
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
 
+  function toggleHtml(id, on, label, onclick){
+    return '<button type="button" class="room-toggle'+(on?' is-on':'')+'" id="'+id+'" onclick="'+onclick+'">' +
+      '<span class="room-toggle-switch" aria-hidden="true"></span>' +
+      '<span class="room-toggle-label">'+esc(label)+'</span>' +
+      '</button>';
+  }
+
+  function membersHtml(){
+    const list = members.length ? members : presentPeople();
+    if (!list.length){
+      return '<div class="room-members-empty">' + esc(t('room.noMembers')) + '</div>';
+    }
+    return '<ul class="room-members">' + list.map(function(p){
+      const isMe = p.id === myId;
+      const isH = (hostId && p.id === hostId);
+      const hostBadge = isH ? '<span class="room-host-badge">' + esc(t('room.hostBadge')) + '</span>' : '';
+      const you = isMe ? '<span class="room-you-badge">' + esc(t('room.you')) + '</span>' : '';
+      return '<li class="room-member'+(isH?' is-host':'')+(isMe?' is-me':'')+'">' +
+               '<span class="room-member-name">'+esc(p.name || 'student')+'</span>' +
+               hostBadge + you +
+             '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function nameFieldHtml(){
+    const signedIn = window.Auth && window.Auth.signedIn();
+    const val = esc(displayName());
+    if (signedIn && displayName()){
+      return '<div class="room-name-row room-name-set">' +
+               '<span class="room-name-label">' + esc(t('room.yourName')) + '</span>' +
+               '<span class="room-name-value">'+val+'</span>' +
+             '</div>';
+    }
+    return '<div class="room-name-row">' +
+             '<label class="room-name-label" for="roomNameInput">' + esc(t('room.yourName')) + '</label>' +
+             '<input class="room-input" id="roomNameInput" type="text" maxlength="24" ' +
+               'placeholder="' + esc(t('room.namePlaceholder')) + '" value="'+val+'" ' +
+               'onkeydown="if(event.key===\'Enter\'){Room.saveName();}">' +
+           '</div>' +
+           (needsName() ? '<div class="room-name-hint">' + esc(t('room.needName')) + '</div>' : '');
+  }
+
   function updateUI(){
+    if (typeof syncPlayerRoomMode === 'function') syncPlayerRoomMode();
     const btn = document.getElementById('roomFixedBtn');
     if (btn) btn.classList.toggle('active', status === 'joined');
     const panel = document.getElementById('roomPanel');
     if (panel) panel.classList.toggle('open', panelOpen);
     const body = document.getElementById('roomBody');
     if (!body) return;
+
+    // Preserve name/code inputs across re-renders when possible
+    const prevName = (document.getElementById('roomNameInput') || {}).value;
+    const prevCode = (document.getElementById('roomJoinInput') || {}).value;
+
     if (status === 'joined'){
+      let perms = '';
+      if (isHost){
+        perms =
+          '<div class="room-perms">' +
+            '<div class="room-perms-title">'+esc(t('room.perms'))+'</div>' +
+            toggleHtml('roomAllowTimer', allowTimer, t('room.allowTimer'), 'Room.toggleAllowTimer()') +
+            toggleHtml('roomAllowMusic', allowMusic, t('room.allowMusic'), 'Room.toggleAllowMusic()') +
+          '</div>';
+      } else {
+        perms =
+          '<div class="room-perms room-perms-ro">' +
+            '<div class="room-perm-line">'+(allowTimer ? esc(t('room.timerOpen')) : esc(t('room.timerLocked')))+'</div>' +
+            '<div class="room-perm-line">'+(allowMusic ? esc(t('room.musicOpen')) : esc(t('room.musicLocked')))+'</div>' +
+          '</div>';
+      }
+      const muteLabel = (typeof isLocalMuted === 'function' && isLocalMuted())
+        ? t('player.unmute') : t('player.mute');
+      const waiting = hostMissingSince && !(hostId && members.some(function(m){ return m.id === hostId; }));
+      let waitNote = '';
+      if (waiting) {
+        const left = Math.max(1, Math.ceil((HOST_GRACE_MS - (Date.now() - hostMissingSince)) / 1000));
+        waitNote = '<div class="room-host-wait">' +
+          esc(t('room.hostMissingCountdown').replace('{s}', String(left))) +
+          '</div>';
+      }
       body.innerHTML =
         '<div class="room-code-label">' + esc(t('room.code')) + '</div>' +
         '<div class="room-code">'+esc(code)+'</div>' +
-        '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+'</div>' +
+        '<div class="room-peers"><span class="room-dot"></span>'+peers+' '+esc(t('room.online'))+
+          (isHost ? ' · '+esc(t('room.youHost')) : '') +
+        '</div>' +
+        waitNote +
         '<div class="room-linkrow"><input class="room-link" readonly value="'+esc(link(code))+'"><button class="room-btn" onclick="Room.copyLink()">' + esc(t('room.copy')) + '</button></div>' +
+        '<div class="room-sec-label">' + esc(t('room.people')) + '</div>' +
+        membersHtml() +
+        perms +
+        '<button type="button" class="room-btn room-mute-btn'+(typeof isLocalMuted==='function'&&isLocalMuted()?' is-on':'')+'" onclick="toggleLocalMute()">'+esc(muteLabel)+'</button>' +
         '<div class="room-hint">' + esc(t('room.hint')) + '</div>' +
         '<button class="room-btn room-btn-leave" onclick="Room.leave()">' + esc(t('room.leave')) + '</button>';
     } else {
       const connecting = (status === 'connecting');
+      const blocked = needsName() && !(window.Auth && window.Auth.signedIn());
+      const pendingRoom = (function(){
+        const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
+        return m ? m[1].toUpperCase() : '';
+      })();
       body.innerHTML =
-        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
+        nameFieldHtml() +
+        '<button class="room-btn room-btn-primary" onclick="Room.create()"'+(connecting||blocked?' disabled':'')+'>'+(connecting?t('room.connecting'):t('room.create'))+'</button>' +
         '<div class="room-or">' + esc(t('room.or')) + '</div>' +
-        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8"><button class="room-btn" onclick="Room.joinFromInput()">' + esc(t('room.join')) + '</button></div>' +
+        '<div class="room-joinrow"><input class="room-input" id="roomJoinInput" placeholder="e.g. GABES7" maxlength="8" value="'+(prevCode?esc(prevCode):(pendingRoom&&blocked?esc(pendingRoom):''))+'"><button class="room-btn" onclick="Room.joinFromInput()"'+(connecting||blocked?' disabled':'')+'>' + esc(t('room.join')) + '</button></div>' +
         (status === 'error' ? '<div class="room-err">' + esc(t('room.failed')) + '</div>' : '');
+      if (prevName && document.getElementById('roomNameInput') && !getStoredName()){
+        document.getElementById('roomNameInput').value = prevName;
+      }
     }
   }
 
+  function saveName(){
+    saveNameFromInput();
+    updateUI();
+    if (status === 'joined') trackPresence();
+  }
+
   function joinFromInput(){
+    if (!ensureNameOrToast()) return;
     const el = document.getElementById('roomJoinInput');
     const v = ((el && el.value) || '').trim().toUpperCase();
     if (v.length >= 4) join(v); else toast('That code is too short');
   }
 
   function closeOtherPanels(){
-    ['bgPanel','settingsSlidePanel','themePanel','playerPanel'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('open'); });
-    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn'].forEach(function(id){ const e=document.getElementById(id); if(e) e.classList.remove('active'); });
-    const bg=document.querySelector('.btn-bg-toggle'); if(bg) bg.classList.remove('active');
+    if (typeof closeDockPopovers === 'function') closeDockPopovers('room');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  // close the room panel whenever another fixed panel button is clicked
-  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
-  // auto-join from ?room=CODE once the Supabase lib is ready
+  // auto-join from ?room=CODE once named + Supabase ready
   (function autoJoin(){
     const m = /[?&]room=([A-Za-z0-9]{4,12})/.exec(location.search);
     if (!m) { updateUI(); return; }
     const c = m[1].toUpperCase();
+    panelOpen = true;
     let tries = 0;
     (function wait(){
-      if (window.supabase && window.supabase.createClient){ panelOpen = true; join(c); }
-      else if (tries++ < 40){ setTimeout(wait, 150); }
+      if (!(window.supabase && window.supabase.createClient)){
+        if (tries++ < 40) setTimeout(wait, 150);
+        else updateUI();
+        return;
+      }
+      if (needsName()){
+        updateUI(); // show name field; user joins manually after naming
+        return;
+      }
+      join(c);
     })();
   })();
 
-  return { onLocalChange: onLocalChange, create: create, join: join, refresh: updateUI,
-           close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
-           joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
-           togglePanel: togglePanel };
+  function onAuthChanged(){
+    updateUI();
+    // Push the signed-in name into presence so the people list updates.
+    if (status === 'joined') trackPresence();
+  }
+  if (window.Auth && window.Auth.onChange){
+    window.Auth.onChange(onAuthChanged);
+  } else {
+    setTimeout(function(){
+      if (window.Auth && window.Auth.onChange) window.Auth.onChange(onAuthChanged);
+    }, 0);
+  }
+
+  return {
+    onLocalChange: onLocalChange,
+    onMusicLocalChange: onMusicLocalChange,
+    create: create, join: join, refresh: updateUI,
+    close: function(){ if (panelOpen){ panelOpen = false; updateUI(); } },
+    joinFromInput: joinFromInput, leave: leave, copyLink: copyLink,
+    togglePanel: togglePanel, saveName: saveName,
+    inRoom: inRoom,
+    canControlTimer: canControlTimer,
+    canControlMusic: canControlMusic,
+    toggleAllowTimer: toggleAllowTimer,
+    toggleAllowMusic: toggleAllowMusic,
+    lastMusic: lastMusic
+  };
 })();
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -1468,13 +2371,29 @@ window.Auth = (function(){
     } catch(e){}
   }
 
+  function isMissingStudyPathColumn(err){
+    const msg = String((err && err.message) || err || '');
+    return /study_path/i.test(msg) &&
+      (/schema cache|Could not find|column.*does not exist/i.test(msg));
+  }
+
   async function loadProfile(){
     const cl = window.SB.get();
     if (!cl || !user){ profile = null; return; }
     try {
-      const r = await cl.from('profiles').select('display_name, section').eq('id', user.id).maybeSingle();
+      let r = await cl.from('profiles').select('display_name, study_path').eq('id', user.id).maybeSingle();
+      if (r.error && isMissingStudyPathColumn(r.error)) {
+        r = await cl.from('profiles').select('display_name').eq('id', user.id).maybeSingle();
+      }
+      if (r.error) throw r.error;
       profile = r.data || null;
-    } catch(e){ profile = null; }
+      if (profile && profile.study_path) {
+        try { localStorage.setItem('sf_study_path', JSON.stringify(profile.study_path)); } catch(e){}
+      }
+    } catch(e){
+      console.warn('profile load', e);
+      profile = null;
+    }
   }
 
   async function setSession(session){
@@ -1558,42 +2477,77 @@ window.Auth = (function(){
     return { ok:true, msg:'Name updated' };
   }
 
+  function studyPathRaw(){
+    if (profile && profile.study_path) return profile.study_path;
+    try {
+      const v = JSON.parse(localStorage.getItem('sf_study_path') || 'null');
+      return v;
+    } catch(e){ return null; }
+  }
+
+  async function saveStudyPath(path){
+    try { localStorage.setItem('sf_study_path', JSON.stringify(path)); } catch(e){}
+    profile = profile || {};
+    profile.study_path = path;
+    const cl = window.SB.get();
+    if (!cl || !user) return { ok:true, msg:'Saved locally' };
+    const r = await cl.from('profiles').update({ study_path: path }).eq('id', user.id);
+    if (r.error) {
+      if (isMissingStudyPathColumn(r.error)) {
+        return {
+          ok: true,
+          localOnly: true,
+          msg: 'Saved on this device. Add study_path to Supabase (see supabase/migrate-study-path.sql).'
+        };
+      }
+      return { ok:false, msg:r.error.message };
+    }
+    emit();
+    return { ok:true, msg:'Study path saved' };
+  }
+
   return { init:init, onChange:onChange, signedIn:signedIn, id:id, name:name,
+           studyPathRaw:studyPathRaw, saveStudyPath:saveStudyPath,
            google:google, signUp:signUp, signIn:signIn, signOut:signOut, rename:rename };
 })();
 
 
 // ── STUDY TIME TRACKER + LEADERBOARD ──────────────────────────
 window.Study = (function(){
-  // Preset subjects are the rankable ones — custom subjects are tracked and
-  // counted in a student's totals, but a per-subject board only makes sense
-  // when everyone is filling the same bucket.
-  // Tunisian prépa (IPEI). Each section sits its own set, so the picker
-  // shows only what that student actually studies rather than a superset
-  // they have to hunt through.
-  const SECTIONS = {
-    MP: ['Physique', 'Chimie inorganique', 'Algèbre', 'Analyse',
-         'Informatique', 'STA', 'Français', 'Anglais'],
-    PC: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
-         'Informatique', 'STA', 'Français', 'Anglais'],
-    PT: ['Physique', 'Chimie inorganique', 'Maths',
-         'Informatique', 'STA', 'CFM', 'Français', 'Anglais'],
-    BG: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
-         'Biologie', 'Géologie', 'Informatique', 'Français', 'Anglais']
-  };
-  const SECTION_ORDER = ['MP', 'PC', 'PT', 'BG'];
+  const K_LOG = 'sf_study_log';
+  const SESSION_SUBJECT = 'study';
+  const MAX_LOG_DAYS = 120;
+  const SYNC_WINDOW_DAYS = 14;
 
-  const K_CUR = 'sf_subject', K_CUSTOM = 'sf_subjects_custom', K_LOG = 'sf_study_log';
-  const K_SECTION = 'sf_section';
-  const MAX_LOG_DAYS = 120;   // local history we keep
-  const SYNC_WINDOW_DAYS = 14; // matches the insert policy in schema.sql
+  // Tunisian lycée + prépa study paths (profile metadata — not used to split the board).
+  const HS_GRADES = {
+    '1': null,
+    '2': ['Lettres', 'Économie et gestion', 'Informatique', 'Sciences'],
+    '3': ['Lettres', 'Économie et gestion', 'Informatique', 'Mathématiques', 'Sciences expérimentales', 'Sciences techniques'],
+    '4': ['Lettres', 'Économie et gestion', 'Informatique', 'Mathématiques', 'Sciences expérimentales', 'Sciences techniques']
+  };
+  const COLLEGE_PREPA = ['MP', 'PT', 'PC', 'BG'];
+  const COLLEGE_INTEG = ['MPI', 'CBA'];
+
+  function normalizePath(p){
+    if (!p || p.level !== 'college') return p;
+    // Legacy: licence lived under prepa integ — lift it to its own college path.
+    if (p.collegeKind === 'prepa_integ' && p.collegeTrack === 'license') {
+      return { level: 'college', collegeKind: 'license', licenseName: p.licenseName || '' };
+    }
+    return p;
+  }
 
   let panelOpen = false;
-  let board = [], standing = null, boardSubject = '', boardLoading = false, boardErr = '';
-  let authMode = 'none'; // none | signin | signup
-  // Account feedback belongs next to the form that caused it, not in a
-  // toast at the far side of the screen.
-  let authMsg = null;    // { kind: 'error' | 'ok', text }
+  let board = [], standing = null, boardLoading = false, boardErr = '';
+  const BOARD_LIMIT = 300;
+  const BOARD_PAGE_SIZE = 20;
+  let authMode = 'none';
+  let authMsg = null;
+  let authGateOpen = false;
+  let pathGateOpen = false;
+  let pathDraft = null;
+  let pathWizard = 'level';
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -1612,65 +2566,265 @@ window.Study = (function(){
   }
   function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
-  function section(){
-    const v = localStorage.getItem(K_SECTION);
-    return SECTIONS[v] ? v : 'MP';
-  }
-  function presets(){ return SECTIONS[section()]; }
-
-  // True for any subject on the current section's list. Only these are
-  // rankable — a per-subject board needs everyone filling the same bucket.
-  function isPreset(s){ return presets().indexOf(s) !== -1; }
-
-  function customs(){ const c = readJSON(K_CUSTOM, []); return Array.isArray(c) ? c : []; }
-
-  function all(){
-    const out = [], seen = {};
-    presets().concat(customs()).forEach(function(n){
-      if (n && !seen[n]){ seen[n] = 1; out.push(n); }
-    });
-    return out;
-  }
-
-  function setSection(next){
-    if (!SECTIONS[next] || next === section()) return;
-    try { localStorage.setItem(K_SECTION, next); } catch(e){}
-    // The selected subject may not exist in the new section; current()
-    // falls back on its own, but the picker has to be rebuilt either way.
-    renderSelect();
-    render();
-    toast(t('study.sectionSet', { section: next }));
-  }
-
-  function current(){
-    const s = localStorage.getItem(K_CUR);
-    return (s && all().indexOf(s) !== -1) ? s : presets()[0];
-  }
-  function setCurrent(s){
-    if (all().indexOf(s) === -1) return;
-    localStorage.setItem(K_CUR, s);
-    renderSelect();
-  }
-
-  function addCustom(raw){
-    const n = String(raw || '').trim().slice(0, 40);
-    if (!n) return false;
-    if (all().some(function(s){ return s.toLowerCase() === n.toLowerCase(); })){
-      toast('"' + n + '" already exists'); return false;
+  function rawPath(){
+    let p = null;
+    if (window.Auth && window.Auth.studyPathRaw) {
+      p = window.Auth.studyPathRaw();
     }
-    const c = customs(); c.push(n); writeJSON(K_CUSTOM, c);
-    setCurrent(n);
-    toast('Added subject: ' + n);
-    return true;
+    if (!p) p = readJSON('sf_study_path', null);
+    return normalizePath(p);
   }
-  function removeCustom(n){
-    writeJSON(K_CUSTOM, customs().filter(function(s){ return s !== n; }));
-    if (current() === n) localStorage.setItem(K_CUR, presets()[0]);
-    renderSelect(); render();
+
+  function isValidPath(p){
+    p = normalizePath(p);
+    if (!p || !p.level) return false;
+    if (p.level === 'highschool'){
+      if (!HS_GRADES.hasOwnProperty(p.grade)) return false;
+      const tracks = HS_GRADES[p.grade];
+      if (!tracks) return true;
+      return tracks.indexOf(p.track) !== -1;
+    }
+    if (p.level === 'college'){
+      if (p.collegeKind === 'license') {
+        return String(p.licenseName || '').trim().length >= 2;
+      }
+      if (p.collegeKind === 'prepa_classique') return COLLEGE_PREPA.indexOf(p.collegeTrack) !== -1;
+      if (p.collegeKind === 'prepa_integ') {
+        return p.collegeTrack === 'MPI' || p.collegeTrack === 'CBA';
+      }
+    }
+    return false;
+  }
+
+  function pathLabel(p){
+    p = normalizePath(p);
+    if (!p || !isValidPath(p)) return '';
+    if (p.level === 'highschool'){
+      const gradeLbl = p.grade === '1' ? t('path.grade1')
+        : p.grade === '4' ? t('path.grade4')
+        : t('path.gradeN').replace('{n}', p.grade);
+      if (p.grade === '1') return t('path.hs') + ' · ' + gradeLbl;
+      return t('path.hs') + ' · ' + gradeLbl + ' · ' + p.track;
+    }
+    if (p.collegeKind === 'license'){
+      return t('path.license') + ' · ' + String(p.licenseName || '').trim();
+    }
+    if (p.collegeKind === 'prepa_classique'){
+      return t('path.prepaClassique') + ' · ' + p.collegeTrack;
+    }
+    return t('path.prepaInteg') + ' · ' + p.collegeTrack;
+  }
+
+  function getPath(){ const p = rawPath(); return isValidPath(p) ? p : null; }
+  function hasStudyPath(){ return !!getPath(); }
+  function needsStudyPath(){
+    return !!(window.Auth && window.Auth.signedIn() && !hasStudyPath());
+  }
+
+  function syncPathGate(){
+    pathGateOpen = needsStudyPath();
+  }
+
+  async function persistPath(p){
+    writeJSON('sf_study_path', p);
+    if (window.Auth && window.Auth.saveStudyPath){
+      const r = await window.Auth.saveStudyPath(p);
+      if (!r.ok) throw new Error(r.msg || 'Could not save study path');
+      if (r.localOnly) toast(r.msg);
+    }
+  }
+
+  function startPathWizard(){
+    pathDraft = {};
+    pathWizard = 'level';
+    pathGateOpen = true;
+    render();
+  }
+
+  function pathBtn(label, action, value){
+    const valAttr = (value != null && value !== '')
+      ? ' data-path-value="'+esc(String(value))+'"' : '';
+    return '<button type="button" class="path-btn" data-path-action="'+esc(action)+'"'+valAttr+'>'+esc(label)+'</button>';
+  }
+
+  function pathNavRow(){
+    const showBack = pathWizard !== 'level';
+    const showCancel = hasStudyPath();
+    if (!showBack && !showCancel) return '';
+    return '<div class="path-nav-row">' +
+      (showBack
+        ? '<button type="button" class="study-link path-nav-back" data-path-action="back">'+esc(t('path.back'))+'</button>'
+        : '<span class="path-nav-spacer"></span>') +
+      (showCancel
+        ? '<button type="button" class="study-link path-nav-cancel" data-path-action="cancel">'+esc(t('path.cancel'))+'</button>'
+        : '') +
+    '</div>';
+  }
+
+  function onPathWizardClick(e){
+    const btn = e.target.closest('[data-path-action]');
+    if (!btn || !pathGateOpen) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const action = btn.getAttribute('data-path-action');
+    const val = btn.getAttribute('data-path-value') || '';
+    switch (action){
+      case 'level': pickPathLevel(val); break;
+      case 'hs_grade': pickHsGrade(val); break;
+      case 'hs_track': pickHsTrack(val); break;
+      case 'college_kind': pickCollegeKind(val); break;
+      case 'college_track': pickCollegeTrack(val); break;
+      case 'back': pathBack(); break;
+      case 'cancel': cancelPathWizard(); break;
+      case 'save_license': saveLicensePath(); break;
+    }
+  }
+
+  function pathWizardBlock(){
+    if (!pathGateOpen || !(window.Auth && window.Auth.signedIn())) return '';
+    pathDraft = pathDraft || {};
+
+    let title = t('path.gateTitle');
+    let body = '';
+
+    if (pathWizard === 'level'){
+      body = '<div class="path-step-label">'+esc(t('path.pickLevel'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          pathBtn(t('path.hs'), 'level', 'highschool') +
+          pathBtn(t('path.college'), 'level', 'college') +
+        '</div>';
+    } else if (pathWizard === 'hs_grade'){
+      body = '<div class="path-step-label">'+esc(t('path.pickGrade'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          pathBtn(t('path.grade1'), 'hs_grade', '1') +
+          pathBtn(t('path.grade2'), 'hs_grade', '2') +
+          pathBtn(t('path.grade3'), 'hs_grade', '3') +
+          pathBtn(t('path.grade4'), 'hs_grade', '4') +
+        '</div>';
+    } else if (pathWizard === 'hs_track'){
+      const tracks = HS_GRADES[pathDraft.grade] || [];
+      body = '<div class="path-step-label">'+esc(t('path.pickTrack'))+'</div>' +
+        '<div class="path-btn-grid path-btn-grid-wide">' +
+          tracks.map(function(tr){ return pathBtn(tr, 'hs_track', tr); }).join('') +
+        '</div>';
+    } else if (pathWizard === 'college_kind'){
+      body = '<div class="path-step-label">'+esc(t('path.pickCollege'))+'</div>' +
+        '<div class="path-btn-grid path-btn-grid-stack">' +
+          pathBtn(t('path.prepaClassique'), 'college_kind', 'prepa_classique') +
+          pathBtn(t('path.prepaInteg'), 'college_kind', 'prepa_integ') +
+          pathBtn(t('path.license'), 'college_kind', 'license') +
+        '</div>';
+    } else if (pathWizard === 'college_track'){
+      const opts = pathDraft.collegeKind === 'prepa_classique' ? COLLEGE_PREPA : COLLEGE_INTEG;
+      body = '<div class="path-step-label">'+esc(t('path.pickPrepa'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          opts.map(function(tr){ return pathBtn(tr, 'college_track', tr); }).join('') +
+        '</div>';
+    } else if (pathWizard === 'license_name'){
+      body = '<div class="path-step-label">'+esc(t('path.licensePrompt'))+'</div>' +
+        '<input class="study-input" id="pathLicenseInput" type="text" maxlength="48" ' +
+          'placeholder="'+esc(t('path.licensePlaceholder'))+'" value="'+esc(pathDraft.licenseName||'')+'">' +
+        '<button type="button" class="study-btn study-btn-primary path-save" data-path-action="save_license">'+esc(t('path.save'))+'</button>';
+    }
+
+    return '<div class="study-path-gate" role="dialog" aria-modal="true" aria-label="'+esc(title)+'">' +
+             '<div class="study-path-gate-card">' +
+               '<div class="study-path-gate-title">'+esc(title)+'</div>' +
+               '<div class="study-path-gate-msg">'+esc(t('path.gateMsg'))+'</div>' +
+               body +
+               pathNavRow() +
+             '</div>' +
+           '</div>';
+  }
+
+  function pathSummaryBlock(){
+    if (!window.Auth || !window.Auth.signedIn()) return '';
+    const p = getPath();
+    if (!p) return '';
+    return '<div class="study-path-set">' +
+             '<span class="study-path-label">'+esc(t('path.yours'))+'</span>' +
+             '<span class="study-path-value">'+esc(pathLabel(p))+'</span>' +
+             '<button type="button" class="study-link" onclick="Study.changePath()">'+esc(t('path.change'))+'</button>' +
+           '</div>';
+  }
+
+  function pickPathLevel(level){
+    pathDraft = { level: level };
+    pathWizard = (level === 'highschool') ? 'hs_grade' : 'college_kind';
+    render();
+  }
+  function pickHsGrade(grade){
+    pathDraft.grade = grade;
+    if (!HS_GRADES.hasOwnProperty(grade)){ render(); return; }
+    if (HS_GRADES[grade] === null){
+      finishPath({ level:'highschool', grade: grade });
+      return;
+    }
+    pathWizard = 'hs_track';
+    render();
+  }
+  function pickHsTrack(track){
+    finishPath({ level:'highschool', grade: pathDraft.grade, track: track });
+  }
+  function pickCollegeKind(kind){
+    pathDraft.collegeKind = kind;
+    if (kind === 'license'){
+      pathWizard = 'license_name';
+      render();
+      setTimeout(function(){
+        const el = document.getElementById('pathLicenseInput');
+        if (el) el.focus();
+      }, 50);
+      return;
+    }
+    pathWizard = 'college_track';
+    render();
+  }
+  function pickCollegeTrack(track){
+    finishPath({ level:'college', collegeKind: pathDraft.collegeKind, collegeTrack: track });
+  }
+  async function saveLicensePath(){
+    const el = document.getElementById('pathLicenseInput');
+    const name = el ? String(el.value || '').trim().slice(0, 48) : '';
+    if (name.length < 2){ toast(t('path.licenseShort')); return; }
+    await finishPath({
+      level:'college',
+      collegeKind: 'license',
+      licenseName: name
+    });
+  }
+  async function finishPath(p){
+    if (!isValidPath(p)){ toast(t('path.invalid')); return; }
+    try {
+      await persistPath(p);
+      pathGateOpen = false;
+      pathDraft = null;
+      pathWizard = 'level';
+      toast(t('path.saved'));
+      loadBoard();
+      render();
+    } catch(e){
+      toast((e && e.message) || t('path.saveFailed'));
+    }
+  }
+  function pathBack(){
+    if (pathWizard === 'hs_grade') pathWizard = 'level';
+    else if (pathWizard === 'hs_track') pathWizard = 'hs_grade';
+    else if (pathWizard === 'college_kind') pathWizard = 'level';
+    else if (pathWizard === 'college_track') pathWizard = 'college_kind';
+    else if (pathWizard === 'license_name') pathWizard = 'college_kind';
+    render();
+  }
+  function changePath(){ startPathWizard(); }
+  function cancelPathWizard(){
+    pathGateOpen = false;
+    pathDraft = null;
+    pathWizard = 'level';
+    render();
   }
 
   // ── local ledger ──
-  // entry: { i:id, s:subject, m:minutes, t:epoch ms, p:preset, u:1 when unsynced }
+  // entry: { i:id, s:subject, m:minutes, t:epoch ms, u:1 when unsynced }
   function log(){ const l = readJSON(K_LOG, []); return Array.isArray(l) ? l : []; }
   function saveLog(l){
     const cutoff = Date.now() - MAX_LOG_DAYS*86400000;
@@ -1679,7 +2833,7 @@ window.Study = (function(){
 
   function weekStart(){
     const d = new Date();
-    const dow = (d.getDay() + 6) % 7;      // Monday = 0, matches date_trunc('week')
+    const dow = (d.getDay() + 6) % 7;
     d.setHours(0,0,0,0); d.setDate(d.getDate() - dow);
     return d.getTime();
   }
@@ -1687,11 +2841,6 @@ window.Study = (function(){
 
   function sumSince(ts){
     return log().reduce(function(a, e){ return e.t >= ts ? a + e.m : a; }, 0);
-  }
-  function bySubjectSince(ts){
-    const out = {};
-    log().forEach(function(e){ if (e.t >= ts) out[e.s] = (out[e.s] || 0) + e.m; });
-    return out;
   }
 
   function fmt(mins){
@@ -1701,20 +2850,38 @@ window.Study = (function(){
     return r ? (h + 'h ' + r + 'm') : (h + 'h');
   }
 
-  // Called when a focus session completes.
-  function logSession(minutes, subjectOverride){
+  function fmtBoardTime(mins){
+    const m = Math.max(0, Math.round(mins));
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return h + ':' + String(r).padStart(2, '0');
+  }
+
+  function avatarHue(name){
+    let h = 0;
+    const s = String(name || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h % 360;
+  }
+
+  function avatarInitial(name){
+    const s = String(name || '?').trim();
+    return esc((s[0] || '?').toUpperCase());
+  }
+
+  function boardPageCount(){
+    return Math.max(1, Math.ceil(board.length / BOARD_PAGE_SIZE) || 1);
+  }
+
+  function logSession(minutes){
     const mins = Math.max(1, Math.min(300, Math.round(minutes)));
-    const subj = subjectOverride ||
-      (window.Goals && window.Goals.activeSubject()) ||
-      current();
     const l = log();
-    l.push({ i: uuid(), s: subj, m: mins, t: Date.now(), p: isPreset(subj), u: 1 });
+    l.push({ i: uuid(), s: SESSION_SUBJECT, m: mins, t: Date.now(), u: 1 });
     saveLog(l);
     render();
     flush();
   }
 
-  // Push guest-captured and offline sessions once a student is signed in.
   async function flush(){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
@@ -1725,7 +2892,7 @@ window.Study = (function(){
     if (!pending.length) return;
 
     const rows = pending.map(function(e){
-      return { id: e.i, user_id: uid, subject: e.s, preset: !!e.p,
+      return { id: e.i, user_id: uid, subject: SESSION_SUBJECT, preset: true,
                minutes: e.m, started_at: new Date(e.t).toISOString() };
     });
     try {
@@ -1734,72 +2901,33 @@ window.Study = (function(){
       const done = {};
       pending.forEach(function(e){ done[e.i] = 1; });
       saveLog(log().map(function(e){ if (done[e.i]) delete e.u; return e; }));
-      // Anything older than the sync window can never be uploaded — stop retrying.
       saveLog(log().map(function(e){ if (e.u && e.t < cutoff) delete e.u; return e; }));
       render();
     } catch(e){ console.warn('study flush', e); }
   }
 
-  // ── leaderboard ──
+  // ── leaderboard (total study time this week — no subject filter) ──
   async function loadBoard(){
-    const cl = window.SB.get();
-    if (!cl){ boardErr = t('study.unavailable'); render(); return; }
-    boardLoading = true; boardErr = ''; render();
-    const subj = boardSubject || null;
-    try {
-      const r = await cl.rpc('leaderboard_week', { p_subject: subj, p_limit: 25 });
-      if (r.error) throw r.error;
-      board = r.data || [];
-      standing = null;
-      if (window.Auth && window.Auth.signedIn()){
-        const s = await cl.rpc('my_week_standing', { p_subject: subj });
-        if (!s.error && s.data && s.data.length) standing = s.data[0];
-      }
-    } catch(e){
-      board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
-      // Full object, not just the message: during setup the useful part is
-      // usually the Postgres hint/code (missing table, missing function,
-      // RLS refusal), which never makes it into .message.
-      console.warn('Leaderboard failed — see supabase/SETUP.md:', e);
-    }
-    boardLoading = false; render();
-  }
-
-  function setBoardSubject(s){ boardSubject = s; loadBoard(); }
-
-  // ── subject <select> next to the timer ──
-  function renderSelect(){
-    const sel = document.getElementById('subjectSelect');
-    if (!sel) return;
-    const cur = current();
-    const cs = customs().filter(function(n){ return presets().indexOf(n) === -1; });
-    let h = '<optgroup label="' + esc(t('study.subjects')) + '">';
-    presets().forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
-    h += '</optgroup>';
-    if (cs.length){
-      h += '<optgroup label="' + esc(t('study.mySubjects')) + '">';
-      cs.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
-      h += '</optgroup>';
-    }
-    h += '<option value="__add">' + esc(t('study.addSubject')) + '</option>';
-    sel.innerHTML = h;
-    sel.value = cur;
-  }
-
-  // Changing the dropdown must also retag the active goal, otherwise the
-  // picker would claim one subject while sessions are logged under the
-  // goal's older one.
-  function onSelect(el){
-    if (el.value === '__add'){
-      const n = window.prompt(t('study.newSubject'));
-      if (!n || !addCustom(n)) renderSelect();
-      if (window.Goals) window.Goals.retagActive(current());
+    if (!window.Auth || !window.Auth.signedIn()){
+      board = []; standing = null; boardLoading = false; boardErr = '';
       render();
       return;
     }
-    setCurrent(el.value);
-    if (window.Goals) window.Goals.retagActive(el.value);
-    render();
+    const cl = window.SB.get();
+    if (!cl){ boardErr = t('study.unavailable'); render(); return; }
+    boardLoading = true; boardErr = ''; render();
+    try {
+      const r = await cl.rpc('leaderboard_week', { p_subject: null, p_limit: BOARD_LIMIT });
+      if (r.error) throw r.error;
+      board = r.data || [];
+      standing = null;
+      const s = await cl.rpc('my_week_standing', { p_subject: null });
+      if (!s.error && s.data && s.data.length) standing = s.data[0];
+    } catch(e){
+      board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
+      console.warn('Leaderboard failed — see supabase/SETUP.md:', e);
+    }
+    boardLoading = false; render();
   }
 
   // ── mini card in the left column ──
@@ -1811,35 +2939,20 @@ window.Study = (function(){
 
     const bars = document.getElementById('studyMiniBars');
     if (!bars) return;
-    const bs = bySubjectSince(weekStart());
-    const rows = Object.keys(bs).map(function(k){ return { s:k, m:bs[k] }; })
-                       .sort(function(a,b){ return b.m - a.m; }).slice(0, 4);
-    if (!rows.length){
-      bars.innerHTML = '<div class="study-mini-empty">' + esc(t('study.noSessions')) + '</div>';
+    const signedIn = window.Auth && window.Auth.signedIn();
+    const p = signedIn ? getPath() : null;
+    if (p){
+      bars.innerHTML = '<div class="study-mini-path">'+esc(pathLabel(p))+'</div>';
       return;
     }
-    const max = rows[0].m || 1;
-    bars.innerHTML = rows.map(function(r){
-      return '<div class="study-bar-row">' +
-               '<span class="study-bar-name" title="'+esc(r.s)+'">'+esc(r.s)+'</span>' +
-               '<span class="study-bar-track"><span class="study-bar-fill" style="width:'+Math.max(4, Math.round(r.m/max*100))+'%"></span></span>' +
-               '<span class="study-bar-val">'+esc(fmt(r.m))+'</span>' +
-             '</div>';
-    }).join('');
+    if (signedIn){
+      bars.innerHTML = '<div class="study-mini-empty">'+esc(t('path.needPick'))+'</div>';
+      return;
+    }
+    bars.innerHTML = '<div class="study-mini-empty">'+esc(t('study.noSessions'))+'</div>';
   }
 
   // ── panel ──
-  function sectionBlock(){
-    const cur = section();
-    const btns = SECTION_ORDER.map(function(k){
-      return '<button class="section-btn' + (k === cur ? ' active' : '') + '" ' +
-             'data-section="' + k + '" onclick="Study.setSection(\'' + k + '\')">' + k + '</button>';
-    }).join('');
-    return '<div class="study-sec-label">' + esc(t('set.section')) + '</div>' +
-           '<div class="section-toggle">' + btns + '</div>' +
-           '<p class="study-section-hint">' + esc(t('set.sectionHint')) + '</p>';
-  }
-
   function msgBlock(){
     if (!authMsg) return '';
     return '<div class="study-msg ' + (authMsg.kind === 'error' ? 'is-error' : 'is-ok') + '">' +
@@ -1888,21 +3001,111 @@ window.Study = (function(){
            '</div>';
   }
 
-  function boardBlock(){
+  function renderLeaderboardPage(page){
+    page = Math.max(1, page || 1);
+    const totalPages = boardPageCount();
+    if (page > totalPages) page = totalPages;
+
+    if (!window.Auth || !window.Auth.signedIn()){
+      const fake = [3,4,5,6,7,8,9,10,11,12].map(function(n){
+        return '<div class="lb-row">' +
+                 '<span class="lb-rank">'+n+'</span>' +
+                 '<span class="lb-avatar" style="--lb-hue:120" aria-hidden="true">•</span>' +
+                 '<span class="lb-name">••••••••</span>' +
+                 '<span class="lb-time">—</span>' +
+               '</div>';
+      }).join('');
+      return '<div class="lb-wrap">' +
+               '<button type="button" class="study-board-lock lb-lock" onclick="Study.openAuthGate()">' +
+                 '<div class="lb-list lb-list-blurred" aria-hidden="true">'+fake+'</div>' +
+                 '<span class="study-board-lock-label">' + esc(t('study.boardLocked')) + '</span>' +
+               '</button>' +
+               authGateBlock() +
+             '</div>';
+    }
+
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
-    if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
-    return '<div class="study-board">' + board.map(function(r){
-      return '<div class="study-row'+(r.is_me?' me':'')+'">' +
-               '<span class="study-row-rank">'+r.rank+'</span>' +
-               '<span class="study-row-name">'+esc(r.display_name)+'</span>' +
-               '<span class="study-row-mins">'+esc(fmt(r.minutes))+'</span>' +
+    if (!board.length) return '<div class="study-board-msg">'+esc(t('study.nobody'))+'</div>';
+
+    const start = (page - 1) * BOARD_PAGE_SIZE;
+    const rows = board.slice(start, start + BOARD_PAGE_SIZE).map(function(r){
+      const hue = avatarHue(r.display_name);
+      return '<div class="lb-row'+(r.is_me?' me':'')+'">' +
+               '<span class="lb-rank">'+r.rank+'</span>' +
+               '<span class="lb-avatar" style="--lb-hue:'+hue+'" aria-hidden="true">'+avatarInitial(r.display_name)+'</span>' +
+               '<span class="lb-name">'+esc(r.display_name)+'</span>' +
+               '<span class="lb-time">'+esc(fmtBoardTime(r.minutes))+'</span>' +
              '</div>';
-    }).join('') + '</div>';
+    }).join('');
+
+    const prevDisabled = page <= 1;
+    const nextDisabled = page >= totalPages;
+    const pager = totalPages > 1
+      ? '<div class="lb-pager">' +
+          '<button type="button" class="lb-page-btn"' +
+            (prevDisabled ? ' disabled' : ' onclick="Stats.setBoardPage('+(page-1)+')"') +
+            ' aria-label="'+esc(t('stats.prevPage'))+'">&lt;</button>' +
+          '<span class="lb-page-num" aria-current="page">'+page+'</span>' +
+          '<button type="button" class="lb-page-btn"' +
+            (nextDisabled ? ' disabled' : ' onclick="Stats.setBoardPage('+(page+1)+')"') +
+            ' aria-label="'+esc(t('stats.nextPage'))+'">&gt;</button>' +
+        '</div>'
+      : '';
+
+    return '<div class="lb-wrap">' +
+             standingBlock() +
+             '<div class="lb-list" aria-label="'+esc(t('study.board'))+'">'+rows+'</div>' +
+             pager +
+             '<p class="lb-hint">'+esc(t('study.resetsMonday'))+'</p>' +
+             authGateBlock() +
+           '</div>';
+  }
+
+  function authGateBlock(){
+    if (!authGateOpen) return '';
+    if (window.Auth && window.Auth.signedIn()){ authGateOpen = false; return ''; }
+    let form = '';
+    if (authMode === 'none'){
+      form =
+        '<button class="study-btn study-btn-google" onclick="Study.doGoogle()">' + esc(t('study.google')) + '</button>' +
+        '<div class="study-or">' + esc(t('study.or')) + '</div>' +
+        '<div class="study-authrow">' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signin\')">' + esc(t('study.signin')) + '</button>' +
+          '<button class="study-btn" onclick="Study.setAuthMode(\'signup\')">' + esc(t('study.signup')) + '</button>' +
+        '</div>';
+    } else {
+      const up = (authMode === 'signup');
+      form =
+        '<div class="study-form">' +
+          (up ? '<input class="study-input" id="authName" type="text" placeholder="' + esc(t('study.name')) + '" maxlength="24">' : '') +
+          '<input class="study-input" id="authEmail" type="email" placeholder="' + esc(t('study.email')) + '" autocomplete="email">' +
+          '<input class="study-input" id="authPass" type="password" placeholder="' + esc(t('study.password')) + '" autocomplete="'+(up?'new-password':'current-password')+'">' +
+          '<button class="study-btn study-btn-primary" onclick="Study.doAuth()">'+(up?'Create account':'Sign in')+'</button>' +
+          '<button class="study-link" onclick="Study.setAuthMode(\'none\')">' + esc(t('study.back')) + '</button>' +
+        '</div>';
+    }
+    return '<div class="study-auth-gate" role="dialog" aria-modal="true" aria-label="' + esc(t('study.boardGateTitle')) + '">' +
+             '<div class="study-auth-gate-card">' +
+               '<button type="button" class="study-auth-gate-x" onclick="Study.closeAuthGate()" aria-label="Close">×</button>' +
+               '<div class="study-auth-gate-title">' + esc(t('study.boardGateTitle')) + '</div>' +
+               '<div class="study-auth-gate-msg">' + esc(t('study.boardGateMsg')) + '</div>' +
+               form +
+               msgBlock() +
+             '</div>' +
+           '</div>';
   }
 
   function render(){
     renderMini();
+    updateStudyPanel();
+    updatePathGate();
+    if (window.Stats && Stats.renderContent && document.body.classList.contains('view-stats')) {
+      Stats.renderContent();
+    }
+  }
+
+  function updateStudyPanel(){
     const btn = document.getElementById('studyFixedBtn');
     if (btn) btn.classList.toggle('active', panelOpen);
     const panel = document.getElementById('studyPanel');
@@ -1910,47 +3113,60 @@ window.Study = (function(){
     const body = document.getElementById('studyBody');
     if (!body || !panelOpen) return;
 
-    let filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-                 '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
-    presets().forEach(function(s){
-      filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
-    });
-    filter += '</select>';
-
     body.innerHTML =
       authBlock() +
-      sectionBlock() +
+      pathSummaryBlock() +
       '<div class="study-sec-label">' + esc(t('study.myWeek')) + '</div>' +
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
         '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
-      '</div>' +
-      standingBlock() +
-      '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
-      filter +
-      boardBlock() +
-      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>';
+      '</div>';
+  }
+
+  function updatePathGate(){
+    const root = document.getElementById('pathGateRoot');
+    if (!root) return;
+    root.innerHTML = pathWizardBlock();
+    document.body.classList.toggle('path-gate-open', pathGateOpen);
   }
 
   function closeOtherPanels(){
-    ['bgPanel','settingsSlidePanel','themePanel','playerPanel','roomPanel'].forEach(function(id){
-      const e = document.getElementById(id); if (e) e.classList.remove('open');
-    });
-    ['settingsFixedBtn','themeFixedBtn','playerFixedBtn','roomFixedBtn'].forEach(function(id){
-      const e = document.getElementById(id); if (e) e.classList.remove('active');
-    });
-    const bg = document.querySelector('.btn-bg-toggle'); if (bg) bg.classList.remove('active');
+    if (typeof closeDockPopovers === 'function') closeDockPopovers('study');
   }
 
   function togglePanel(){
     panelOpen = !panelOpen;
-    if (panelOpen){ closeOtherPanels(); loadBoard(); }
+    if (panelOpen){
+      closeOtherPanels();
+      syncPathGate();
+    }
+    render();
+  }
+
+  function closeStudy(){
+    if (panelOpen){ panelOpen = false; }
+    render();
+  }
+
+  function closeAll(){
+    panelOpen = false;
+    authGateOpen = false;
     render();
   }
 
   // ── panel actions ──
   function setAuthMode(m){ authMode = m; authMsg = null; render(); }
   function setAuthMsg(kind, text){ authMsg = { kind: kind, text: text }; render(); }
+  function openAuthGate(){
+    if (window.Auth && window.Auth.signedIn()){ loadBoard(); return; }
+    authGateOpen = true;
+    authMode = 'none';
+    authMsg = null;
+    if (window.Stats && Stats.setTab) Stats.setTab('board');
+    if (typeof showView === 'function') showView('stats');
+    render();
+  }
+  function closeAuthGate(){ authGateOpen = false; authMsg = null; render(); }
 
   async function doAuth(){
     const em = (document.getElementById('authEmail')||{}).value || '';
@@ -1966,7 +3182,12 @@ window.Study = (function(){
       : await window.Auth.signIn(em.trim(), pw);
 
     authMsg = { kind: r.ok ? 'ok' : 'error', text: r.msg };
-    if (r.ok){ authMode = 'none'; loadBoard(); }
+    if (r.ok){
+      authMode = 'none';
+      authGateOpen = false;
+      syncPathGate();
+      loadBoard();
+    }
     render();
   }
 
@@ -1994,25 +3215,38 @@ window.Study = (function(){
   }
 
   function init(){
-    renderSelect();
     render();
-    if (window.Auth) window.Auth.onChange(function(){ render(); });
+    const gateRoot = document.getElementById('pathGateRoot');
+    if (gateRoot && !gateRoot.dataset.pathBound){
+      gateRoot.dataset.pathBound = '1';
+      gateRoot.addEventListener('click', onPathWizardClick, true);
+    }
+    if (window.Auth) window.Auth.onChange(function(){
+      if (window.Auth.signedIn()) authGateOpen = false;
+      syncPathGate();
+      loadBoard();
+      render();
+    });
     ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
       const b = document.querySelector(sel);
-      if (b) b.addEventListener('click', function(){ if (panelOpen){ panelOpen = false; render(); } });
+      if (b) b.addEventListener('click', function(){
+        if (panelOpen){ panelOpen = false; render(); }
+      });
     });
   }
 
   return { init:init, doGoogle:doGoogle,
-           close: function(){ if (panelOpen){ panelOpen = false; render(); } },
-           SECTIONS:SECTIONS, SECTION_ORDER:SECTION_ORDER,
-           presets:presets, section:section, setSection:setSection,
-           all:all, current:current, setCurrent:setCurrent,
-           isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
-           onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
-           entries:log, sumSince:sumSince, bySubjectSince:bySubjectSince,
-           togglePanel:togglePanel, setBoardSubject:setBoardSubject,
+           close: closeAll, closeStudy:closeStudy,
+           hasStudyPath:hasStudyPath, needsStudyPath:needsStudyPath, pathLabel:pathLabel, getPath:getPath,
+           pickPathLevel:pickPathLevel, pickHsGrade:pickHsGrade, pickHsTrack:pickHsTrack,
+           pickCollegeKind:pickCollegeKind, pickCollegeTrack:pickCollegeTrack, saveLicensePath:saveLicensePath,
+           pathBack:pathBack, changePath:changePath, cancelPathWizard:cancelPathWizard,
+           logSession:logSession, flush:flush, fmt:fmt, loadBoard:loadBoard,
+           boardPageCount:boardPageCount, renderLeaderboardPage:renderLeaderboardPage,
+           entries:log, sumSince:sumSince,
+           togglePanel:togglePanel,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
+           openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
 })();
 
@@ -2023,7 +3257,11 @@ window.Study = (function(){
 window.Goals = (function(){
   const K_ITEMS = 'sf_goals', K_DAY = 'sf_goals_day', K_ACTIVE = 'sf_goal_active';
 
-  let items = [], activeId = null;
+  let items = [], activeId = null, editingId = null, reorderDragId = null;
+
+  function sortItems(){
+    items.sort(function(a, b){ return (a.pos || 0) - (b.pos || 0); });
+  }
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -2058,6 +3296,7 @@ window.Goals = (function(){
       if (dropped > 0) setTimeout(function(){ toast(t('goals.newDay', { n: dropped })); }, 900);
     }
     if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
+    sortItems();
   }
 
   function save(){
@@ -2070,20 +3309,18 @@ window.Goals = (function(){
 
   function find(id){ return items.filter(function(g){ return g.id === id; })[0] || null; }
   function active(){ return activeId ? find(activeId) : null; }
-  function activeSubject(){ const a = active(); return (a && a.subject) || null; }
 
-  function add(title, est, subject){
+  function add(title, est){
     const clean = String(title || '').trim().slice(0, 120);
     if (!clean) return;
     const g = {
       id: uuid(), day: today(), title: clean,
-      subject: subject || (window.Study ? window.Study.current() : null),
       est: Math.max(1, Math.min(20, parseInt(est) || 1)),
       progress: 0, done: false,
       pos: items.length, updated: Date.now()
     };
     items.push(g);
-    if (!activeId) activeId = g.id;
+    activeId = g.id;
     save(); render(); push([g]);
   }
 
@@ -2118,31 +3355,247 @@ window.Goals = (function(){
   function setActive(id){
     const g = find(id); if (!g || g.done) return;
     activeId = (activeId === id) ? null : id;
-    // Point the subject picker at whatever the newly focused goal is tagged
-    // with, so it always shows where the next session will be logged.
-    if (activeId && g.subject && window.Study) window.Study.setCurrent(g.subject);
     save(); render();
-  }
-
-  // Retag the focused goal when the subject picker changes.
-  function retagActive(subject){
-    const g = active();
-    if (!g || !subject || g.subject === subject) return;
-    g.subject = subject; g.updated = Date.now();
-    save(); render(); push([g]);
   }
 
   function remove(id){
     const g = find(id);
     items = items.filter(function(x){ return x.id !== id; });
     if (activeId === id) activeId = null;
+    if (editingId === id) editingId = null;
+    items.forEach(function(x, i){ x.pos = i; });
     save(); render();
     if (g) del(g.id);
   }
 
+  function startEdit(id){
+    const g = find(id); if (!g) return;
+    editingId = id;
+    render();
+    const inp = document.querySelector('.goal-edit-title');
+    if (inp){ inp.focus(); inp.select(); }
+  }
+
+  function cancelEdit(){
+    editingId = null;
+    render();
+  }
+
+  function saveEdit(id){
+    const g = find(id); if (!g) return;
+    const titleEl = document.querySelector('.goal-edit-title');
+    const estEl = document.querySelector('.goal-edit-est');
+    const title = titleEl ? String(titleEl.value || '').trim().slice(0, 120) : '';
+    const est = Math.max(1, Math.min(20, parseInt(estEl && estEl.value, 10) || 1));
+    if (!title){ toast(t('goals.needTitle')); return; }
+    g.title = title;
+    g.est = est;
+    if (g.progress > g.est) g.progress = g.est;
+    if (!g.done && g.progress >= g.est){
+      g.done = true;
+      if (activeId === id){
+        const next = items.filter(function(x){ return !x.done; })[0];
+        activeId = next ? next.id : null;
+      }
+    } else if (g.done && g.progress < g.est){
+      g.done = false;
+    }
+    g.updated = Date.now();
+    editingId = null;
+    save(); render(); push([g]);
+    toast(t('goals.updated'));
+  }
+
+  function reorderGoals(fromId, toId){
+    if (!fromId || !toId || fromId === toId) return;
+    const fromIdx = items.findIndex(function(g){ return g.id === fromId; });
+    const toIdx = items.findIndex(function(g){ return g.id === toId; });
+    if (fromIdx < 0 || toIdx < 0) return;
+    const moved = items.splice(fromIdx, 1)[0];
+    items.splice(toIdx, 0, moved);
+    items.forEach(function(g, i){
+      g.pos = i;
+      g.updated = Date.now();
+    });
+    save(); render(); push(items);
+  }
+
+  function goalEditBlock(g){
+    return '<div class="goal-edit">' +
+             '<input class="goal-edit-title study-input" type="text" maxlength="120" value="'+esc(g.title)+'" ' +
+               'placeholder="'+esc(t('goals.add'))+'" aria-label="'+esc(t('goals.editTitle'))+'">' +
+             '<div class="goal-edit-row">' +
+               '<label class="goal-edit-est-wrap">' +
+                 '<span class="goal-edit-est-label">'+esc(t('goals.est'))+'</span>' +
+                 '<input class="goal-edit-est" type="number" min="1" max="20" value="'+g.est+'" aria-label="'+esc(t('goals.est'))+'">' +
+               '</label>' +
+               '<button type="button" class="goal-edit-save study-mini-btn" data-goal-action="save" data-goal-id="'+g.id+'">'+esc(t('goals.save'))+'</button>' +
+               '<button type="button" class="goal-edit-cancel study-link" data-goal-action="cancel">'+esc(t('goals.cancel'))+'</button>' +
+             '</div>' +
+           '</div>';
+  }
+
+  function onGoalListClick(e){
+    if (goalDragSuppressClick) return;
+    const btn = e.target.closest('[data-goal-action]');
+    if (btn){
+      e.preventDefault();
+      e.stopPropagation();
+      const action = btn.getAttribute('data-goal-action');
+      const row = btn.closest('.goal-item');
+      const id = btn.getAttribute('data-goal-id') || (row ? row.dataset.goalId : '');
+      if (action === 'toggle' && id) toggle(id);
+      else if (action === 'focus' && id) setActive(id);
+      else if (action === 'remove' && id) remove(id);
+      else if (action === 'edit' && id) startEdit(id);
+      else if (action === 'save' && id) saveEdit(id);
+      else if (action === 'cancel') cancelEdit();
+      return;
+    }
+    const main = e.target.closest('.goal-main');
+    if (main && !editingId){
+      const row = main.closest('.goal-item');
+      if (row && row.dataset.goalId) setActive(row.dataset.goalId);
+    }
+  }
+
+  function onGoalListKeydown(e){
+    if (e.key !== 'Enter') return;
+    const inEdit = e.target.closest('.goal-edit');
+    if (!inEdit) return;
+    e.preventDefault();
+    const row = inEdit.closest('.goal-item');
+    if (row && row.dataset.goalId) saveEdit(row.dataset.goalId);
+  }
+
+  let ptrDrag = null;
+  let goalDragSuppressClick = false;
+
+  function isGoalDragBlocked(el){
+    if (!el) return true;
+    return !!el.closest(
+      'button, input, textarea, select, a, .goal-edit, .goal-actions, .goal-drag'
+    );
+  }
+
+  function clearDropTargets(list){
+    if (!list) return;
+    list.querySelectorAll('.goal-item').forEach(function(el){
+      el.classList.remove('goal-drop-target', 'is-dragging');
+      el.style.transform = '';
+      el.style.zIndex = '';
+    });
+  }
+
+  function bindGoalList(){
+    const list = document.getElementById('goalsList');
+    if (!list || list.dataset.bound) return;
+    list.dataset.bound = '1';
+    list.addEventListener('click', onGoalListClick);
+    list.addEventListener('keydown', onGoalListKeydown);
+
+    list.addEventListener('dragstart', function(e){
+      const row = e.target.closest('.goal-item');
+      if (!row || row.classList.contains('done') || row.classList.contains('editing')){
+        e.preventDefault(); return;
+      }
+      if (isGoalDragBlocked(e.target)){ e.preventDefault(); return; }
+      reorderDragId = row.dataset.goalId;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', reorderDragId); } catch(err){}
+      row.classList.add('is-dragging');
+      goalDragSuppressClick = true;
+    });
+    list.addEventListener('dragend', function(){
+      reorderDragId = null;
+      clearDropTargets(list);
+      setTimeout(function(){ goalDragSuppressClick = false; }, 0);
+    });
+    list.addEventListener('dragover', function(e){
+      if (!reorderDragId) return;
+      e.preventDefault();
+      const row = e.target.closest('.goal-item');
+      list.querySelectorAll('.goal-item').forEach(function(el){
+        el.classList.toggle('goal-drop-target', !!(row && el === row && el.dataset.goalId !== reorderDragId));
+      });
+    });
+    list.addEventListener('drop', function(e){
+      e.preventDefault();
+      const row = e.target.closest('.goal-item');
+      if (row && reorderDragId && row.dataset.goalId !== reorderDragId){
+        reorderGoals(reorderDragId, row.dataset.goalId);
+      }
+      reorderDragId = null;
+      clearDropTargets(list);
+    });
+
+    list.addEventListener('pointerdown', function(e){
+      if (e.button !== 0) return;
+      const row = e.target.closest('.goal-item');
+      if (!row || row.classList.contains('done') || row.classList.contains('editing')) return;
+      if (isGoalDragBlocked(e.target)) return;
+      ptrDrag = {
+        id: row.dataset.goalId, row: row, list: list,
+        startY: e.clientY, startX: e.clientX, overId: null, dragging: false,
+        pointerId: e.pointerId
+      };
+    });
+    list.addEventListener('pointermove', function(e){
+      if (!ptrDrag) return;
+      const dy = e.clientY - ptrDrag.startY;
+      const dx = e.clientX - ptrDrag.startX;
+      if (!ptrDrag.dragging){
+        if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
+        ptrDrag.dragging = true;
+        goalDragSuppressClick = true;
+        ptrDrag.row.classList.add('is-dragging');
+        try { ptrDrag.row.setPointerCapture(ptrDrag.pointerId); } catch(err){}
+      }
+      e.preventDefault();
+      ptrDrag.row.style.transform = 'translateY(' + dy + 'px)';
+      ptrDrag.row.style.zIndex = '3';
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const target = el && el.closest('.goal-item');
+      ptrDrag.list.querySelectorAll('.goal-item').forEach(function(item){
+        item.classList.toggle('goal-drop-target',
+          !!(target && item === target && item.dataset.goalId !== ptrDrag.id));
+      });
+      ptrDrag.overId = (target && target.dataset.goalId !== ptrDrag.id) ? target.dataset.goalId : null;
+    });
+    function endPtrDrag(e){
+      if (!ptrDrag) return;
+      const moved = ptrDrag.dragging;
+      if (moved && ptrDrag.overId) reorderGoals(ptrDrag.id, ptrDrag.overId);
+      clearDropTargets(ptrDrag.list);
+      ptrDrag = null;
+      if (moved){
+        setTimeout(function(){ goalDragSuppressClick = false; }, 0);
+      }
+    }
+    list.addEventListener('pointerup', endPtrDrag);
+    list.addEventListener('pointercancel', endPtrDrag);
+  }
+
+  // Which goal should receive the next finished pomodoro?
+  function goalForSession(){
+    let g = active();
+    if (g && !g.done) return g;
+    const taskEl = document.getElementById('taskInput');
+    const task = taskEl ? String(taskEl.value || '').trim().toLowerCase() : '';
+    if (task){
+      g = items.filter(function(x){
+        return !x.done && String(x.title || '').trim().toLowerCase() === task;
+      })[0];
+      if (g) return g;
+    }
+    const open = items.filter(function(x){ return !x.done; });
+    if (open.length === 1) return open[0];
+    return null;
+  }
+
   // Called by onDone() when a focus session finishes.
   function onPomodoro(){
-    const g = active();
+    const g = goalForSession();
     if (!g) return;
     g.progress = (g.progress || 0) + 1;
     g.updated = Date.now();
@@ -2218,20 +3671,34 @@ window.Goals = (function(){
       } else {
         list.innerHTML = items.map(function(g){
           const isActive = (g.id === activeId);
+          const isEditing = (g.id === editingId);
           const dots = Array.from({length: Math.min(g.est, 8)}, function(_, i){
             return '<span class="goal-dot'+(i < g.progress ? ' filled' : '')+'"></span>';
           }).join('');
-          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+'">' +
-                   '<button class="goal-check" onclick="Goals.toggle(\''+g.id+'\')" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
-                   '<div class="goal-main" onclick="Goals.setActive(\''+g.id+'\')" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
-                     '<div class="goal-title">'+esc(g.title)+'</div>' +
-                     '<div class="goal-meta">' +
-                       (g.subject ? '<span class="goal-subj">'+esc(g.subject)+'</span>' : '') +
-                       '<span class="goal-dots">'+dots+'</span>' +
-                       '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
-                     '</div>' +
-                   '</div>' +
-                   '<button class="goal-del" onclick="Goals.remove(\''+g.id+'\')" title="remove">×</button>' +
+          const mainBlock = isEditing ? goalEditBlock(g) :
+            ('<div class="goal-main" data-goal-action="focus" data-goal-id="'+g.id+'" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
+               '<div class="goal-title">'+esc(g.title)+'</div>' +
+               '<div class="goal-meta">' +
+                 '<span class="goal-dots">'+dots+'</span>' +
+                 '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
+               '</div>' +
+             '</div>');
+          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'"' +
+                   (!g.done && !isEditing ? ' draggable="true"' : '') + '>' +
+                   '<span class="goal-drag" aria-hidden="true">' +
+                     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h2M9 12h2M9 18h2M13 6h2M13 12h2M13 18h2"/></svg>' +
+                   '</span>' +
+                   '<button type="button" class="goal-check" data-goal-action="toggle" data-goal-id="'+g.id+'" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
+                   mainBlock +
+                   (!isEditing
+                     ? ('<div class="goal-actions">' +
+                          '<button type="button" class="goal-edit-btn" data-goal-action="edit" data-goal-id="'+g.id+'" ' +
+                            'aria-label="'+esc(t('goals.edit'))+'" title="'+esc(t('goals.edit'))+'">' +
+                            '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 000-2.12l-2.38-2.38a1.5 1.5 0 00-2.12 0L4 15.5V20z"/><path d="M13.5 6.5l2 2"/></svg>' +
+                          '</button>' +
+                          '<button type="button" class="goal-del" data-goal-action="remove" data-goal-id="'+g.id+'" title="remove" aria-label="remove">×</button>' +
+                        '</div>')
+                     : '') +
                  '</div>';
         }).join('');
       }
@@ -2250,10 +3717,6 @@ window.Goals = (function(){
     load();
     render();
 
-    // Restore the picker to the focused goal's subject on page load.
-    const a0 = active();
-    if (a0 && a0.subject && window.Study) window.Study.setCurrent(a0.subject);
-
     const inp = document.getElementById('goalInput');
     if (inp) inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); addFromInput(); } });
 
@@ -2271,11 +3734,13 @@ window.Goals = (function(){
     });
 
     if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });
+    bindGoalList();
   }
 
   return { init:init, add:add, addFromInput:addFromInput, toggle:toggle, setActive:setActive,
-           retagActive:retagActive, remove:remove, onPomodoro:onPomodoro,
-           activeSubject:activeSubject, active:active, pull:pull, render:render };
+           remove:remove, onPomodoro:onPomodoro, goalForSession:goalForSession,
+           startEdit:startEdit, saveEdit:saveEdit, cancelEdit:cancelEdit, reorderGoals:reorderGoals,
+           active:active, pull:pull, render:render };
 })();
 
 
@@ -2300,6 +3765,7 @@ window.Chrono = (function(){
     const chr = document.getElementById('switchChrono');
     if (pom) pom.classList.toggle('active', !active);
     if (chr) chr.classList.toggle('active', active);
+    if (typeof updateAllTabIndicators === 'function') updateAllTabIndicators();
   }
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
@@ -2337,6 +3803,7 @@ window.Chrono = (function(){
     const b = block(); if (b) b.classList.add('chrono-mode');
     syncSwitch();
     render(); save();
+    if (typeof animateModeSwitch === 'function') animateModeSwitch();
   }
 
   // Leaving the stopwatch banks whatever is on it, so a mode switch can
@@ -2352,6 +3819,7 @@ window.Chrono = (function(){
     if (typeof setTab === 'function' && typeof mode !== 'undefined') setTab(mode);
     syncSwitch();
     render(); save();
+    if (typeof animateModeSwitch === 'function') animateModeSwitch();
   }
 
   function start(){
@@ -2386,7 +3854,7 @@ window.Chrono = (function(){
 
     let blocks = 0;
     const per = (typeof MODES === 'object' && MODES.work) ? MODES.work : 25;
-    if (window.Goals && Goals.active()){
+    if (window.Goals && Goals.goalForSession && Goals.goalForSession()){
       blocks = Math.floor(mins / per);
       for (let i = 0; i < blocks; i++) Goals.onPomodoro();
     }
@@ -2441,6 +3909,8 @@ window.I18N = (function(){
   const DICT = {
     en: {
       'nav.focus': 'Focus', 'nav.planner': 'Planner', 'nav.stats': 'Stats',
+      'stats.heading': 'Stats', 'stats.yours': 'Your study', 'stats.leaderboard': 'Leaderboard',
+      'stats.prevPage': 'Previous page', 'stats.nextPage': 'Next page',
       'stats.title': 'Your study', 'stats.thisWeek': 'This week',
       'stats.avgDay': 'Average day', 'stats.streak': 'Streak',
       'stats.days': 'd', 'stats.best': 'Best day',
@@ -2449,7 +3919,7 @@ window.I18N = (function(){
       'stats.month': 'Month', 'stats.all': 'All time',
       'stats.total': 'Total {time}',
       'stats.empty': 'No sessions in this range yet — finish a focus session and it shows up here.',
-      'tip.study': 'Study time & leaderboard', 'tip.room': 'Shared room',
+      'tip.study': 'Study time', 'tip.board': 'Leaderboard', 'tip.room': 'Shared room',
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
       'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
@@ -2459,48 +3929,110 @@ window.I18N = (function(){
       'timer.focus': 'Focus', 'timer.break': 'Break', 'timer.long': 'Long break',
       'timer.start': 'Start', 'timer.pause': 'Pause', 'timer.resume': 'Resume',
       'timer.reset': 'Reset', 'timer.skip': 'Skip',
-      'timer.task': 'What are you working on?', 'timer.subject': 'Subject',
+      'timer.task': 'What are you working on?',
       'timer.saveSession': 'Save this session',
-      'chrono.hint': 'Counts up with no target. Saving logs the time to your subject.',
+      'chrono.hint': 'Counts up with no target. Saving logs your study time.',
       'chrono.reset': 'Stopwatch reset', 'chrono.nothing': 'Nothing to save yet',
       'chrono.saved': 'Saved {time}', 'chrono.credited': '{n} pomodoro(s) credited',
 
       'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
       'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
-      'goals.hint': 'Tap a goal to focus it — finished sessions count toward it.',
+      'goals.hint': 'Tap a goal to focus it — drag anywhere on a goal to reorder.',
       'goals.empty': 'Nothing yet — add what you want to finish today',
       'goals.complete': 'Goal complete: {title}',
       'goals.added': "Added to today's goals",
       'goals.newDay': 'New day — {n} goal(s) cleared',
+      'goals.edit': 'Edit goal', 'goals.save': 'Save', 'goals.cancel': 'Cancel',
+      'goals.drag': 'Drag to reorder', 'goals.editTitle': 'Goal name',
+      'goals.updated': 'Goal updated', 'goals.needTitle': 'Give the goal a name',
 
       'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
       'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
-      'study.guest': "You're a guest — your time is saved on this device. Sign in to appear on the board.",
+      'study.guest': "You're a guest — your time is saved on this device. Sign in to unlock the leaderboard.",
+      'study.boardLocked': 'Sign in to see the leaderboard',
+      'study.boardGateTitle': 'Leaderboard is for members',
+      'study.boardGateMsg': 'Sign in or create an account to see weekly rankings and your place on the board.',
       'study.google': 'Continue with Google', 'study.or': 'or',
       'study.signin': 'Sign in', 'study.signup': 'Create account', 'study.back': 'Back',
       'study.signout': 'Sign out', 'study.rename': 'Rename',
       'study.email': 'Email', 'study.password': 'Password', 'study.name': 'Display name',
-      'study.allSubjects': 'All subjects', 'study.loading': 'Loading…',
-      'study.resetsMonday': 'The board resets every Monday',
+      'study.loading': 'Loading…',
+      'study.resetsMonday': 'The board resets every Monday — ranked by total study time',
       'study.rankEmpty': 'Log a focus session to get your rank',
       'study.percentile': 'You studied more than <b>{pct}%</b> of candidates this week',
       'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet — be first',
       'study.unavailable': 'Leaderboard unavailable',
-      'study.addSubject': '＋ add a subject…', 'study.newSubject': 'New subject name',
       'study.needBoth': 'Enter an email and a password.',
       'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
       'study.renamePrompt': 'Display name (shown on the leaderboard)',
       'study.unavailableAuth': 'Sign-in is unavailable right now.',
-      'study.sectionSet': 'Section {section} — subjects updated',
-      'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
+
+      'path.gateTitle': 'What are you studying?',
+      'path.gateMsg': 'Pick your level so we know who you are — required once after sign-in.',
+      'path.pickLevel': 'School level',
+      'path.pickGrade': 'Which year?',
+      'path.pickTrack': 'Which track?',
+      'path.pickCollege': 'Which path?',
+      'path.pickPrepa': 'Which speciality?',
+      'path.hs': 'High school',
+      'path.college': 'College / prépa',
+      'path.grade1': '1st year',
+      'path.grade2': '2nd year',
+      'path.grade3': '3rd year',
+      'path.grade4': 'BAC (4th year)',
+      'path.gradeN': '{n}th year',
+      'path.prepaClassique': 'Classic prepa',
+      'path.prepaInteg': 'Integrated prepa',
+      'path.license': 'Degree / licence',
+      'path.licensePrompt': 'Which degree are you studying?',
+      'path.licensePlaceholder': 'e.g. Computer science',
+      'path.licenseShort': 'Enter at least 2 characters',
+      'path.save': 'Save',
+      'path.back': 'Back',
+      'path.saved': 'Study path saved',
+      'path.saveFailed': 'Could not save study path',
+      'path.invalid': 'That selection is incomplete',
+      'path.yours': 'You study',
+      'path.change': 'Change',
+      'path.cancel': 'Cancel',
+      'path.needPick': 'Sign in and pick what you study',
 
       'room.title': 'Shared room', 'room.create': 'Create a room',
       'room.or': 'Or join with a code', 'room.join': 'Join', 'room.copy': 'Copy',
       'room.code': 'Room code', 'room.leave': 'Leave room',
-      'room.hint': 'Share the link or code — everyone controls the timer',
+      'room.hint': 'Share the link or code. Music and the timer stay in sync while you are in the room.',
       'room.online': 'online', 'room.connecting': 'Connecting…',
       'room.failed': 'Connection failed — try again',
+      'room.created': 'Room created',
+      'room.reclaimed': 'Back as host',
+      'room.youHost': 'you are host',
+      'room.youAreNowHost': 'You are now the host',
+      'room.hostMissing': 'Host disconnected — waiting before passing the role…',
+      'room.hostMissingToast': 'Host left the room — next host in 35 seconds',
+      'room.hostMissingCountdown': 'Host disconnected — next host in {s}s',
+      'room.people': 'In this room',
+      'room.hostBadge': 'host',
+      'room.you': 'you',
+      'room.noMembers': 'No one else here yet',
+      'room.yourName': 'Your name',
+      'room.namePlaceholder': 'e.g. Amine',
+      'room.needName': 'Enter a name (at least 2 characters) before creating or joining a room',
+      'room.perms': 'Who can control',
+      'room.allowTimer': 'Others can control the timer',
+      'room.allowMusic': 'Others can control the music',
+      'room.timerOpen': 'Timer: everyone can control',
+      'room.musicOpen': 'Music: everyone can control',
+      'room.timerLocked': 'Only the host can control the timer',
+      'room.musicLocked': 'Only the host can control the music',
+      'room.hostOnly': 'Only the host can change that',
+      'player.mute': 'Mute for me',
+      'player.unmute': 'Unmute',
+      'player.muteTip': 'Mute only on this device',
+      'player.mutedToast': 'Muted for you only — others still hear it',
+      'player.unmutedToast': 'Unmuted',
+      'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync — paste a YouTube URL',
+      'player.roomYoutubeNote': 'Only YouTube is available in a shared room.',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
       'player.load': 'Load', 'player.clear': 'Clear player',
@@ -2524,8 +4056,6 @@ window.I18N = (function(){
       'set.alarm': 'Alarm sound', 'set.bell': 'Bell', 'set.digital': 'Digital',
       'set.soft': 'Soft chime', 'set.none': 'None', 'set.apply': 'Apply & reset',
       'set.language': 'Language',
-      'set.section': 'Prépa section',
-      'set.sectionHint': "Only this section's subjects appear in the picker.",
 
       'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
@@ -2544,6 +4074,8 @@ window.I18N = (function(){
 
     fr: {
       'nav.focus': 'Focus', 'nav.planner': 'Planning', 'nav.stats': 'Stats',
+      'stats.heading': 'Stats', 'stats.yours': 'Ton étude', 'stats.leaderboard': 'Classement',
+      'stats.prevPage': 'Page précédente', 'stats.nextPage': 'Page suivante',
       'stats.title': 'Ton étude', 'stats.thisWeek': 'Cette semaine',
       'stats.avgDay': 'Moyenne / jour', 'stats.streak': 'Série',
       'stats.days': 'j', 'stats.best': 'Meilleur jour',
@@ -2552,7 +4084,7 @@ window.I18N = (function(){
       'stats.month': 'Mois', 'stats.all': 'Tout',
       'stats.total': 'Total {time}',
       'stats.empty': 'Aucune session sur cette période — termine une session et elle apparaîtra ici.',
-      'tip.study': "Temps d'étude & classement", 'tip.room': 'Salle partagée',
+      'tip.study': "Temps d'étude", 'tip.board': 'Classement', 'tip.room': 'Salle partagée',
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
       'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',
@@ -2562,48 +4094,110 @@ window.I18N = (function(){
       'timer.focus': 'Focus', 'timer.break': 'Pause', 'timer.long': 'Longue pause',
       'timer.start': 'Démarrer', 'timer.pause': 'Pause', 'timer.resume': 'Reprendre',
       'timer.reset': 'Réinitialiser', 'timer.skip': 'Passer',
-      'timer.task': 'Sur quoi travailles-tu ?', 'timer.subject': 'Matière',
+      'timer.task': 'Sur quoi travailles-tu ?',
       'timer.saveSession': 'Enregistrer cette session',
-      'chrono.hint': "Compte à l'endroit, sans objectif. L'enregistrement ajoute le temps à ta matière.",
+      'chrono.hint': "Compte à l'endroit, sans objectif. L'enregistrement ajoute ton temps d'étude.",
       'chrono.reset': 'Chronomètre remis à zéro', 'chrono.nothing': 'Rien à enregistrer pour le moment',
       'chrono.saved': '{time} enregistré', 'chrono.credited': '{n} pomodoro(s) crédité(s)',
 
       'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
       'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
-      'goals.hint': 'Touche un objectif pour le cibler — les sessions terminées y sont comptées.',
+      'goals.hint': 'Touche un objectif pour le cibler — glisse n’importe où sur la ligne pour réordonner.',
       'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
       'goals.complete': 'Objectif atteint : {title}',
       'goals.added': 'Ajouté aux objectifs du jour',
       'goals.newDay': 'Nouveau jour — {n} objectif(s) effacé(s)',
+      'goals.edit': 'Modifier', 'goals.save': 'Enregistrer', 'goals.cancel': 'Annuler',
+      'goals.drag': 'Glisser pour réordonner', 'goals.editTitle': 'Nom de l’objectif',
+      'goals.updated': 'Objectif mis à jour', 'goals.needTitle': 'Donne un nom à l’objectif',
 
       'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
       'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
-      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour apparaître au classement.",
+      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",
+      'study.boardLocked': 'Connecte-toi pour voir le classement',
+      'study.boardGateTitle': 'Classement réservé aux membres',
+      'study.boardGateMsg': 'Connecte-toi ou crée un compte pour voir le classement de la semaine et ta place.',
       'study.google': 'Continuer avec Google', 'study.or': 'ou',
       'study.signin': 'Se connecter', 'study.signup': 'Créer un compte', 'study.back': 'Retour',
       'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
       'study.email': 'E-mail', 'study.password': 'Mot de passe', 'study.name': "Nom affiché",
-      'study.allSubjects': 'Toutes les matières', 'study.loading': 'Chargement…',
-      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi',
+      'study.loading': 'Chargement…',
+      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi — classé par temps total',
       'study.rankEmpty': 'Enregistre une session pour obtenir ton rang',
       'study.percentile': 'Tu as étudié plus que <b>{pct}%</b> des candidats cette semaine',
       'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine — sois le premier",
       'study.unavailable': 'Classement indisponible',
-      'study.addSubject': '＋ ajouter une matière…', 'study.newSubject': 'Nom de la matière',
       'study.needBoth': 'Saisis un e-mail et un mot de passe.',
       'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
       'study.renamePrompt': 'Nom affiché (visible au classement)',
       'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
-      'study.sectionSet': 'Section {section} — matières mises à jour',
-      'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
+
+      'path.gateTitle': 'Qu’est-ce que tu étudies ?',
+      'path.gateMsg': 'Choisis ton niveau — obligatoire une fois après connexion.',
+      'path.pickLevel': 'Niveau scolaire',
+      'path.pickGrade': 'Quelle année ?',
+      'path.pickTrack': 'Quelle filière ?',
+      'path.pickCollege': 'Quel parcours ?',
+      'path.pickPrepa': 'Quelle spécialité ?',
+      'path.hs': 'Lycée',
+      'path.college': 'Supérieur / prépa',
+      'path.grade1': '1ère année',
+      'path.grade2': '2ème année',
+      'path.grade3': '3ème année',
+      'path.grade4': 'BAC (4ème année)',
+      'path.gradeN': '{n}ème année',
+      'path.prepaClassique': 'Prépa classique',
+      'path.prepaInteg': 'Prépa intégrée',
+      'path.license': 'Licence',
+      'path.licensePrompt': 'Quelle licence suis-tu ?',
+      'path.licensePlaceholder': 'ex. Informatique',
+      'path.licenseShort': 'Saisis au moins 2 caractères',
+      'path.save': 'Enregistrer',
+      'path.back': 'Retour',
+      'path.saved': 'Parcours enregistré',
+      'path.saveFailed': 'Impossible d’enregistrer le parcours',
+      'path.invalid': 'Sélection incomplète',
+      'path.yours': 'Tu étudies',
+      'path.change': 'Modifier',
+      'path.cancel': 'Annuler',
+      'path.needPick': 'Connecte-toi et choisis ton parcours',
 
       'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
       'room.or': 'Ou rejoindre avec un code', 'room.join': 'Rejoindre', 'room.copy': 'Copier',
       'room.code': 'Code de la salle', 'room.leave': 'Quitter la salle',
-      'room.hint': 'Partage le lien ou le code — tout le monde contrôle le minuteur',
+      'room.hint': 'Partage le lien ou le code. La musique et le minuteur restent synchronisés dans la salle.',
       'room.online': 'en ligne', 'room.connecting': 'Connexion…',
       'room.failed': 'Échec de la connexion — réessaie',
+      'room.created': 'Salle créée',
+      'room.reclaimed': 'De retour en tant qu’hôte',
+      'room.youHost': 'tu es hôte',
+      'room.youAreNowHost': 'Tu es maintenant l’hôte',
+      'room.hostMissing': 'Hôte déconnecté — transfert du rôle dans un instant…',
+      'room.hostMissingToast': 'L’hôte a quitté — prochain hôte dans 35 secondes',
+      'room.hostMissingCountdown': 'Hôte déconnecté — prochain hôte dans {s}s',
+      'room.people': 'Dans la salle',
+      'room.hostBadge': 'hôte',
+      'room.you': 'toi',
+      'room.noMembers': 'Personne d’autre pour l’instant',
+      'room.yourName': 'Ton prénom',
+      'room.namePlaceholder': 'ex. Amine',
+      'room.needName': 'Entre un prénom (au moins 2 caractères) avant de créer ou rejoindre une salle',
+      'room.perms': 'Qui peut contrôler',
+      'room.allowTimer': 'Les autres peuvent contrôler le minuteur',
+      'room.allowMusic': 'Les autres peuvent contrôler la musique',
+      'room.timerOpen': 'Minuteur : tout le monde peut contrôler',
+      'room.musicOpen': 'Musique : tout le monde peut contrôler',
+      'room.timerLocked': 'Seul l’hôte peut contrôler le minuteur',
+      'room.musicLocked': 'Seul l’hôte peut contrôler la musique',
+      'room.hostOnly': 'Seul l’hôte peut changer ça',
+      'player.mute': 'Couper le son pour moi',
+      'player.unmute': 'Remettre le son',
+      'player.muteTip': 'Coupe le son seulement sur cet appareil',
+      'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
+      'player.unmutedToast': 'Son rétabli',
+      'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise — colle un lien YouTube',
+      'player.roomYoutubeNote': 'Seul YouTube est disponible dans une salle partagée.',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
       'player.load': 'Charger', 'player.clear': 'Vider le lecteur',
@@ -2628,8 +4222,6 @@ window.I18N = (function(){
       'set.alarm': 'Son d’alarme', 'set.bell': 'Cloche', 'set.digital': 'Numérique',
       'set.soft': 'Carillon doux', 'set.none': 'Aucun', 'set.apply': 'Appliquer & réinitialiser',
       'set.language': 'Langue',
-      'set.section': 'Section prépa',
-      'set.sectionHint': 'Seules les matières de cette section apparaissent dans le sélecteur.',
 
       'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',
@@ -2920,17 +4512,45 @@ window.Planner = (function(){
 })();
 
 
-// ── VIEW SWITCH (focus ⇄ planner) ─────────────────────────────
+// ── VIEW SWITCH (focus ⇄ planner ⇄ stats) ─────────────────────
+function updateTabIndicator(container){
+  if (!container) return;
+  const ind = container.querySelector('.tab-indicator');
+  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active, .stats-tab.active');
+  if (!ind || !active) return;
+  const cr = container.getBoundingClientRect();
+  const ar = active.getBoundingClientRect();
+  ind.style.width = ar.width + 'px';
+  ind.style.height = ar.height + 'px';
+  ind.style.transform = 'translate(' + (ar.left - cr.left) + 'px,' + (ar.top - cr.top) + 'px)';
+  ind.style.opacity = '1';
+}
+
+function updateAllTabIndicators(){
+  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch, .stats-tabs').forEach(updateTabIndicator);
+}
+
+function animateModeSwitch(){
+  const chronoOn = window.Chrono && Chrono.isActive && Chrono.isActive();
+  const el = chronoOn
+    ? document.getElementById('chronoDisplay')
+    : document.getElementById('timerDisplay');
+  if (!el || el.offsetParent === null) return;
+  el.classList.remove('mode-switch-bump');
+  void el.offsetWidth;
+  el.classList.add('mode-switch-bump');
+}
+
 function showView(name){
   document.body.classList.toggle('view-planner', name === 'planner');
   document.body.classList.toggle('view-stats', name === 'stats');
-  // Recompute on entry rather than on every logged session.
-  if (name === 'stats' && window.Stats) Stats.render();
+  if (name === 'stats' && window.Stats) Stats.onShow();
   document.querySelectorAll('[data-view]').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   try { localStorage.setItem('sf_view', name); } catch(e){}
   window.scrollTo(0, 0);
+  updateAllTabIndicators();
 }
 
 
@@ -2938,15 +4558,11 @@ function showView(name){
 
 
 // ── CELEBRATION & MICRO-INTERACTIONS ──────────────────────────
-// Small, meaningful feedback: a burst when a goal is finished, a pop when a
-// tracked number changes. Both no-op under prefers-reduced-motion so the
-// calm setting stays genuinely calm.
 function prefersReducedMotion(){
-  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return false;
 }
 
 function burstConfetti(origin){
-  if (prefersReducedMotion()) return;
   const styles = getComputedStyle(document.body);
   const colours = ['--accent', '--break', '--long']
     .map(v => styles.getPropertyValue(v).trim())
@@ -2980,7 +4596,7 @@ function burstConfetti(origin){
 
 // Re-triggers the CSS animation by forcing a reflow between class removals.
 function bump(el){
-  if (!el || prefersReducedMotion()) return;
+  if (!el) return;
   el.classList.remove('bump');
   void el.offsetWidth;
   el.classList.add('bump');
@@ -3052,33 +4668,7 @@ async function checkSupabase(){
 // the class — otherwise their state would drift from the DOM and the next
 // click on their button would need pressing twice.
 function closeAllPanels(){
-  const settings = document.getElementById('settingsSlidePanel');
-  if (settings){
-    settings.classList.remove('open');
-    const b = document.getElementById('settingsFixedBtn');
-    if (b) b.classList.remove('active');
-  }
-  if (typeof settingsPanelOpen !== 'undefined') settingsPanelOpen = false;
-
-  const bg = document.getElementById('bgPanel');
-  if (bg){
-    bg.classList.remove('open');
-    const b = document.querySelector('.btn-bg-toggle');
-    if (b) b.classList.remove('active');
-  }
-  if (typeof bgPanelOpen !== 'undefined') bgPanelOpen = false;
-
-  ['themePanel', 'playerPanel'].forEach(function(id){
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-  });
-  ['themeFixedBtn', 'playerFixedBtn'].forEach(function(id){
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
-
-  if (window.Study && Study.close) Study.close();
-  if (window.Room && Room.close) Room.close();
+  if (typeof closeDockPopovers === 'function') closeDockPopovers();
 }
 
 // Where the click started has to be recorded in the CAPTURE phase, before
@@ -3090,9 +4680,10 @@ let clickOrigin = null;
 document.addEventListener('click', function(e){
   const el = e.target;
   clickOrigin = (el && el.closest) ? {
-    inPanel: !!el.closest('.popover'),
+    inPanel: !!(el.closest('.popover') || el.closest('.study-path-gate')),
     onDock:  !!el.closest('.dock-btn'),
-    onLang:  !!el.closest('.lang-toggle')
+    onLang:  !!el.closest('.lang-toggle'),
+    opensPanel: !!el.closest('.study-mini-btn')
   } : null;
 }, true);
 
@@ -3100,7 +4691,7 @@ document.addEventListener('click', function(){
   // Inside a popover, or on the control that opens one — those manage
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
-  if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang)) return;
+  if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang || clickOrigin.opensPanel)) return;
   closeAllPanels();
 });
 
@@ -3138,10 +4729,74 @@ document.addEventListener('keydown', function(e){
 // than a categorical palette — which also means it re-tints per theme
 // instead of fighting four of them.
 window.Stats = (function(){
+  const K_TAB = 'sf_stats_tab';
   let range = 'week';   // week | month | all
+  let tab = 'study';    // study | board
+  let boardPage = 1;
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function readTab(){
+    try {
+      const v = localStorage.getItem(K_TAB);
+      if (v === 'board' || v === 'study') return v;
+    } catch(e){}
+    return 'study';
+  }
+
+  function clampBoardPage(){
+    if (window.Study && Study.boardPageCount){
+      const max = Study.boardPageCount();
+      if (boardPage > max) boardPage = max;
+      if (boardPage < 1) boardPage = 1;
+    }
+  }
+
+  function setTab(next){
+    const prev = tab;
+    tab = (next === 'board') ? 'board' : 'study';
+    try { localStorage.setItem(K_TAB, tab); } catch(e){}
+    updateTabsUI();
+    if (prev === tab) return;
+    if (tab === 'board'){
+      boardPage = 1;
+      if (window.Study && Study.loadBoard) Study.loadBoard();
+      else renderContent();
+    } else {
+      renderContent();
+    }
+  }
+
+  function setBoardPage(p){
+    boardPage = Math.max(1, p);
+    clampBoardPage();
+    renderContent();
+  }
+
+  function openLeaderboard(){
+    if (tab !== 'board') setTab('board');
+    else renderContent();
+    if (typeof showView === 'function') showView('stats');
+  }
+
+  function onShow(){
+    updateTabsUI();
+    if (tab === 'board' && window.Study && Study.loadBoard) Study.loadBoard();
+    else renderContent();
+  }
+
+  function updateTabsUI(){
+    const tabs = document.querySelector('.stats-tabs');
+    if (!tabs) return;
+    tabs.querySelectorAll('.stats-tab').forEach(function(btn){
+      const key = btn.getAttribute('data-stats-tab');
+      const active = (key === 'board') ? tab === 'board' : tab === 'study';
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    updateTabIndicator(tabs);
+  }
 
   function locale(){ return window.I18N && I18N.current() === 'fr' ? 'fr-FR' : 'en-GB'; }
   function fmt(m){ return window.Study ? Study.fmt(m) : m + 'm'; }
@@ -3239,57 +4894,37 @@ window.Stats = (function(){
            '</div><div class="st-chart">' + bars + '</div></div>';
   }
 
-  function subjectChart(){
-    const since = rangeStart();
-    const totals = window.Study ? Study.bySubjectSince(since) : {};
-    const rows = Object.keys(totals).map(function(k){ return { s:k, m:totals[k] }; })
-                       .sort(function(a,b){ return b.m - a.m; });
+  function subjectChart(){ return ''; }
 
-    const picker = ['week','month','all'].map(function(r){
-      return '<button class="st-range' + (range === r ? ' active' : '') + '" ' +
-             'onclick="Stats.setRange(\'' + r + '\')">' + esc(t('stats.' + r)) + '</button>';
-    }).join('');
-
-    const head = '<div class="st-section-head">' +
-                   '<h3 class="st-title">' + esc(t('stats.bySubject')) + '</h3>' +
-                   '<div class="st-ranges">' + picker + '</div>' +
-                 '</div>';
-
-    if (!rows.length){
-      return '<div class="st-section">' + head +
-             '<p class="st-empty">' + esc(t('stats.empty')) + '</p></div>';
+  function renderContent(){
+    const host = document.getElementById('statsBody');
+    if (!host) return;
+    clampBoardPage();
+    if (tab === 'study'){
+      host.innerHTML = statTiles() + dailyChart();
+    } else if (window.Study && Study.renderLeaderboardPage){
+      host.innerHTML = Study.renderLeaderboardPage(boardPage);
+    } else {
+      host.innerHTML = '';
     }
-
-    const max = rows[0].m || 1;
-    const total = rows.reduce(function(a,x){ return a + x.m; }, 0);
-    const body = rows.map(function(r){
-      const pct = Math.max(2, Math.round(r.m / max * 100));
-      const share = Math.round(r.m / total * 100);
-      return '<div class="st-row">' +
-               '<span class="st-row-name" title="' + esc(r.s) + '">' + esc(r.s) + '</span>' +
-               '<span class="st-row-track"><span class="st-row-fill" style="width:' + pct + '%"></span></span>' +
-               '<span class="st-row-val">' + esc(fmt(r.m)) + '</span>' +
-               '<span class="st-row-share">' + share + '%</span>' +
-             '</div>';
-    }).join('');
-
-    return '<div class="st-section">' + head +
-           '<div class="st-rows">' + body + '</div>' +
-           '<p class="st-total">' + esc(t('stats.total', { time: fmt(total) })) + '</p></div>';
   }
 
   function render(){
-    const host = document.getElementById('statsBody');
-    if (!host) return;
-    host.innerHTML = statTiles() + dailyChart() + subjectChart();
+    updateTabsUI();
+    renderContent();
   }
 
   function init(){
-    render();
-    if (window.I18N) I18N.onChange(function(){ render(); });
+    tab = readTab();
+    updateTabsUI();
+    renderContent();
+    if (tab === 'board' && window.Study && Study.loadBoard) Study.loadBoard();
+    if (window.I18N) I18N.onChange(function(){ updateTabsUI(); renderContent(); });
   }
 
-  return { init:init, render:render, setRange:setRange, streak:streak, daily:daily };
+  return { init:init, render:render, renderContent:renderContent, onShow:onShow, setRange:setRange,
+           setTab:setTab, setBoardPage:setBoardPage, openLeaderboard:openLeaderboard,
+           streak:streak, daily:daily };
 })();
 
 
@@ -3317,4 +4952,13 @@ I18N.apply();
 (function(){
   const saved = localStorage.getItem('sf_view');
   showView(saved === 'planner' || saved === 'stats' ? saved : 'focus');
+  requestAnimationFrame(updateAllTabIndicators);
 })();
+window.addEventListener('resize', function(){
+  clearTimeout(window._tabIndTO);
+  window._tabIndTO = setTimeout(updateAllTabIndicators, 100);
+});
+if (window.I18N) I18N.onChange(function(){
+  updateClock();
+  requestAnimationFrame(updateAllTabIndicators);
+});
