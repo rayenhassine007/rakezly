@@ -28,7 +28,7 @@ This creates:
 
 | Object | What it does |
 |---|---|
-| `profiles` | One row per student; `display_name` is the only thing others ever see |
+| `profiles` | One row per student; `display_name` for the leaderboard, `study_path` (json) for what they study |
 | `study_sessions` | One row per finished focus session |
 | `goals` | Daily checklist, mirrored from the device when signed in |
 | `leaderboard_week()` | Returns weekly rankings — aggregates only |
@@ -36,8 +36,10 @@ This creates:
 | `handle_new_user()` | Creates a profile automatically on sign-up |
 
 Row Level Security is on for all three tables: a student can only ever read
-their own rows. The leaderboard is served by `SECURITY DEFINER` functions
-that return totals, never anyone's individual sessions.
+their own rows. The leaderboard ranks **total study time this week** (all
+subjects combined) via `SECURITY DEFINER` functions that return aggregates
+only, never anyone's individual sessions. Run the latest `schema.sql` to add
+the `study_path` column if upgrading an existing project.
 
 ### Check it worked
 
