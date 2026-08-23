@@ -2306,16 +2306,29 @@ window.Auth = (function(){
     } catch(e){}
   }
 
+  function isMissingStudyPathColumn(err){
+    const msg = String((err && err.message) || err || '');
+    return /study_path/i.test(msg) &&
+      (/schema cache|Could not find|column.*does not exist/i.test(msg));
+  }
+
   async function loadProfile(){
     const cl = window.SB.get();
     if (!cl || !user){ profile = null; return; }
     try {
-      const r = await cl.from('profiles').select('display_name, study_path').eq('id', user.id).maybeSingle();
+      let r = await cl.from('profiles').select('display_name, study_path').eq('id', user.id).maybeSingle();
+      if (r.error && isMissingStudyPathColumn(r.error)) {
+        r = await cl.from('profiles').select('display_name').eq('id', user.id).maybeSingle();
+      }
+      if (r.error) throw r.error;
       profile = r.data || null;
       if (profile && profile.study_path) {
         try { localStorage.setItem('sf_study_path', JSON.stringify(profile.study_path)); } catch(e){}
       }
-    } catch(e){ profile = null; }
+    } catch(e){
+      console.warn('profile load', e);
+      profile = null;
+    }
   }
 
   async function setSession(session){
@@ -2414,7 +2427,16 @@ window.Auth = (function(){
     const cl = window.SB.get();
     if (!cl || !user) return { ok:true, msg:'Saved locally' };
     const r = await cl.from('profiles').update({ study_path: path }).eq('id', user.id);
-    if (r.error) return { ok:false, msg:r.error.message };
+    if (r.error) {
+      if (isMissingStudyPathColumn(r.error)) {
+        return {
+          ok: true,
+          localOnly: true,
+          msg: 'Saved on this device. Add study_path to Supabase (see supabase/migrate-study-path.sql).'
+        };
+      }
+      return { ok:false, msg:r.error.message };
+    }
     emit();
     return { ok:true, msg:'Study path saved' };
   }
@@ -2532,6 +2554,7 @@ window.Study = (function(){
     if (window.Auth && window.Auth.saveStudyPath){
       const r = await window.Auth.saveStudyPath(p);
       if (!r.ok) throw new Error(r.msg || 'Could not save study path');
+      if (r.localOnly) toast(r.msg);
     }
   }
 
