@@ -1866,7 +1866,17 @@ body.view-stats .stage {
 }
 .path-btn:hover { color: var(--text); border-color: var(--border); }
 .path-btn.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.path-back { margin-top: 4px; }
+.path-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.path-nav-spacer { flex: 1; }
+.path-nav-back, .path-nav-cancel { margin: 0; padding: 4px 2px; }
 .path-save { width: 100%; margin-top: 8px; }
 .study-path-set {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
