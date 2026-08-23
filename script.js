@@ -2462,7 +2462,16 @@ window.Study = (function(){
     '4': ['Lettres', 'Économie et gestion', 'Informatique', 'Mathématiques', 'Sciences expérimentales', 'Sciences techniques']
   };
   const COLLEGE_PREPA = ['MP', 'PT', 'PC', 'BG'];
-  const COLLEGE_INTEG = ['MPI', 'CBA', 'license'];
+  const COLLEGE_INTEG = ['MPI', 'CBA'];
+
+  function normalizePath(p){
+    if (!p || p.level !== 'college') return p;
+    // Legacy: licence lived under prepa integ — lift it to its own college path.
+    if (p.collegeKind === 'prepa_integ' && p.collegeTrack === 'license') {
+      return { level: 'college', collegeKind: 'license', licenseName: p.licenseName || '' };
+    }
+    return p;
+  }
 
   let panelOpen = false;
   let board = [], standing = null, boardLoading = false, boardErr = '';
@@ -2491,14 +2500,16 @@ window.Study = (function(){
   function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
   function rawPath(){
+    let p = null;
     if (window.Auth && window.Auth.studyPathRaw) {
-      const p = window.Auth.studyPathRaw();
-      if (p) return p;
+      p = window.Auth.studyPathRaw();
     }
-    return readJSON('sf_study_path', null);
+    if (!p) p = readJSON('sf_study_path', null);
+    return normalizePath(p);
   }
 
   function isValidPath(p){
+    p = normalizePath(p);
     if (!p || !p.level) return false;
     if (p.level === 'highschool'){
       if (!HS_GRADES.hasOwnProperty(p.grade)) return false;
@@ -2507,11 +2518,11 @@ window.Study = (function(){
       return tracks.indexOf(p.track) !== -1;
     }
     if (p.level === 'college'){
+      if (p.collegeKind === 'license') {
+        return String(p.licenseName || '').trim().length >= 2;
+      }
       if (p.collegeKind === 'prepa_classique') return COLLEGE_PREPA.indexOf(p.collegeTrack) !== -1;
-      if (p.collegeKind === 'prepa_integ'){
-        if (p.collegeTrack === 'license'){
-          return String(p.licenseName || '').trim().length >= 2;
-        }
+      if (p.collegeKind === 'prepa_integ') {
         return p.collegeTrack === 'MPI' || p.collegeTrack === 'CBA';
       }
     }
@@ -2519,6 +2530,7 @@ window.Study = (function(){
   }
 
   function pathLabel(p){
+    p = normalizePath(p);
     if (!p || !isValidPath(p)) return '';
     if (p.level === 'highschool'){
       const gradeLbl = p.grade === '1' ? t('path.grade1')
@@ -2527,11 +2539,11 @@ window.Study = (function(){
       if (p.grade === '1') return t('path.hs') + ' · ' + gradeLbl;
       return t('path.hs') + ' · ' + gradeLbl + ' · ' + p.track;
     }
+    if (p.collegeKind === 'license'){
+      return t('path.license') + ' · ' + String(p.licenseName || '').trim();
+    }
     if (p.collegeKind === 'prepa_classique'){
       return t('path.prepaClassique') + ' · ' + p.collegeTrack;
-    }
-    if (p.collegeTrack === 'license'){
-      return t('path.license') + ' · ' + String(p.licenseName || '').trim();
     }
     return t('path.prepaInteg') + ' · ' + p.collegeTrack;
   }
@@ -2633,17 +2645,16 @@ window.Study = (function(){
         '</div>';
     } else if (pathWizard === 'college_kind'){
       body = '<div class="path-step-label">'+esc(t('path.pickCollege'))+'</div>' +
-        '<div class="path-btn-grid">' +
+        '<div class="path-btn-grid path-btn-grid-stack">' +
           pathBtn(t('path.prepaClassique'), 'college_kind', 'prepa_classique') +
           pathBtn(t('path.prepaInteg'), 'college_kind', 'prepa_integ') +
+          pathBtn(t('path.license'), 'college_kind', 'license') +
         '</div>';
     } else if (pathWizard === 'college_track'){
       const opts = pathDraft.collegeKind === 'prepa_classique' ? COLLEGE_PREPA : COLLEGE_INTEG;
       body = '<div class="path-step-label">'+esc(t('path.pickPrepa'))+'</div>' +
         '<div class="path-btn-grid">' +
-          opts.map(function(tr){
-            return pathBtn(tr === 'license' ? t('path.license') : tr, 'college_track', tr);
-          }).join('') +
+          opts.map(function(tr){ return pathBtn(tr, 'college_track', tr); }).join('') +
         '</div>';
     } else if (pathWizard === 'license_name'){
       body = '<div class="path-step-label">'+esc(t('path.licensePrompt'))+'</div>' +
@@ -2692,12 +2703,7 @@ window.Study = (function(){
   }
   function pickCollegeKind(kind){
     pathDraft.collegeKind = kind;
-    pathWizard = 'college_track';
-    render();
-  }
-  function pickCollegeTrack(track){
-    if (track === 'license'){
-      pathDraft.collegeTrack = 'license';
+    if (kind === 'license'){
       pathWizard = 'license_name';
       render();
       setTimeout(function(){
@@ -2706,6 +2712,10 @@ window.Study = (function(){
       }, 50);
       return;
     }
+    pathWizard = 'college_track';
+    render();
+  }
+  function pickCollegeTrack(track){
     finishPath({ level:'college', collegeKind: pathDraft.collegeKind, collegeTrack: track });
   }
   async function saveLicensePath(){
@@ -2714,8 +2724,7 @@ window.Study = (function(){
     if (name.length < 2){ toast(t('path.licenseShort')); return; }
     await finishPath({
       level:'college',
-      collegeKind: pathDraft.collegeKind,
-      collegeTrack: 'license',
+      collegeKind: 'license',
       licenseName: name
     });
   }
@@ -2738,7 +2747,7 @@ window.Study = (function(){
     else if (pathWizard === 'hs_track') pathWizard = 'hs_grade';
     else if (pathWizard === 'college_kind') pathWizard = 'level';
     else if (pathWizard === 'college_track') pathWizard = 'college_kind';
-    else if (pathWizard === 'license_name') pathWizard = 'college_track';
+    else if (pathWizard === 'license_name') pathWizard = 'college_kind';
     render();
   }
   function changePath(){ startPathWizard(); }
