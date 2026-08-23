@@ -1278,6 +1278,7 @@ function init(){
   if (_gbord !== null) { const v = parseInt(_gbord); document.getElementById('glassBordSlider').value = v; setGlassBorder(v); }
 
   loadQuote();
+  startQuoteRotation();
 }
 
 const QUOTES = [
@@ -1292,10 +1293,38 @@ const QUOTES = [
   {t:"One hour of focused work is worth more than a day of distraction.", a:"— Anonymous"},
   {t:"Small steps every day lead to giant leaps over time.", a:"— Anonymous"},
 ];
-function loadQuote(){
-  const q=QUOTES[Math.floor(Math.random()*QUOTES.length)];
-  document.getElementById('quoteText').textContent='"'+q.t+'"';
-  document.getElementById('quoteAuthor').textContent=q.a;
+let quoteIndex = -1;
+let quoteTimer = null;
+
+function loadQuote(animate){
+  const card = document.querySelector('.quote-card');
+  const textEl = document.getElementById('quoteText');
+  const authorEl = document.getElementById('quoteAuthor');
+  if (!textEl || !authorEl) return;
+
+  function applyQuote(){
+    let next = Math.floor(Math.random() * QUOTES.length);
+    if (QUOTES.length > 1){
+      while (next === quoteIndex) next = Math.floor(Math.random() * QUOTES.length);
+    }
+    quoteIndex = next;
+    const q = QUOTES[quoteIndex];
+    textEl.textContent = '"' + q.t + '"';
+    authorEl.textContent = q.a;
+    if (card) card.classList.remove('fading');
+  }
+
+  if (animate && card){
+    card.classList.add('fading');
+    setTimeout(applyQuote, 400);
+  } else {
+    applyQuote();
+  }
+}
+
+function startQuoteRotation(){
+  if (quoteTimer) clearInterval(quoteTimer);
+  quoteTimer = setInterval(function(){ loadQuote(true); }, 5 * 60 * 1000);
 }
 
 // ── THEME ─────────────────────────────────────────────────────
@@ -1519,13 +1548,11 @@ function updateClock() {
 
   let h = now.getHours();
   const m = now.getMinutes();
-  const s = now.getSeconds();
   const ampm = h24 ? '' : (h >= 12 ? 'PM' : 'AM');
   if (!h24) h = h % 12 || 12;
 
   document.getElementById('clockHours').textContent = String(h).padStart(2, '0');
   document.getElementById('clockMins').textContent  = String(m).padStart(2, '0');
-  document.getElementById('clockSecs').textContent  = String(s).padStart(2, '0');
   document.getElementById('clockAmpm').textContent  = ampm;
 
   const el = document.getElementById('liveDate');
@@ -1541,8 +1568,16 @@ function updateClock() {
     }
   }
 }
-updateClock();
-setInterval(updateClock, 1000);
+function scheduleClock(){
+  updateClock();
+  const now = new Date();
+  const ms = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+  setTimeout(function(){
+    updateClock();
+    setInterval(updateClock, 60000);
+  }, Math.max(0, ms));
+}
+scheduleClock();
 
 
 // ── SHARED ROOM (Supabase Realtime) ───────────────────────────
@@ -4723,11 +4758,12 @@ window.Stats = (function(){
     tab = (next === 'board') ? 'board' : 'study';
     try { localStorage.setItem(K_TAB, tab); } catch(e){}
     updateTabsUI();
+    if (prev === tab) return;
     if (tab === 'board'){
       boardPage = 1;
       if (window.Study && Study.loadBoard) Study.loadBoard();
       else renderContent();
-    } else if (prev !== tab) {
+    } else {
       renderContent();
     }
   }
