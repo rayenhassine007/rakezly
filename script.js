@@ -2703,6 +2703,7 @@ window.Study = (function(){
   }
 
   function pathSummaryBlock(){
+    if (!window.Auth || !window.Auth.signedIn()) return '';
     const p = getPath();
     if (!p) return '';
     return '<div class="study-path-set">' +
@@ -2903,12 +2904,13 @@ window.Study = (function(){
 
     const bars = document.getElementById('studyMiniBars');
     if (!bars) return;
-    const p = getPath();
+    const signedIn = window.Auth && window.Auth.signedIn();
+    const p = signedIn ? getPath() : null;
     if (p){
       bars.innerHTML = '<div class="study-mini-path">'+esc(pathLabel(p))+'</div>';
       return;
     }
-    if (window.Auth && window.Auth.signedIn()){
+    if (signedIn){
       bars.innerHTML = '<div class="study-mini-empty">'+esc(t('path.needPick'))+'</div>';
       return;
     }
@@ -3397,6 +3399,7 @@ window.Goals = (function(){
   }
 
   function onGoalListClick(e){
+    if (goalDragSuppressClick) return;
     const btn = e.target.closest('[data-goal-action]');
     if (btn){
       e.preventDefault();
@@ -3429,6 +3432,14 @@ window.Goals = (function(){
   }
 
   let ptrDrag = null;
+  let goalDragSuppressClick = false;
+
+  function isGoalDragBlocked(el){
+    if (!el) return true;
+    return !!el.closest(
+      'button, input, textarea, select, a, .goal-edit, .goal-actions, .goal-drag'
+    );
+  }
 
   function clearDropTargets(list){
     if (!list) return;
@@ -3447,18 +3458,21 @@ window.Goals = (function(){
     list.addEventListener('keydown', onGoalListKeydown);
 
     list.addEventListener('dragstart', function(e){
-      const handle = e.target.closest('.goal-drag');
-      if (!handle) return;
-      const row = handle.closest('.goal-item');
-      if (!row || row.classList.contains('done')){ e.preventDefault(); return; }
+      const row = e.target.closest('.goal-item');
+      if (!row || row.classList.contains('done') || row.classList.contains('editing')){
+        e.preventDefault(); return;
+      }
+      if (isGoalDragBlocked(e.target)){ e.preventDefault(); return; }
       reorderDragId = row.dataset.goalId;
       e.dataTransfer.effectAllowed = 'move';
       try { e.dataTransfer.setData('text/plain', reorderDragId); } catch(err){}
       row.classList.add('is-dragging');
+      goalDragSuppressClick = true;
     });
     list.addEventListener('dragend', function(){
       reorderDragId = null;
       clearDropTargets(list);
+      setTimeout(function(){ goalDragSuppressClick = false; }, 0);
     });
     list.addEventListener('dragover', function(e){
       if (!reorderDragId) return;
@@ -3479,18 +3493,28 @@ window.Goals = (function(){
     });
 
     list.addEventListener('pointerdown', function(e){
-      const handle = e.target.closest('.goal-drag');
-      if (!handle || e.button !== 0) return;
-      const row = handle.closest('.goal-item');
-      if (!row || row.classList.contains('done')) return;
-      e.preventDefault();
-      handle.setPointerCapture(e.pointerId);
-      ptrDrag = { id: row.dataset.goalId, row: row, list: list, startY: e.clientY, overId: null };
-      row.classList.add('is-dragging');
+      if (e.button !== 0) return;
+      const row = e.target.closest('.goal-item');
+      if (!row || row.classList.contains('done') || row.classList.contains('editing')) return;
+      if (isGoalDragBlocked(e.target)) return;
+      ptrDrag = {
+        id: row.dataset.goalId, row: row, list: list,
+        startY: e.clientY, startX: e.clientX, overId: null, dragging: false,
+        pointerId: e.pointerId
+      };
     });
     list.addEventListener('pointermove', function(e){
       if (!ptrDrag) return;
       const dy = e.clientY - ptrDrag.startY;
+      const dx = e.clientX - ptrDrag.startX;
+      if (!ptrDrag.dragging){
+        if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
+        ptrDrag.dragging = true;
+        goalDragSuppressClick = true;
+        ptrDrag.row.classList.add('is-dragging');
+        try { ptrDrag.row.setPointerCapture(ptrDrag.pointerId); } catch(err){}
+      }
+      e.preventDefault();
       ptrDrag.row.style.transform = 'translateY(' + dy + 'px)';
       ptrDrag.row.style.zIndex = '3';
       const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -3501,11 +3525,15 @@ window.Goals = (function(){
       });
       ptrDrag.overId = (target && target.dataset.goalId !== ptrDrag.id) ? target.dataset.goalId : null;
     });
-    function endPtrDrag(){
+    function endPtrDrag(e){
       if (!ptrDrag) return;
-      if (ptrDrag.overId) reorderGoals(ptrDrag.id, ptrDrag.overId);
+      const moved = ptrDrag.dragging;
+      if (moved && ptrDrag.overId) reorderGoals(ptrDrag.id, ptrDrag.overId);
       clearDropTargets(ptrDrag.list);
       ptrDrag = null;
+      if (moved){
+        setTimeout(function(){ goalDragSuppressClick = false; }, 0);
+      }
     }
     list.addEventListener('pointerup', endPtrDrag);
     list.addEventListener('pointercancel', endPtrDrag);
@@ -3618,11 +3646,11 @@ window.Goals = (function(){
                  '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
                '</div>' +
              '</div>');
-          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'">' +
-                   '<button type="button" class="goal-drag" draggable="true" data-goal-id="'+g.id+'" ' +
-                     'aria-label="'+esc(t('goals.drag'))+'" title="'+esc(t('goals.drag'))+'">' +
+          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'"' +
+                   (!g.done && !isEditing ? ' draggable="true"' : '') + '>' +
+                   '<span class="goal-drag" aria-hidden="true">' +
                      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h2M9 12h2M9 18h2M13 6h2M13 12h2M13 18h2"/></svg>' +
-                   '</button>' +
+                   '</span>' +
                    '<button type="button" class="goal-check" data-goal-action="toggle" data-goal-id="'+g.id+'" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
                    mainBlock +
                    (!isEditing
@@ -3872,7 +3900,7 @@ window.I18N = (function(){
 
       'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
       'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
-      'goals.hint': 'Tap a goal to focus it — drag to reorder, edit to fix mistakes.',
+      'goals.hint': 'Tap a goal to focus it — drag anywhere on a goal to reorder.',
       'goals.empty': 'Nothing yet — add what you want to finish today',
       'goals.complete': 'Goal complete: {title}',
       'goals.added': "Added to today's goals",
