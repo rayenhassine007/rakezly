@@ -32,7 +32,11 @@ function closePlayerPanel(){
 }
 
 function closeStudyPanel(){
-  if (window.Study && Study.close) Study.close();
+  if (window.Study && Study.closeStudy) Study.closeStudy();
+}
+
+function closeBoardPanel(){
+  if (window.Study && Study.closeBoard) Study.closeBoard();
 }
 
 function closeRoomPanel(){
@@ -45,6 +49,7 @@ function closeDockPopovers(except){
   if (except !== 'theme') closeThemePanel();
   if (except !== 'player') closePlayerPanel();
   if (except !== 'study') closeStudyPanel();
+  if (except !== 'board') closeBoardPanel();
   if (except !== 'room') closeRoomPanel();
 }
 
@@ -2254,7 +2259,7 @@ window.Room = (function(){
     if (typeof closeDockPopovers === 'function') closeDockPopovers('room');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','#boardFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
@@ -2504,7 +2509,9 @@ window.Study = (function(){
   }
 
   let panelOpen = false;
+  let boardPanelOpen = false;
   let board = [], standing = null, boardLoading = false, boardErr = '';
+  const BOARD_LIMIT = 300;
   let authMode = 'none';
   let authMsg = null;
   let authGateOpen = false;
@@ -2859,7 +2866,7 @@ window.Study = (function(){
     if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
     try {
-      const r = await cl.rpc('leaderboard_week', { p_subject: null, p_limit: 25 });
+      const r = await cl.rpc('leaderboard_week', { p_subject: null, p_limit: BOARD_LIMIT });
       if (r.error) throw r.error;
       board = r.data || [];
       standing = null;
@@ -2960,13 +2967,16 @@ window.Study = (function(){
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">'+esc(t('study.nobody'))+'</div>';
-    return '<div class="study-board">' + board.map(function(r){
+    const rows = board.map(function(r){
       return '<div class="study-row'+(r.is_me?' me':'')+'">' +
                '<span class="study-row-rank">'+r.rank+'</span>' +
                '<span class="study-row-name">'+esc(r.display_name)+'</span>' +
                '<span class="study-row-mins">'+esc(fmt(r.minutes))+'</span>' +
              '</div>';
-    }).join('') + '</div>';
+    }).join('');
+    return '<div class="study-board-scroll" tabindex="0" aria-label="'+esc(t('study.board'))+'">' +
+             '<div class="study-board">'+rows+'</div>' +
+           '</div>';
   }
 
   function authGateBlock(){
@@ -3005,6 +3015,11 @@ window.Study = (function(){
 
   function render(){
     renderMini();
+    updateStudyPanel();
+    updateBoardPanel();
+  }
+
+  function updateStudyPanel(){
     const btn = document.getElementById('studyFixedBtn');
     if (btn) btn.classList.toggle('active', panelOpen);
     const panel = document.getElementById('studyPanel');
@@ -3020,25 +3035,69 @@ window.Study = (function(){
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
         '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
       '</div>' +
+      pathWizardBlock();
+  }
+
+  function updateBoardPanel(){
+    const btn = document.getElementById('boardFixedBtn');
+    if (btn) btn.classList.toggle('active', boardPanelOpen);
+    const panel = document.getElementById('boardPanel');
+    if (panel) panel.classList.toggle('open', boardPanelOpen);
+    const body = document.getElementById('boardBody');
+    if (!body || !boardPanelOpen) return;
+
+    body.innerHTML =
+      authBlock() +
       standingBlock() +
       '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
       boardBlock() +
       '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>' +
-      authGateBlock() +
-      pathWizardBlock();
+      authGateBlock();
   }
 
   function closeOtherPanels(){
     if (typeof closeDockPopovers === 'function') closeDockPopovers('study');
   }
 
+  function closeBoardOtherPanels(){
+    if (typeof closeDockPopovers === 'function') closeDockPopovers('board');
+  }
+
   function togglePanel(){
     panelOpen = !panelOpen;
     if (panelOpen){
+      boardPanelOpen = false;
       closeOtherPanels();
       syncPathGate();
+    }
+    render();
+  }
+
+  function toggleBoardPanel(){
+    boardPanelOpen = !boardPanelOpen;
+    if (boardPanelOpen){
+      panelOpen = false;
+      closeBoardOtherPanels();
       loadBoard();
     }
+    render();
+  }
+
+  function closeStudy(){
+    if (panelOpen){ panelOpen = false; }
+    render();
+  }
+
+  function closeBoard(){
+    boardPanelOpen = false;
+    authGateOpen = false;
+    render();
+  }
+
+  function closeAll(){
+    panelOpen = false;
+    boardPanelOpen = false;
+    authGateOpen = false;
     render();
   }
 
@@ -3050,6 +3109,8 @@ window.Study = (function(){
     authGateOpen = true;
     authMode = 'none';
     authMsg = null;
+    boardPanelOpen = true;
+    closeBoardOtherPanels();
     render();
   }
   function closeAuthGate(){ authGateOpen = false; authMsg = null; render(); }
@@ -3113,21 +3174,29 @@ window.Study = (function(){
       loadBoard();
       render();
     });
-    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','#boardFixedBtn','.btn-bg-toggle'].forEach(function(sel){
       const b = document.querySelector(sel);
-      if (b) b.addEventListener('click', function(){ if (panelOpen){ panelOpen = false; render(); } });
+      if (b) b.addEventListener('click', function(){
+        if (panelOpen){ panelOpen = false; render(); }
+      });
+    });
+    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+      const b = document.querySelector(sel);
+      if (b) b.addEventListener('click', function(){
+        if (boardPanelOpen){ boardPanelOpen = false; authGateOpen = false; render(); }
+      });
     });
   }
 
   return { init:init, doGoogle:doGoogle,
-           close: function(){ if (panelOpen){ panelOpen = false; authGateOpen = false; render(); } },
+           close: closeAll, closeStudy:closeStudy, closeBoard:closeBoard,
            hasStudyPath:hasStudyPath, needsStudyPath:needsStudyPath, pathLabel:pathLabel, getPath:getPath,
            pickPathLevel:pickPathLevel, pickHsGrade:pickHsGrade, pickHsTrack:pickHsTrack,
            pickCollegeKind:pickCollegeKind, pickCollegeTrack:pickCollegeTrack, saveLicensePath:saveLicensePath,
            pathBack:pathBack, changePath:changePath, cancelPathWizard:cancelPathWizard,
            logSession:logSession, flush:flush, fmt:fmt,
            entries:log, sumSince:sumSince,
-           togglePanel:togglePanel,
+           togglePanel:togglePanel, toggleBoardPanel:toggleBoardPanel,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
            openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
@@ -3774,7 +3843,7 @@ window.I18N = (function(){
       'stats.month': 'Month', 'stats.all': 'All time',
       'stats.total': 'Total {time}',
       'stats.empty': 'No sessions in this range yet — finish a focus session and it shows up here.',
-      'tip.study': 'Study time & leaderboard', 'tip.room': 'Shared room',
+      'tip.study': 'Study time', 'tip.board': 'Leaderboard', 'tip.room': 'Shared room',
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
       'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
@@ -3937,7 +4006,7 @@ window.I18N = (function(){
       'stats.month': 'Mois', 'stats.all': 'Tout',
       'stats.total': 'Total {time}',
       'stats.empty': 'Aucune session sur cette période — termine une session et elle apparaîtra ici.',
-      'tip.study': "Temps d'étude & classement", 'tip.room': 'Salle partagée',
+      'tip.study': "Temps d'étude", 'tip.board': 'Classement', 'tip.room': 'Salle partagée',
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
       'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',

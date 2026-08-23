@@ -838,7 +838,18 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 
 .study-board-msg { font-size: 12px; line-height: 1.6; color: var(--text-faint); padding: 6px 0; }
 .study-board-err { color: var(--danger); }
-#studyBody { position: relative; }
+#studyBody, #boardBody { position: relative; }
+.study-board-scroll {
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  margin: 0 -2px;
+  padding-right: 2px;
+  border-radius: var(--radius-sm);
+}
+.study-board-scroll:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+.board-panel { width: min(340px, calc(100vw - 32px)); }
 .study-hint      { font-size: 11px; color: var(--text-faint); text-align: center; margin-top: 14px; }
 
 
@@ -1656,7 +1667,7 @@ body.view-planner .stage {
     background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
     box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.34);
   }
-  .dock-btn { width: 40px; height: 40px; padding: 9px; }
+  .dock-btn { width: 36px; height: 36px; padding: 8px; }
 
   /* Keep the last card clear of the bottom bar. */
   .stage { padding-bottom: 84px; }

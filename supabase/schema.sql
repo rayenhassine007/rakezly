@@ -188,7 +188,7 @@ as $$
   from totals t
   left join public.profiles p on p.id = t.user_id
   order by t.minutes desc, p.display_name asc
-  limit greatest(1, least(coalesce(p_limit, 50), 100));
+  limit greatest(1, least(coalesce(p_limit, 50), 500));
 $$;
 
 revoke all on function public.leaderboard_week(text, integer) from public;

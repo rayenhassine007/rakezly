@@ -44,7 +44,10 @@
   </nav>
 
   <nav class="dock" aria-label="Tools">
-    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Study time &amp; leaderboard" aria-label="Study time and leaderboard">
+    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Study time" aria-label="Study time">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2.5h6"/></svg>
+    </button>
+    <button class="dock-btn" onclick="Study.toggleBoardPanel()" id="boardFixedBtn" data-i18n-title="tip.board" title="Leaderboard" aria-label="Leaderboard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
     </button>
     <button class="dock-btn" onclick="Room.togglePanel()" id="roomFixedBtn" data-i18n-title="tip.room" title="Shared room" aria-label="Shared room">
@@ -162,7 +165,7 @@
     <div class="pane study-mini-card">
       <div class="pane-head">
         <span class="pane-titlewrap"><svg class="pane-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2.5h6"/></svg><h2 class="pane-title" data-i18n="study.title">Study time</h2></span>
-        <button class="study-mini-btn" onclick="Study.togglePanel()" data-i18n="study.board">Leaderboard</button>
+        <button class="study-mini-btn" onclick="Study.toggleBoardPanel()" data-i18n="study.board">Leaderboard</button>
       </div>
       <div class="study-mini-nums">
         <div class="study-mini-item">
@@ -254,6 +257,11 @@
 <div id="studyPanel" class="popover study-panel">
   <div class="popover-title study-panel-title" data-i18n="study.title">Study time</div>
   <div id="studyBody"></div>
+</div>
+
+<div id="boardPanel" class="popover board-panel">
+  <div class="popover-title board-panel-title" data-i18n="study.board">Leaderboard</div>
+  <div id="boardBody"></div>
 </div>
 
 <div id="roomPanel" class="popover room-panel">
