@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="google-site-verification" content="pROm9li1Swu3KFEX_KdQjbNA8KvtEBbxRanenVgUUa4" />
-<meta name="description" content="Rakezly — a calm pomodoro timer for students. Track your study time by subject, set daily goals, and see how you compare with other candidates.">
+<meta name="description" content="Rakezly — a calm pomodoro timer for students. Track your study time, set daily goals, and see how you compare on the weekly leaderboard.">
 <meta name="theme-color" content="#1a1520">
 <title>Rakezly</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231a1520'/%3E%3Ccircle cx='16' cy='17' r='8' fill='none' stroke='%23f2a8c4' stroke-width='2'/%3E%3Cpath d='M16 13v4.5' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12.5 7h7' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -139,8 +139,7 @@
     </div>
 
     <div class="focus-row">
-      <input class="task-input" id="taskInput" type="text" data-i18n-ph="timer.task" placeholder="What are you working on?">
-      <select class="subject-select" id="subjectSelect" onchange="Study.onSelect(this)" data-i18n-title="timer.subject" aria-label="Subject"></select>
+      <input class="task-input task-input-full" id="taskInput" type="text" data-i18n-ph="timer.task" placeholder="What are you working on?">
     </div>
   </section>
 

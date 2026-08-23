@@ -2310,8 +2310,11 @@ window.Auth = (function(){
     const cl = window.SB.get();
     if (!cl || !user){ profile = null; return; }
     try {
-      const r = await cl.from('profiles').select('display_name, section').eq('id', user.id).maybeSingle();
+      const r = await cl.from('profiles').select('display_name, study_path').eq('id', user.id).maybeSingle();
       profile = r.data || null;
+      if (profile && profile.study_path) {
+        try { localStorage.setItem('sf_study_path', JSON.stringify(profile.study_path)); } catch(e){}
+      }
     } catch(e){ profile = null; }
   }
 
@@ -2396,44 +2399,57 @@ window.Auth = (function(){
     return { ok:true, msg:'Name updated' };
   }
 
+  function studyPathRaw(){
+    if (profile && profile.study_path) return profile.study_path;
+    try {
+      const v = JSON.parse(localStorage.getItem('sf_study_path') || 'null');
+      return v;
+    } catch(e){ return null; }
+  }
+
+  async function saveStudyPath(path){
+    try { localStorage.setItem('sf_study_path', JSON.stringify(path)); } catch(e){}
+    profile = profile || {};
+    profile.study_path = path;
+    const cl = window.SB.get();
+    if (!cl || !user) return { ok:true, msg:'Saved locally' };
+    const r = await cl.from('profiles').update({ study_path: path }).eq('id', user.id);
+    if (r.error) return { ok:false, msg:r.error.message };
+    emit();
+    return { ok:true, msg:'Study path saved' };
+  }
+
   return { init:init, onChange:onChange, signedIn:signedIn, id:id, name:name,
+           studyPathRaw:studyPathRaw, saveStudyPath:saveStudyPath,
            google:google, signUp:signUp, signIn:signIn, signOut:signOut, rename:rename };
 })();
 
 
 // ── STUDY TIME TRACKER + LEADERBOARD ──────────────────────────
 window.Study = (function(){
-  // Preset subjects are the rankable ones — custom subjects are tracked and
-  // counted in a student's totals, but a per-subject board only makes sense
-  // when everyone is filling the same bucket.
-  // Tunisian prépa (IPEI). Each section sits its own set, so the picker
-  // shows only what that student actually studies rather than a superset
-  // they have to hunt through.
-  const SECTIONS = {
-    MP: ['Physique', 'Chimie inorganique', 'Algèbre', 'Analyse',
-         'Informatique', 'STA', 'Français', 'Anglais'],
-    PC: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
-         'Informatique', 'STA', 'Français', 'Anglais'],
-    PT: ['Physique', 'Chimie inorganique', 'Maths',
-         'Informatique', 'STA', 'CFM', 'Français', 'Anglais'],
-    BG: ['Physique', 'Chimie inorganique', 'Chimie organique', 'Maths',
-         'Biologie', 'Géologie', 'Informatique', 'Français', 'Anglais']
-  };
-  const SECTION_ORDER = ['MP', 'PC', 'PT', 'BG'];
+  const K_LOG = 'sf_study_log';
+  const SESSION_SUBJECT = 'study';
+  const MAX_LOG_DAYS = 120;
+  const SYNC_WINDOW_DAYS = 14;
 
-  const K_CUR = 'sf_subject', K_CUSTOM = 'sf_subjects_custom', K_LOG = 'sf_study_log';
-  const K_SECTION = 'sf_section';
-  const MAX_LOG_DAYS = 120;   // local history we keep
-  const SYNC_WINDOW_DAYS = 14; // matches the insert policy in schema.sql
+  // Tunisian lycée + prépa study paths (profile metadata — not used to split the board).
+  const HS_GRADES = {
+    '1': null,
+    '2': ['Lettres', 'Économie et gestion', 'Informatique', 'Sciences'],
+    '3': ['Lettres', 'Économie et gestion', 'Informatique', 'Mathématiques', 'Sciences expérimentales', 'Sciences techniques'],
+    '4': ['Lettres', 'Économie et gestion', 'Informatique', 'Mathématiques', 'Sciences expérimentales', 'Sciences techniques']
+  };
+  const COLLEGE_PREPA = ['MP', 'PT', 'PC', 'BG'];
+  const COLLEGE_INTEG = ['MPI', 'CBA', 'license'];
 
   let panelOpen = false;
-  let board = [], standing = null, boardSubject = '', boardLoading = false, boardErr = '';
-  let authMode = 'none'; // none | signin | signup
-  // Account feedback belongs next to the form that caused it, not in a
-  // toast at the far side of the screen.
-  let authMsg = null;    // { kind: 'error' | 'ok', text }
-  let authGateOpen = false; // popup asking guests to sign in for the board
-
+  let board = [], standing = null, boardLoading = false, boardErr = '';
+  let authMode = 'none';
+  let authMsg = null;
+  let authGateOpen = false;
+  let pathGateOpen = false;
+  let pathDraft = null;
+  let pathWizard = 'level';
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -2452,65 +2468,239 @@ window.Study = (function(){
   }
   function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
-  function section(){
-    const v = localStorage.getItem(K_SECTION);
-    return SECTIONS[v] ? v : 'MP';
-  }
-  function presets(){ return SECTIONS[section()]; }
-
-  // True for any subject on the current section's list. Only these are
-  // rankable — a per-subject board needs everyone filling the same bucket.
-  function isPreset(s){ return presets().indexOf(s) !== -1; }
-
-  function customs(){ const c = readJSON(K_CUSTOM, []); return Array.isArray(c) ? c : []; }
-
-  function all(){
-    const out = [], seen = {};
-    presets().concat(customs()).forEach(function(n){
-      if (n && !seen[n]){ seen[n] = 1; out.push(n); }
-    });
-    return out;
-  }
-
-  function setSection(next){
-    if (!SECTIONS[next] || next === section()) return;
-    try { localStorage.setItem(K_SECTION, next); } catch(e){}
-    // The selected subject may not exist in the new section; current()
-    // falls back on its own, but the picker has to be rebuilt either way.
-    renderSelect();
-    render();
-    toast(t('study.sectionSet', { section: next }));
-  }
-
-  function current(){
-    const s = localStorage.getItem(K_CUR);
-    return (s && all().indexOf(s) !== -1) ? s : presets()[0];
-  }
-  function setCurrent(s){
-    if (all().indexOf(s) === -1) return;
-    localStorage.setItem(K_CUR, s);
-    renderSelect();
-  }
-
-  function addCustom(raw){
-    const n = String(raw || '').trim().slice(0, 40);
-    if (!n) return false;
-    if (all().some(function(s){ return s.toLowerCase() === n.toLowerCase(); })){
-      toast('"' + n + '" already exists'); return false;
+  function rawPath(){
+    if (window.Auth && window.Auth.studyPathRaw) {
+      const p = window.Auth.studyPathRaw();
+      if (p) return p;
     }
-    const c = customs(); c.push(n); writeJSON(K_CUSTOM, c);
-    setCurrent(n);
-    toast('Added subject: ' + n);
-    return true;
+    return readJSON('sf_study_path', null);
   }
-  function removeCustom(n){
-    writeJSON(K_CUSTOM, customs().filter(function(s){ return s !== n; }));
-    if (current() === n) localStorage.setItem(K_CUR, presets()[0]);
-    renderSelect(); render();
+
+  function isValidPath(p){
+    if (!p || !p.level) return false;
+    if (p.level === 'highschool'){
+      if (!HS_GRADES.hasOwnProperty(p.grade)) return false;
+      const tracks = HS_GRADES[p.grade];
+      if (!tracks) return true;
+      return tracks.indexOf(p.track) !== -1;
+    }
+    if (p.level === 'college'){
+      if (p.collegeKind === 'prepa_classique') return COLLEGE_PREPA.indexOf(p.collegeTrack) !== -1;
+      if (p.collegeKind === 'prepa_integ'){
+        if (p.collegeTrack === 'license'){
+          return String(p.licenseName || '').trim().length >= 2;
+        }
+        return p.collegeTrack === 'MPI' || p.collegeTrack === 'CBA';
+      }
+    }
+    return false;
+  }
+
+  function pathLabel(p){
+    if (!p || !isValidPath(p)) return '';
+    if (p.level === 'highschool'){
+      const gradeLbl = p.grade === '1' ? t('path.grade1')
+        : p.grade === '4' ? t('path.grade4')
+        : t('path.gradeN').replace('{n}', p.grade);
+      if (p.grade === '1') return t('path.hs') + ' · ' + gradeLbl;
+      return t('path.hs') + ' · ' + gradeLbl + ' · ' + p.track;
+    }
+    if (p.collegeKind === 'prepa_classique'){
+      return t('path.prepaClassique') + ' · ' + p.collegeTrack;
+    }
+    if (p.collegeTrack === 'license'){
+      return t('path.license') + ' · ' + String(p.licenseName || '').trim();
+    }
+    return t('path.prepaInteg') + ' · ' + p.collegeTrack;
+  }
+
+  function getPath(){ const p = rawPath(); return isValidPath(p) ? p : null; }
+  function hasStudyPath(){ return !!getPath(); }
+  function needsStudyPath(){
+    return !!(window.Auth && window.Auth.signedIn() && !hasStudyPath());
+  }
+
+  function syncPathGate(){
+    if (needsStudyPath()){
+      pathGateOpen = true;
+      panelOpen = true;
+    }
+  }
+
+  async function persistPath(p){
+    writeJSON('sf_study_path', p);
+    if (window.Auth && window.Auth.saveStudyPath){
+      const r = await window.Auth.saveStudyPath(p);
+      if (!r.ok) throw new Error(r.msg || 'Could not save study path');
+    }
+  }
+
+  function startPathWizard(){
+    pathDraft = {};
+    pathWizard = 'level';
+    pathGateOpen = true;
+    render();
+  }
+
+  function pathBtn(label, onclick, active){
+    return '<button type="button" class="path-btn'+(active?' active':'')+'" onclick="'+onclick+'">'+esc(label)+'</button>';
+  }
+
+  function pathWizardBlock(){
+    if (!pathGateOpen || !(window.Auth && window.Auth.signedIn())) return '';
+    pathDraft = pathDraft || {};
+
+    let title = t('path.gateTitle');
+    let body = '';
+
+    if (pathWizard === 'level'){
+      body = '<div class="path-step-label">'+esc(t('path.pickLevel'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          pathBtn(t('path.hs'), 'Study.pickPathLevel(\'highschool\')') +
+          pathBtn(t('path.college'), 'Study.pickPathLevel(\'college\')') +
+        '</div>';
+    } else if (pathWizard === 'hs_grade'){
+      body = '<div class="path-step-label">'+esc(t('path.pickGrade'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          pathBtn(t('path.grade1'), 'Study.pickHsGrade(\'1\')') +
+          pathBtn(t('path.grade2'), 'Study.pickHsGrade(\'2\')') +
+          pathBtn(t('path.grade3'), 'Study.pickHsGrade(\'3\')') +
+          pathBtn(t('path.grade4'), 'Study.pickHsGrade(\'4\')') +
+        '</div>' +
+        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+    } else if (pathWizard === 'hs_track'){
+      const tracks = HS_GRADES[pathDraft.grade] || [];
+      body = '<div class="path-step-label">'+esc(t('path.pickTrack'))+'</div>' +
+        '<div class="path-btn-grid path-btn-grid-wide">' +
+          tracks.map(function(tr){
+            return pathBtn(tr, 'Study.pickHsTrack('+JSON.stringify(tr)+')');
+          }).join('') +
+        '</div>' +
+        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+    } else if (pathWizard === 'college_kind'){
+      body = '<div class="path-step-label">'+esc(t('path.pickCollege'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          pathBtn(t('path.prepaClassique'), 'Study.pickCollegeKind(\'prepa_classique\')') +
+          pathBtn(t('path.prepaInteg'), 'Study.pickCollegeKind(\'prepa_integ\')') +
+        '</div>' +
+        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+    } else if (pathWizard === 'college_track'){
+      const opts = pathDraft.collegeKind === 'prepa_classique' ? COLLEGE_PREPA : COLLEGE_INTEG;
+      body = '<div class="path-step-label">'+esc(t('path.pickPrepa'))+'</div>' +
+        '<div class="path-btn-grid">' +
+          opts.map(function(tr){
+            return pathBtn(tr === 'license' ? t('path.license') : tr,
+              tr === 'license' ? 'Study.pickCollegeTrack(\'license\')' : 'Study.pickCollegeTrack('+JSON.stringify(tr)+')');
+          }).join('') +
+        '</div>' +
+        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+    } else if (pathWizard === 'license_name'){
+      body = '<div class="path-step-label">'+esc(t('path.licensePrompt'))+'</div>' +
+        '<input class="study-input" id="pathLicenseInput" type="text" maxlength="48" ' +
+          'placeholder="'+esc(t('path.licensePlaceholder'))+'" value="'+esc(pathDraft.licenseName||'')+'">' +
+        '<button type="button" class="study-btn study-btn-primary path-save" onclick="Study.saveLicensePath()">'+esc(t('path.save'))+'</button>' +
+        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+    }
+
+    return '<div class="study-path-gate" role="dialog" aria-modal="true" aria-label="'+esc(title)+'">' +
+             '<div class="study-path-gate-card">' +
+               '<div class="study-path-gate-title">'+esc(title)+'</div>' +
+               '<div class="study-path-gate-msg">'+esc(t('path.gateMsg'))+'</div>' +
+               body +
+               (hasStudyPath() ? '<button type="button" class="study-link path-back" onclick="Study.cancelPathWizard()">'+esc(t('path.cancel'))+'</button>' : '') +
+             '</div>' +
+           '</div>';
+  }
+
+  function pathSummaryBlock(){
+    const p = getPath();
+    if (!p) return '';
+    return '<div class="study-path-set">' +
+             '<span class="study-path-label">'+esc(t('path.yours'))+'</span>' +
+             '<span class="study-path-value">'+esc(pathLabel(p))+'</span>' +
+             '<button type="button" class="study-link" onclick="Study.changePath()">'+esc(t('path.change'))+'</button>' +
+           '</div>';
+  }
+
+  function pickPathLevel(level){
+    pathDraft = { level: level };
+    pathWizard = (level === 'highschool') ? 'hs_grade' : 'college_kind';
+    render();
+  }
+  function pickHsGrade(grade){
+    pathDraft.grade = grade;
+    if (!HS_GRADES.hasOwnProperty(grade)){ render(); return; }
+    if (HS_GRADES[grade] === null){
+      finishPath({ level:'highschool', grade: grade });
+      return;
+    }
+    pathWizard = 'hs_track';
+    render();
+  }
+  function pickHsTrack(track){
+    finishPath({ level:'highschool', grade: pathDraft.grade, track: track });
+  }
+  function pickCollegeKind(kind){
+    pathDraft.collegeKind = kind;
+    pathWizard = 'college_track';
+    render();
+  }
+  function pickCollegeTrack(track){
+    if (track === 'license'){
+      pathDraft.collegeTrack = 'license';
+      pathWizard = 'license_name';
+      render();
+      setTimeout(function(){
+        const el = document.getElementById('pathLicenseInput');
+        if (el) el.focus();
+      }, 50);
+      return;
+    }
+    finishPath({ level:'college', collegeKind: pathDraft.collegeKind, collegeTrack: track });
+  }
+  async function saveLicensePath(){
+    const el = document.getElementById('pathLicenseInput');
+    const name = el ? String(el.value || '').trim().slice(0, 48) : '';
+    if (name.length < 2){ toast(t('path.licenseShort')); return; }
+    await finishPath({
+      level:'college',
+      collegeKind: pathDraft.collegeKind,
+      collegeTrack: 'license',
+      licenseName: name
+    });
+  }
+  async function finishPath(p){
+    if (!isValidPath(p)){ toast(t('path.invalid')); return; }
+    try {
+      await persistPath(p);
+      pathGateOpen = false;
+      pathDraft = null;
+      pathWizard = 'level';
+      toast(t('path.saved'));
+      loadBoard();
+      render();
+    } catch(e){
+      toast((e && e.message) || t('path.saveFailed'));
+    }
+  }
+  function pathBack(){
+    if (pathWizard === 'hs_grade') pathWizard = 'level';
+    else if (pathWizard === 'hs_track') pathWizard = 'hs_grade';
+    else if (pathWizard === 'college_kind') pathWizard = 'level';
+    else if (pathWizard === 'college_track') pathWizard = 'college_kind';
+    else if (pathWizard === 'license_name') pathWizard = 'college_track';
+    render();
+  }
+  function changePath(){ startPathWizard(); }
+  function cancelPathWizard(){
+    pathGateOpen = false;
+    pathDraft = null;
+    pathWizard = 'level';
+    render();
   }
 
   // ── local ledger ──
-  // entry: { i:id, s:subject, m:minutes, t:epoch ms, p:preset, u:1 when unsynced }
+  // entry: { i:id, s:subject, m:minutes, t:epoch ms, u:1 when unsynced }
   function log(){ const l = readJSON(K_LOG, []); return Array.isArray(l) ? l : []; }
   function saveLog(l){
     const cutoff = Date.now() - MAX_LOG_DAYS*86400000;
@@ -2519,7 +2709,7 @@ window.Study = (function(){
 
   function weekStart(){
     const d = new Date();
-    const dow = (d.getDay() + 6) % 7;      // Monday = 0, matches date_trunc('week')
+    const dow = (d.getDay() + 6) % 7;
     d.setHours(0,0,0,0); d.setDate(d.getDate() - dow);
     return d.getTime();
   }
@@ -2527,11 +2717,6 @@ window.Study = (function(){
 
   function sumSince(ts){
     return log().reduce(function(a, e){ return e.t >= ts ? a + e.m : a; }, 0);
-  }
-  function bySubjectSince(ts){
-    const out = {};
-    log().forEach(function(e){ if (e.t >= ts) out[e.s] = (out[e.s] || 0) + e.m; });
-    return out;
   }
 
   function fmt(mins){
@@ -2541,20 +2726,15 @@ window.Study = (function(){
     return r ? (h + 'h ' + r + 'm') : (h + 'h');
   }
 
-  // Called when a focus session completes.
-  function logSession(minutes, subjectOverride){
+  function logSession(minutes){
     const mins = Math.max(1, Math.min(300, Math.round(minutes)));
-    const subj = subjectOverride ||
-      (window.Goals && window.Goals.activeSubject()) ||
-      current();
     const l = log();
-    l.push({ i: uuid(), s: subj, m: mins, t: Date.now(), p: isPreset(subj), u: 1 });
+    l.push({ i: uuid(), s: SESSION_SUBJECT, m: mins, t: Date.now(), u: 1 });
     saveLog(l);
     render();
     flush();
   }
 
-  // Push guest-captured and offline sessions once a student is signed in.
   async function flush(){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
@@ -2565,7 +2745,7 @@ window.Study = (function(){
     if (!pending.length) return;
 
     const rows = pending.map(function(e){
-      return { id: e.i, user_id: uid, subject: e.s, preset: !!e.p,
+      return { id: e.i, user_id: uid, subject: SESSION_SUBJECT, preset: true,
                minutes: e.m, started_at: new Date(e.t).toISOString() };
     });
     try {
@@ -2574,15 +2754,13 @@ window.Study = (function(){
       const done = {};
       pending.forEach(function(e){ done[e.i] = 1; });
       saveLog(log().map(function(e){ if (done[e.i]) delete e.u; return e; }));
-      // Anything older than the sync window can never be uploaded — stop retrying.
       saveLog(log().map(function(e){ if (e.u && e.t < cutoff) delete e.u; return e; }));
       render();
     } catch(e){ console.warn('study flush', e); }
   }
 
-  // ── leaderboard ──
+  // ── leaderboard (total study time this week — no subject filter) ──
   async function loadBoard(){
-    // Guests only see a blurred teaser — never fetch rankings signed out.
     if (!window.Auth || !window.Auth.signedIn()){
       board = []; standing = null; boardLoading = false; boardErr = '';
       render();
@@ -2591,59 +2769,18 @@ window.Study = (function(){
     const cl = window.SB.get();
     if (!cl){ boardErr = t('study.unavailable'); render(); return; }
     boardLoading = true; boardErr = ''; render();
-    const subj = boardSubject || null;
     try {
-      const r = await cl.rpc('leaderboard_week', { p_subject: subj, p_limit: 25 });
+      const r = await cl.rpc('leaderboard_week', { p_subject: null, p_limit: 25 });
       if (r.error) throw r.error;
       board = r.data || [];
       standing = null;
-      const s = await cl.rpc('my_week_standing', { p_subject: subj });
+      const s = await cl.rpc('my_week_standing', { p_subject: null });
       if (!s.error && s.data && s.data.length) standing = s.data[0];
     } catch(e){
       board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
-      // Full object, not just the message: during setup the useful part is
-      // usually the Postgres hint/code (missing table, missing function,
-      // RLS refusal), which never makes it into .message.
       console.warn('Leaderboard failed — see supabase/SETUP.md:', e);
     }
     boardLoading = false; render();
-  }
-
-  function setBoardSubject(s){ boardSubject = s; loadBoard(); }
-
-  // ── subject <select> next to the timer ──
-  function renderSelect(){
-    const sel = document.getElementById('subjectSelect');
-    if (!sel) return;
-    const cur = current();
-    const cs = customs().filter(function(n){ return presets().indexOf(n) === -1; });
-    let h = '<optgroup label="' + esc(t('study.subjects')) + '">';
-    presets().forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
-    h += '</optgroup>';
-    if (cs.length){
-      h += '<optgroup label="' + esc(t('study.mySubjects')) + '">';
-      cs.forEach(function(s){ h += '<option value="'+esc(s)+'"'+(s===cur?' selected':'')+'>'+esc(s)+'</option>'; });
-      h += '</optgroup>';
-    }
-    h += '<option value="__add">' + esc(t('study.addSubject')) + '</option>';
-    sel.innerHTML = h;
-    sel.value = cur;
-  }
-
-  // Changing the dropdown must also retag the active goal, otherwise the
-  // picker would claim one subject while sessions are logged under the
-  // goal's older one.
-  function onSelect(el){
-    if (el.value === '__add'){
-      const n = window.prompt(t('study.newSubject'));
-      if (!n || !addCustom(n)) renderSelect();
-      if (window.Goals) window.Goals.retagActive(current());
-      render();
-      return;
-    }
-    setCurrent(el.value);
-    if (window.Goals) window.Goals.retagActive(el.value);
-    render();
   }
 
   // ── mini card in the left column ──
@@ -2655,35 +2792,19 @@ window.Study = (function(){
 
     const bars = document.getElementById('studyMiniBars');
     if (!bars) return;
-    const bs = bySubjectSince(weekStart());
-    const rows = Object.keys(bs).map(function(k){ return { s:k, m:bs[k] }; })
-                       .sort(function(a,b){ return b.m - a.m; }).slice(0, 4);
-    if (!rows.length){
-      bars.innerHTML = '<div class="study-mini-empty">' + esc(t('study.noSessions')) + '</div>';
+    const p = getPath();
+    if (p){
+      bars.innerHTML = '<div class="study-mini-path">'+esc(pathLabel(p))+'</div>';
       return;
     }
-    const max = rows[0].m || 1;
-    bars.innerHTML = rows.map(function(r){
-      return '<div class="study-bar-row">' +
-               '<span class="study-bar-name" title="'+esc(r.s)+'">'+esc(r.s)+'</span>' +
-               '<span class="study-bar-track"><span class="study-bar-fill" style="width:'+Math.max(4, Math.round(r.m/max*100))+'%"></span></span>' +
-               '<span class="study-bar-val">'+esc(fmt(r.m))+'</span>' +
-             '</div>';
-    }).join('');
+    if (window.Auth && window.Auth.signedIn()){
+      bars.innerHTML = '<div class="study-mini-empty">'+esc(t('path.needPick'))+'</div>';
+      return;
+    }
+    bars.innerHTML = '<div class="study-mini-empty">'+esc(t('study.noSessions'))+'</div>';
   }
 
   // ── panel ──
-  function sectionBlock(){
-    const cur = section();
-    const btns = SECTION_ORDER.map(function(k){
-      return '<button class="section-btn' + (k === cur ? ' active' : '') + '" ' +
-             'data-section="' + k + '" onclick="Study.setSection(\'' + k + '\')">' + k + '</button>';
-    }).join('');
-    return '<div class="study-sec-label">' + esc(t('set.section')) + '</div>' +
-           '<div class="section-toggle">' + btns + '</div>' +
-           '<p class="study-section-hint">' + esc(t('set.sectionHint')) + '</p>';
-  }
-
   function msgBlock(){
     if (!authMsg) return '';
     return '<div class="study-msg ' + (authMsg.kind === 'error' ? 'is-error' : 'is-ok') + '">' +
@@ -2749,7 +2870,7 @@ window.Study = (function(){
     }
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
-    if (!board.length) return '<div class="study-board-msg">nobody has logged time'+(boardSubject?' in '+esc(boardSubject):'')+' this week yet — be first</div>';
+    if (!board.length) return '<div class="study-board-msg">'+esc(t('study.nobody'))+'</div>';
     return '<div class="study-board">' + board.map(function(r){
       return '<div class="study-row'+(r.is_me?' me':'')+'">' +
                '<span class="study-row-rank">'+r.rank+'</span>' +
@@ -2802,20 +2923,9 @@ window.Study = (function(){
     const body = document.getElementById('studyBody');
     if (!body || !panelOpen) return;
 
-    const signedIn = window.Auth && window.Auth.signedIn();
-    let filter = '';
-    if (signedIn){
-      filter = '<select class="study-select" onchange="Study.setBoardSubject(this.value)">' +
-               '<option value=""'+(boardSubject===''?' selected':'')+'>' + esc(t('study.allSubjects')) + '</option>';
-      presets().forEach(function(s){
-        filter += '<option value="'+esc(s)+'"'+(boardSubject===s?' selected':'')+'>'+esc(s)+'</option>';
-      });
-      filter += '</select>';
-    }
-
     body.innerHTML =
       authBlock() +
-      sectionBlock() +
+      pathSummaryBlock() +
       '<div class="study-sec-label">' + esc(t('study.myWeek')) + '</div>' +
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
@@ -2823,10 +2933,10 @@ window.Study = (function(){
       '</div>' +
       standingBlock() +
       '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
-      filter +
       boardBlock() +
       '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>' +
-      authGateBlock();
+      authGateBlock() +
+      pathWizardBlock();
   }
 
   function closeOtherPanels(){
@@ -2837,14 +2947,16 @@ window.Study = (function(){
       const e = document.getElementById(id); if (e) e.classList.remove('active');
     });
     const bg = document.querySelector('.btn-bg-toggle'); if (bg) bg.classList.remove('active');
-    // Must call Room.close() — stripping the class alone leaves Room.panelOpen
-    // true, and the next Room.updateUI() (auth/presence) reopens Shared room.
     if (window.Room && Room.close) Room.close();
   }
 
   function togglePanel(){
     panelOpen = !panelOpen;
-    if (panelOpen){ closeOtherPanels(); loadBoard(); }
+    if (panelOpen){
+      closeOtherPanels();
+      syncPathGate();
+      loadBoard();
+    }
     render();
   }
 
@@ -2877,6 +2989,7 @@ window.Study = (function(){
     if (r.ok){
       authMode = 'none';
       authGateOpen = false;
+      syncPathGate();
       loadBoard();
     }
     render();
@@ -2906,10 +3019,10 @@ window.Study = (function(){
   }
 
   function init(){
-    renderSelect();
     render();
     if (window.Auth) window.Auth.onChange(function(){
       if (window.Auth.signedIn()) authGateOpen = false;
+      syncPathGate();
       loadBoard();
       render();
     });
@@ -2921,13 +3034,13 @@ window.Study = (function(){
 
   return { init:init, doGoogle:doGoogle,
            close: function(){ if (panelOpen){ panelOpen = false; authGateOpen = false; render(); } },
-           SECTIONS:SECTIONS, SECTION_ORDER:SECTION_ORDER,
-           presets:presets, section:section, setSection:setSection,
-           all:all, current:current, setCurrent:setCurrent,
-           isPreset:isPreset, addCustom:addCustom, removeCustom:removeCustom,
-           onSelect:onSelect, logSession:logSession, flush:flush, fmt:fmt,
-           entries:log, sumSince:sumSince, bySubjectSince:bySubjectSince,
-           togglePanel:togglePanel, setBoardSubject:setBoardSubject,
+           hasStudyPath:hasStudyPath, needsStudyPath:needsStudyPath, pathLabel:pathLabel, getPath:getPath,
+           pickPathLevel:pickPathLevel, pickHsGrade:pickHsGrade, pickHsTrack:pickHsTrack,
+           pickCollegeKind:pickCollegeKind, pickCollegeTrack:pickCollegeTrack, saveLicensePath:saveLicensePath,
+           pathBack:pathBack, changePath:changePath, cancelPathWizard:cancelPathWizard,
+           logSession:logSession, flush:flush, fmt:fmt,
+           entries:log, sumSince:sumSince,
+           togglePanel:togglePanel,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
            openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
@@ -2987,14 +3100,12 @@ window.Goals = (function(){
 
   function find(id){ return items.filter(function(g){ return g.id === id; })[0] || null; }
   function active(){ return activeId ? find(activeId) : null; }
-  function activeSubject(){ const a = active(); return (a && a.subject) || null; }
 
-  function add(title, est, subject){
+  function add(title, est){
     const clean = String(title || '').trim().slice(0, 120);
     if (!clean) return;
     const g = {
       id: uuid(), day: today(), title: clean,
-      subject: subject || (window.Study ? window.Study.current() : null),
       est: Math.max(1, Math.min(20, parseInt(est) || 1)),
       progress: 0, done: false,
       pos: items.length, updated: Date.now()
@@ -3035,18 +3146,7 @@ window.Goals = (function(){
   function setActive(id){
     const g = find(id); if (!g || g.done) return;
     activeId = (activeId === id) ? null : id;
-    // Point the subject picker at whatever the newly focused goal is tagged
-    // with, so it always shows where the next session will be logged.
-    if (activeId && g.subject && window.Study) window.Study.setCurrent(g.subject);
     save(); render();
-  }
-
-  // Retag the focused goal when the subject picker changes.
-  function retagActive(subject){
-    const g = active();
-    if (!g || !subject || g.subject === subject) return;
-    g.subject = subject; g.updated = Date.now();
-    save(); render(); push([g]);
   }
 
   function remove(id){
@@ -3143,7 +3243,6 @@ window.Goals = (function(){
                    '<div class="goal-main" onclick="Goals.setActive(\''+g.id+'\')" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
                      '<div class="goal-title">'+esc(g.title)+'</div>' +
                      '<div class="goal-meta">' +
-                       (g.subject ? '<span class="goal-subj">'+esc(g.subject)+'</span>' : '') +
                        '<span class="goal-dots">'+dots+'</span>' +
                        '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
                      '</div>' +
@@ -3167,10 +3266,6 @@ window.Goals = (function(){
     load();
     render();
 
-    // Restore the picker to the focused goal's subject on page load.
-    const a0 = active();
-    if (a0 && a0.subject && window.Study) window.Study.setCurrent(a0.subject);
-
     const inp = document.getElementById('goalInput');
     if (inp) inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); addFromInput(); } });
 
@@ -3191,8 +3286,8 @@ window.Goals = (function(){
   }
 
   return { init:init, add:add, addFromInput:addFromInput, toggle:toggle, setActive:setActive,
-           retagActive:retagActive, remove:remove, onPomodoro:onPomodoro,
-           activeSubject:activeSubject, active:active, pull:pull, render:render };
+           remove:remove, onPomodoro:onPomodoro,
+           active:active, pull:pull, render:render };
 })();
 
 
@@ -3376,9 +3471,9 @@ window.I18N = (function(){
       'timer.focus': 'Focus', 'timer.break': 'Break', 'timer.long': 'Long break',
       'timer.start': 'Start', 'timer.pause': 'Pause', 'timer.resume': 'Resume',
       'timer.reset': 'Reset', 'timer.skip': 'Skip',
-      'timer.task': 'What are you working on?', 'timer.subject': 'Subject',
+      'timer.task': 'What are you working on?',
       'timer.saveSession': 'Save this session',
-      'chrono.hint': 'Counts up with no target. Saving logs the time to your subject.',
+      'chrono.hint': 'Counts up with no target. Saving logs your study time.',
       'chrono.reset': 'Stopwatch reset', 'chrono.nothing': 'Nothing to save yet',
       'chrono.saved': 'Saved {time}', 'chrono.credited': '{n} pomodoro(s) credited',
 
@@ -3401,19 +3496,46 @@ window.I18N = (function(){
       'study.signin': 'Sign in', 'study.signup': 'Create account', 'study.back': 'Back',
       'study.signout': 'Sign out', 'study.rename': 'Rename',
       'study.email': 'Email', 'study.password': 'Password', 'study.name': 'Display name',
-      'study.allSubjects': 'All subjects', 'study.loading': 'Loading…',
-      'study.resetsMonday': 'The board resets every Monday',
+      'study.loading': 'Loading…',
+      'study.resetsMonday': 'The board resets every Monday — ranked by total study time',
       'study.rankEmpty': 'Log a focus session to get your rank',
       'study.percentile': 'You studied more than <b>{pct}%</b> of candidates this week',
       'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet — be first',
       'study.unavailable': 'Leaderboard unavailable',
-      'study.addSubject': '＋ add a subject…', 'study.newSubject': 'New subject name',
       'study.needBoth': 'Enter an email and a password.',
       'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
       'study.renamePrompt': 'Display name (shown on the leaderboard)',
       'study.unavailableAuth': 'Sign-in is unavailable right now.',
-      'study.sectionSet': 'Section {section} — subjects updated',
-      'study.mySubjects': 'My subjects', 'study.subjects': 'Subjects',
+
+      'path.gateTitle': 'What are you studying?',
+      'path.gateMsg': 'Pick your level so we know who you are — required once after sign-in.',
+      'path.pickLevel': 'School level',
+      'path.pickGrade': 'Which year?',
+      'path.pickTrack': 'Which track?',
+      'path.pickCollege': 'Which path?',
+      'path.pickPrepa': 'Which speciality?',
+      'path.hs': 'High school',
+      'path.college': 'College / prépa',
+      'path.grade1': '1st year',
+      'path.grade2': '2nd year',
+      'path.grade3': '3rd year',
+      'path.grade4': 'BAC (4th year)',
+      'path.gradeN': '{n}th year',
+      'path.prepaClassique': 'Classic prepa',
+      'path.prepaInteg': 'Integrated prepa',
+      'path.license': 'Degree / licence',
+      'path.licensePrompt': 'Which degree are you studying?',
+      'path.licensePlaceholder': 'e.g. Computer science',
+      'path.licenseShort': 'Enter at least 2 characters',
+      'path.save': 'Save',
+      'path.back': 'Back',
+      'path.saved': 'Study path saved',
+      'path.saveFailed': 'Could not save study path',
+      'path.invalid': 'That selection is incomplete',
+      'path.yours': 'You study',
+      'path.change': 'Change',
+      'path.cancel': 'Cancel',
+      'path.needPick': 'Sign in and pick what you study',
 
       'room.title': 'Shared room', 'room.create': 'Create a room',
       'room.or': 'Or join with a code', 'room.join': 'Join', 'room.copy': 'Copy',
@@ -3473,8 +3595,6 @@ window.I18N = (function(){
       'set.alarm': 'Alarm sound', 'set.bell': 'Bell', 'set.digital': 'Digital',
       'set.soft': 'Soft chime', 'set.none': 'None', 'set.apply': 'Apply & reset',
       'set.language': 'Language',
-      'set.section': 'Prépa section',
-      'set.sectionHint': "Only this section's subjects appear in the picker.",
 
       'plan.weekly': 'Weekly planner', 'plan.monthly': 'Monthly planner',
       'plan.from': 'From', 'plan.to': 'to', 'plan.print': 'Print',
@@ -3511,9 +3631,9 @@ window.I18N = (function(){
       'timer.focus': 'Focus', 'timer.break': 'Pause', 'timer.long': 'Longue pause',
       'timer.start': 'Démarrer', 'timer.pause': 'Pause', 'timer.resume': 'Reprendre',
       'timer.reset': 'Réinitialiser', 'timer.skip': 'Passer',
-      'timer.task': 'Sur quoi travailles-tu ?', 'timer.subject': 'Matière',
+      'timer.task': 'Sur quoi travailles-tu ?',
       'timer.saveSession': 'Enregistrer cette session',
-      'chrono.hint': "Compte à l'endroit, sans objectif. L'enregistrement ajoute le temps à ta matière.",
+      'chrono.hint': "Compte à l'endroit, sans objectif. L'enregistrement ajoute ton temps d'étude.",
       'chrono.reset': 'Chronomètre remis à zéro', 'chrono.nothing': 'Rien à enregistrer pour le moment',
       'chrono.saved': '{time} enregistré', 'chrono.credited': '{n} pomodoro(s) crédité(s)',
 
@@ -3536,19 +3656,46 @@ window.I18N = (function(){
       'study.signin': 'Se connecter', 'study.signup': 'Créer un compte', 'study.back': 'Retour',
       'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
       'study.email': 'E-mail', 'study.password': 'Mot de passe', 'study.name': "Nom affiché",
-      'study.allSubjects': 'Toutes les matières', 'study.loading': 'Chargement…',
-      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi',
+      'study.loading': 'Chargement…',
+      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi — classé par temps total',
       'study.rankEmpty': 'Enregistre une session pour obtenir ton rang',
       'study.percentile': 'Tu as étudié plus que <b>{pct}%</b> des candidats cette semaine',
       'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine — sois le premier",
       'study.unavailable': 'Classement indisponible',
-      'study.addSubject': '＋ ajouter une matière…', 'study.newSubject': 'Nom de la matière',
       'study.needBoth': 'Saisis un e-mail et un mot de passe.',
       'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
       'study.renamePrompt': 'Nom affiché (visible au classement)',
       'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
-      'study.sectionSet': 'Section {section} — matières mises à jour',
-      'study.mySubjects': 'Mes matières', 'study.subjects': 'Matières',
+
+      'path.gateTitle': 'Qu’est-ce que tu étudies ?',
+      'path.gateMsg': 'Choisis ton niveau — obligatoire une fois après connexion.',
+      'path.pickLevel': 'Niveau scolaire',
+      'path.pickGrade': 'Quelle année ?',
+      'path.pickTrack': 'Quelle filière ?',
+      'path.pickCollege': 'Quel parcours ?',
+      'path.pickPrepa': 'Quelle spécialité ?',
+      'path.hs': 'Lycée',
+      'path.college': 'Supérieur / prépa',
+      'path.grade1': '1ère année',
+      'path.grade2': '2ème année',
+      'path.grade3': '3ème année',
+      'path.grade4': 'BAC (4ème année)',
+      'path.gradeN': '{n}ème année',
+      'path.prepaClassique': 'Prépa classique',
+      'path.prepaInteg': 'Prépa intégrée',
+      'path.license': 'Licence',
+      'path.licensePrompt': 'Quelle licence suis-tu ?',
+      'path.licensePlaceholder': 'ex. Informatique',
+      'path.licenseShort': 'Saisis au moins 2 caractères',
+      'path.save': 'Enregistrer',
+      'path.back': 'Retour',
+      'path.saved': 'Parcours enregistré',
+      'path.saveFailed': 'Impossible d’enregistrer le parcours',
+      'path.invalid': 'Sélection incomplète',
+      'path.yours': 'Tu étudies',
+      'path.change': 'Modifier',
+      'path.cancel': 'Annuler',
+      'path.needPick': 'Connecte-toi et choisis ton parcours',
 
       'room.title': 'Salle partagée', 'room.create': 'Créer une salle',
       'room.or': 'Ou rejoindre avec un code', 'room.join': 'Rejoindre', 'room.copy': 'Copier',
@@ -3609,8 +3756,6 @@ window.I18N = (function(){
       'set.alarm': 'Son d’alarme', 'set.bell': 'Cloche', 'set.digital': 'Numérique',
       'set.soft': 'Carillon doux', 'set.none': 'Aucun', 'set.apply': 'Appliquer & réinitialiser',
       'set.language': 'Langue',
-      'set.section': 'Section prépa',
-      'set.sectionHint': 'Seules les matières de cette section apparaissent dans le sélecteur.',
 
       'plan.weekly': 'Planning hebdomadaire', 'plan.monthly': 'Planning mensuel',
       'plan.from': 'De', 'plan.to': 'à', 'plan.print': 'Imprimer',
@@ -4220,49 +4365,12 @@ window.Stats = (function(){
            '</div><div class="st-chart">' + bars + '</div></div>';
   }
 
-  function subjectChart(){
-    const since = rangeStart();
-    const totals = window.Study ? Study.bySubjectSince(since) : {};
-    const rows = Object.keys(totals).map(function(k){ return { s:k, m:totals[k] }; })
-                       .sort(function(a,b){ return b.m - a.m; });
-
-    const picker = ['week','month','all'].map(function(r){
-      return '<button class="st-range' + (range === r ? ' active' : '') + '" ' +
-             'onclick="Stats.setRange(\'' + r + '\')">' + esc(t('stats.' + r)) + '</button>';
-    }).join('');
-
-    const head = '<div class="st-section-head">' +
-                   '<h3 class="st-title">' + esc(t('stats.bySubject')) + '</h3>' +
-                   '<div class="st-ranges">' + picker + '</div>' +
-                 '</div>';
-
-    if (!rows.length){
-      return '<div class="st-section">' + head +
-             '<p class="st-empty">' + esc(t('stats.empty')) + '</p></div>';
-    }
-
-    const max = rows[0].m || 1;
-    const total = rows.reduce(function(a,x){ return a + x.m; }, 0);
-    const body = rows.map(function(r){
-      const pct = Math.max(2, Math.round(r.m / max * 100));
-      const share = Math.round(r.m / total * 100);
-      return '<div class="st-row">' +
-               '<span class="st-row-name" title="' + esc(r.s) + '">' + esc(r.s) + '</span>' +
-               '<span class="st-row-track"><span class="st-row-fill" style="width:' + pct + '%"></span></span>' +
-               '<span class="st-row-val">' + esc(fmt(r.m)) + '</span>' +
-               '<span class="st-row-share">' + share + '%</span>' +
-             '</div>';
-    }).join('');
-
-    return '<div class="st-section">' + head +
-           '<div class="st-rows">' + body + '</div>' +
-           '<p class="st-total">' + esc(t('stats.total', { time: fmt(total) })) + '</p></div>';
-  }
+  function subjectChart(){ return ''; }
 
   function render(){
     const host = document.getElementById('statsBody');
     if (!host) return;
-    host.innerHTML = statTiles() + dailyChart() + subjectChart();
+    host.innerHTML = statTiles() + dailyChart();
   }
 
   function init(){
