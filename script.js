@@ -2565,8 +2565,43 @@ window.Study = (function(){
     render();
   }
 
-  function pathBtn(label, onclick, active){
-    return '<button type="button" class="path-btn'+(active?' active':'')+'" onclick="'+onclick+'">'+esc(label)+'</button>';
+  function pathBtn(label, action, value){
+    const valAttr = (value != null && value !== '')
+      ? ' data-path-value="'+esc(String(value))+'"' : '';
+    return '<button type="button" class="path-btn" data-path-action="'+esc(action)+'"'+valAttr+'>'+esc(label)+'</button>';
+  }
+
+  function pathNavRow(){
+    const showBack = pathWizard !== 'level';
+    const showCancel = hasStudyPath();
+    if (!showBack && !showCancel) return '';
+    return '<div class="path-nav-row">' +
+      (showBack
+        ? '<button type="button" class="study-link path-nav-back" data-path-action="back">'+esc(t('path.back'))+'</button>'
+        : '<span class="path-nav-spacer"></span>') +
+      (showCancel
+        ? '<button type="button" class="study-link path-nav-cancel" data-path-action="cancel">'+esc(t('path.cancel'))+'</button>'
+        : '') +
+    '</div>';
+  }
+
+  function onPathWizardClick(e){
+    const btn = e.target.closest('[data-path-action]');
+    if (!btn || !pathGateOpen) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const action = btn.getAttribute('data-path-action');
+    const val = btn.getAttribute('data-path-value') || '';
+    switch (action){
+      case 'level': pickPathLevel(val); break;
+      case 'hs_grade': pickHsGrade(val); break;
+      case 'hs_track': pickHsTrack(val); break;
+      case 'college_kind': pickCollegeKind(val); break;
+      case 'college_track': pickCollegeTrack(val); break;
+      case 'back': pathBack(); break;
+      case 'cancel': cancelPathWizard(); break;
+      case 'save_license': saveLicensePath(); break;
+    }
   }
 
   function pathWizardBlock(){
@@ -2579,50 +2614,42 @@ window.Study = (function(){
     if (pathWizard === 'level'){
       body = '<div class="path-step-label">'+esc(t('path.pickLevel'))+'</div>' +
         '<div class="path-btn-grid">' +
-          pathBtn(t('path.hs'), 'Study.pickPathLevel(\'highschool\')') +
-          pathBtn(t('path.college'), 'Study.pickPathLevel(\'college\')') +
+          pathBtn(t('path.hs'), 'level', 'highschool') +
+          pathBtn(t('path.college'), 'level', 'college') +
         '</div>';
     } else if (pathWizard === 'hs_grade'){
       body = '<div class="path-step-label">'+esc(t('path.pickGrade'))+'</div>' +
         '<div class="path-btn-grid">' +
-          pathBtn(t('path.grade1'), 'Study.pickHsGrade(\'1\')') +
-          pathBtn(t('path.grade2'), 'Study.pickHsGrade(\'2\')') +
-          pathBtn(t('path.grade3'), 'Study.pickHsGrade(\'3\')') +
-          pathBtn(t('path.grade4'), 'Study.pickHsGrade(\'4\')') +
-        '</div>' +
-        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+          pathBtn(t('path.grade1'), 'hs_grade', '1') +
+          pathBtn(t('path.grade2'), 'hs_grade', '2') +
+          pathBtn(t('path.grade3'), 'hs_grade', '3') +
+          pathBtn(t('path.grade4'), 'hs_grade', '4') +
+        '</div>';
     } else if (pathWizard === 'hs_track'){
       const tracks = HS_GRADES[pathDraft.grade] || [];
       body = '<div class="path-step-label">'+esc(t('path.pickTrack'))+'</div>' +
         '<div class="path-btn-grid path-btn-grid-wide">' +
-          tracks.map(function(tr){
-            return pathBtn(tr, 'Study.pickHsTrack('+JSON.stringify(tr)+')');
-          }).join('') +
-        '</div>' +
-        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+          tracks.map(function(tr){ return pathBtn(tr, 'hs_track', tr); }).join('') +
+        '</div>';
     } else if (pathWizard === 'college_kind'){
       body = '<div class="path-step-label">'+esc(t('path.pickCollege'))+'</div>' +
         '<div class="path-btn-grid">' +
-          pathBtn(t('path.prepaClassique'), 'Study.pickCollegeKind(\'prepa_classique\')') +
-          pathBtn(t('path.prepaInteg'), 'Study.pickCollegeKind(\'prepa_integ\')') +
-        '</div>' +
-        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+          pathBtn(t('path.prepaClassique'), 'college_kind', 'prepa_classique') +
+          pathBtn(t('path.prepaInteg'), 'college_kind', 'prepa_integ') +
+        '</div>';
     } else if (pathWizard === 'college_track'){
       const opts = pathDraft.collegeKind === 'prepa_classique' ? COLLEGE_PREPA : COLLEGE_INTEG;
       body = '<div class="path-step-label">'+esc(t('path.pickPrepa'))+'</div>' +
         '<div class="path-btn-grid">' +
           opts.map(function(tr){
-            return pathBtn(tr === 'license' ? t('path.license') : tr,
-              tr === 'license' ? 'Study.pickCollegeTrack(\'license\')' : 'Study.pickCollegeTrack('+JSON.stringify(tr)+')');
+            return pathBtn(tr === 'license' ? t('path.license') : tr, 'college_track', tr);
           }).join('') +
-        '</div>' +
-        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+        '</div>';
     } else if (pathWizard === 'license_name'){
       body = '<div class="path-step-label">'+esc(t('path.licensePrompt'))+'</div>' +
         '<input class="study-input" id="pathLicenseInput" type="text" maxlength="48" ' +
           'placeholder="'+esc(t('path.licensePlaceholder'))+'" value="'+esc(pathDraft.licenseName||'')+'">' +
-        '<button type="button" class="study-btn study-btn-primary path-save" onclick="Study.saveLicensePath()">'+esc(t('path.save'))+'</button>' +
-        '<button type="button" class="study-link path-back" onclick="Study.pathBack()">'+esc(t('path.back'))+'</button>';
+        '<button type="button" class="study-btn study-btn-primary path-save" data-path-action="save_license">'+esc(t('path.save'))+'</button>';
     }
 
     return '<div class="study-path-gate" role="dialog" aria-modal="true" aria-label="'+esc(title)+'">' +
@@ -2630,7 +2657,7 @@ window.Study = (function(){
                '<div class="study-path-gate-title">'+esc(title)+'</div>' +
                '<div class="study-path-gate-msg">'+esc(t('path.gateMsg'))+'</div>' +
                body +
-               (hasStudyPath() ? '<button type="button" class="study-link path-back" onclick="Study.cancelPathWizard()">'+esc(t('path.cancel'))+'</button>' : '') +
+               pathNavRow() +
              '</div>' +
            '</div>';
   }
@@ -3043,6 +3070,11 @@ window.Study = (function(){
 
   function init(){
     render();
+    const body = document.getElementById('studyBody');
+    if (body && !body.dataset.pathBound){
+      body.dataset.pathBound = '1';
+      body.addEventListener('click', onPathWizardClick, true);
+    }
     if (window.Auth) window.Auth.onChange(function(){
       if (window.Auth.signedIn()) authGateOpen = false;
       syncPathGate();
@@ -4239,7 +4271,7 @@ let clickOrigin = null;
 document.addEventListener('click', function(e){
   const el = e.target;
   clickOrigin = (el && el.closest) ? {
-    inPanel: !!el.closest('.popover'),
+    inPanel: !!(el.closest('.popover') || el.closest('.study-path-gate')),
     onDock:  !!el.closest('.dock-btn'),
     onLang:  !!el.closest('.lang-toggle')
   } : null;
