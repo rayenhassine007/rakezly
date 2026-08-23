@@ -627,6 +627,7 @@ function setTab(m, animate){
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
   if (animate) animateModeSwitch();
   updateAllTabIndicators();
+  if (typeof blurPillTabFocus === 'function') blurPillTabFocus();
 }
 function switchMode(m){
   if (window.Chrono) Chrono.exit();
@@ -4526,10 +4527,7 @@ window.Planner = (function(){
     tab = (next === 'month') ? 'month' : 'week';
     try { localStorage.setItem(K_TAB, tab); } catch(e){}
     updateTabsUI();
-    // Touch/DevTools leave :focus on the tab; clear it so only the pill shows.
-    if (document.activeElement && document.activeElement.classList.contains('planner-tab')){
-      document.activeElement.blur();
-    }
+    if (typeof blurPillTabFocus === 'function') blurPillTabFocus();
     requestAnimationFrame(function(){
       const tabs = document.querySelector('.planner-tabs');
       if (tabs && typeof updateTabIndicator === 'function') updateTabIndicator(tabs);
@@ -4826,13 +4824,28 @@ window.Planner = (function(){
 
 
 // ── VIEW SWITCH (focus ⇄ planner ⇄ stats) ─────────────────────
+function blurPillTabFocus(){
+  const el = document.activeElement;
+  if (!el) return;
+  if (el.matches('.view-btn, .mode-tab, .switch-btn, .stats-tab, .planner-tab')){
+    el.blur();
+  }
+}
+
 function updateTabIndicator(container){
   if (!container) return;
   const ind = container.querySelector('.tab-indicator');
   const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active, .stats-tab.active, .planner-tab.active');
-  if (!ind || !active) return;
+  if (!ind || !active){
+    if (ind) ind.style.opacity = '0';
+    return;
+  }
   const cr = container.getBoundingClientRect();
   const ar = active.getBoundingClientRect();
+  if (!cr.width || !ar.width){
+    ind.style.opacity = '0';
+    return;
+  }
   ind.style.width = ar.width + 'px';
   ind.style.height = ar.height + 'px';
   ind.style.transform = 'translate(' + (ar.left - cr.left) + 'px,' + (ar.top - cr.top) + 'px)';
@@ -4865,7 +4878,7 @@ function showView(name){
   try { localStorage.setItem('sf_view', name); } catch(e){}
   window.scrollTo(0, 0);
   updateAllTabIndicators();
-  // Planner was display:none — measure the pill again after layout.
+  blurPillTabFocus();
   requestAnimationFrame(function(){ updateAllTabIndicators(); });
 }
 
@@ -5074,6 +5087,7 @@ window.Stats = (function(){
     tab = (next === 'board') ? 'board' : 'study';
     try { localStorage.setItem(K_TAB, tab); } catch(e){}
     updateTabsUI();
+    if (typeof blurPillTabFocus === 'function') blurPillTabFocus();
     if (prev === tab) return;
     if (tab === 'board'){
       boardPage = 1;

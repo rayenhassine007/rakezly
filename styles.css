@@ -81,17 +81,35 @@ h1, h2 { font-weight: 600; }
 
 /* Segmented pills already have a sliding indicator — a second focus ring
    reads as a stray “blue box”, especially on touch / narrow viewports. */
+.viewswitch,
+.mode-switch,
+.mode-tabs,
+.stats-tabs,
+.planner-tabs,
+.viewswitch:focus,
+.viewswitch:focus-visible,
+.viewswitch:focus-within,
+.mode-switch:focus-within,
+.mode-tabs:focus-within,
+.stats-tabs:focus-within,
+.planner-tabs:focus-within,
+.view-btn,
 .view-btn:focus,
 .view-btn:focus-visible,
+.mode-tab,
 .mode-tab:focus,
 .mode-tab:focus-visible,
+.switch-btn,
 .switch-btn:focus,
 .switch-btn:focus-visible,
+.stats-tab,
 .stats-tab:focus,
 .stats-tab:focus-visible,
+.planner-tab,
 .planner-tab:focus,
 .planner-tab:focus-visible {
-  outline: none;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Inline icons inherit the button's colour. Deliberately scoped: the
@@ -1297,6 +1315,29 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   .mode-tab { padding: 5px 12px; font-size: 12px; }
 }
 
+/* Tablet / narrow window: timer+goals stack — trim chrome so both fit. */
+@media (max-width: 960px) {
+  .cycles-row { display: none; }
+  .study-mini-card { display: none; }
+  .quote-card { display: none; }
+  .timer-display { font-size: clamp(40px, 8.5vw, 58px) !important; }
+  .chrono-display { font-size: clamp(34px, 7vw, 50px) !important; }
+  .timer-block { gap: 8px !important; padding: 12px 14px !important; }
+  .stage { gap: 12px; }
+}
+
+@media (max-width: 960px) and (max-height: 780px) {
+  .timer-display { font-size: clamp(36px, 7.5vh, 50px) !important; }
+  .chrono-display { font-size: clamp(30px, 6.5vh, 44px) !important; }
+  .timer-block { gap: 6px !important; padding: 10px 12px !important; }
+  .mode-switch .switch-btn { padding: 5px 12px; font-size: 12px; }
+  .mode-tab { padding: 4px 10px; font-size: 11.5px; }
+  .btn-primary { min-width: 108px; padding: 10px 18px; }
+  .btn-icon { width: 34px; height: 34px; }
+  .quick-add-row .btn-qadd { padding: 3px 7px; font-size: 10.5px; }
+  .stage { padding-top: 72px; gap: 10px; }
+}
+
 /* Short / cramped viewports: shrink the timer stack so controls stay usable.
    !important beats later phone-width rules that re-inflate gap/padding. */
 @media (max-height: 740px) {
@@ -1901,19 +1942,19 @@ body.view-planner .stage {
    moves to the bottom, which also puts it under the thumb.
    ══════════════════════════════════════════════════════════════ */
 
-@media (max-width: 700px) {
+@media (max-width: 960px) {
   .topbar {
     padding: 8px 12px;
     gap: 10px;
   }
   .topbar-left { padding: 6px 14px; flex: none; }
   .brand { font-size: 14px; }
-  .live-clock, .live-date { display: none; }
+  .live-date { display: none; }
 
   .viewswitch { padding: 3px; }
   .view-btn { padding: 6px 15px; font-size: 12.5px; }
 
-  /* Dock becomes a bottom bar. */
+  /* Dock becomes a bottom bar — same band as tablet portrait (e.g. 933px). */
   .dock {
     position: fixed;
     left: 10px; right: 10px; bottom: 10px;
@@ -1922,21 +1963,15 @@ body.view-planner .stage {
     justify-content: space-around;
     gap: 0; padding: 5px 4px;
     border-radius: 18px;
-    /* Opaque: unlike the top bar it floats over page content, not the
-       background video, so the glass tint alone let cards bleed through.
-       The theme colour under the usual tint keeps the look consistent. */
     background-color: var(--bg);
     background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
     box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.34);
   }
   .dock-btn { width: 36px; height: 36px; padding: 8px; }
 
-  /* Keep the last card clear of the bottom bar. */
   .stage { padding-bottom: 84px; }
   body.view-planner .stage { padding-bottom: 84px; }
 
-  /* Same breakpoint as the bottom dock: panels must rise from below,
-     not float top-right away from the icons that opened them. */
   .popover {
     top: auto; bottom: 0; left: 0; right: 0;
     width: 100%; max-width: none;
@@ -1953,6 +1988,20 @@ body.view-planner .stage {
   }
   .popover.open { transform: translateY(0); }
   .player-panel { width: 100%; }
+
+  .popover { position: fixed; }
+  .popover-close { display: block; }
+  .popover::before {
+    content: ''; display: block;
+    width: 40px; height: 4px; margin: 0 auto 14px;
+    border-radius: 2px; background: var(--text-faint);
+    opacity: .55;
+  }
+  .popover-title { padding-right: 38px; }
+}
+
+@media (max-width: 700px) {
+  .live-clock { display: none; }
 }
 
 /* Narrow phones: the timer card was the tightest element. */
@@ -2005,19 +2054,6 @@ body.view-planner .stage {
   stroke-width: 2; stroke-linecap: round;
 }
 .popover-close:active { transform: scale(.92); }
-
-@media (max-width: 700px) {
-  .popover { position: fixed; }
-  .popover-close { display: block; }
-  /* Grab-handle, so the sheet reads as draggable/dismissible. */
-  .popover::before {
-    content: ''; display: block;
-    width: 40px; height: 4px; margin: 0 auto 14px;
-    border-radius: 2px; background: var(--text-faint);
-    opacity: .55;
-  }
-  .popover-title { padding-right: 38px; }
-}
 
 /* Planner header on phones: title, then navigation, then tools — stacked
    instead of three groups competing for one row. The week grid keeps its
