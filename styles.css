@@ -1342,20 +1342,6 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   .brand      { font-size: 15px; }
   .live-clock, .live-date { display: none; }
   .dock-btn   { width: 32px; height: 32px; padding: 7px; }
-
-  /* Popovers become a bottom sheet — reachable with a thumb. */
-  .popover {
-    top: auto; bottom: 0; left: 0; right: 0;
-    width: 100%; max-width: none;
-    border-radius: var(--radius) var(--radius) 0 0;
-    border-bottom: none;
-    transform: translateY(100%);
-    transform-origin: bottom center;
-    max-height: 78vh;
-    padding-bottom: 26px;
-  }
-  .popover.open { transform: translateY(0); }
-  .player-panel { width: 100%; }
 }
 
 
@@ -1934,14 +1920,24 @@ body.view-planner .stage {
   .stage { padding-bottom: 84px; }
   body.view-planner .stage { padding-bottom: 84px; }
 
-  /* Bottom sheets cover the dock rather than fighting it for space;
-     tapping outside dismisses, which the click-away handler provides. */
+  /* Same breakpoint as the bottom dock: panels must rise from below,
+     not float top-right away from the icons that opened them. */
   .popover {
-    z-index: 46; max-height: 82vh;
+    top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; max-width: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+    transform: translateY(100%);
+    transform-origin: bottom center;
+    max-height: 82vh;
+    padding-bottom: 26px;
+    z-index: 46;
     background-color: var(--bg);
     background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
   }
+  .popover.open { transform: translateY(0); }
+  .player-panel { width: 100%; }
 }
 
 /* Narrow phones: the timer card was the tightest element. */
