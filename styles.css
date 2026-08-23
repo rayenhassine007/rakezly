@@ -79,6 +79,21 @@ h1, h2 { font-weight: 600; }
 /* One focus ring everywhere: visible for keyboards, quiet for mice. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
+/* Segmented pills already have a sliding indicator — a second focus ring
+   reads as a stray “blue box”, especially on touch / narrow viewports. */
+.view-btn:focus,
+.view-btn:focus-visible,
+.mode-tab:focus,
+.mode-tab:focus-visible,
+.switch-btn:focus,
+.switch-btn:focus-visible,
+.stats-tab:focus,
+.stats-tab:focus-visible,
+.planner-tab:focus,
+.planner-tab:focus-visible {
+  outline: none;
+}
+
 /* Inline icons inherit the button's colour. Deliberately scoped: the
    progress animal injects its own multi-colour artwork and must not be
    repainted by a blanket svg rule. */
