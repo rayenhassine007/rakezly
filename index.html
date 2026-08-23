@@ -37,6 +37,7 @@
   </div>
 
   <nav class="viewswitch" aria-label="View">
+    <span class="tab-indicator" aria-hidden="true"></span>
     <button class="view-btn active" data-view="focus" onclick="showView('focus')" data-i18n="nav.focus">Focus</button>
     <button class="view-btn" data-view="planner" onclick="showView('planner')" data-i18n="nav.planner">Planner</button>
     <button class="view-btn" data-view="stats" onclick="showView('stats')" data-i18n="nav.stats">Stats</button>
@@ -77,6 +78,7 @@
 
     <!-- Primary switch: two different kinds of timer, not two sessions -->
     <div class="mode-switch" role="tablist" aria-label="Timer type">
+      <span class="tab-indicator" aria-hidden="true"></span>
       <button class="switch-btn active" id="switchPomodoro" onclick="Chrono.exit()" data-i18n="timer.pomodoro">Pomodoro</button>
       <button class="switch-btn" id="switchChrono" onclick="Chrono.enter()"
               data-i18n-title="timer.chronoTip" data-i18n="timer.chrono" title="Chronomètre d'étude">Chrono</button>
@@ -98,6 +100,7 @@
     </div>
 
     <div class="mode-tabs" role="tablist">
+      <span class="tab-indicator" aria-hidden="true"></span>
       <button class="mode-tab active" data-mode="work"  onclick="switchMode('work')" data-i18n="timer.focus">Focus</button>
       <button class="mode-tab bt"     data-mode="break" onclick="switchMode('break')" data-i18n="timer.break">Break</button>
       <button class="mode-tab lt"     data-mode="long"  onclick="switchMode('long')" data-i18n="timer.long">Long break</button>

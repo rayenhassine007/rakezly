@@ -582,13 +582,15 @@ function advance(){
   const next=seq[cycleIndex]; setTab(next.type); initTimer(next.type); renderCycles();
   saveTimerState();
 }
-function setTab(m){
+function setTab(m, animate){
   m = m==='brk' ? 'break' : m==='lng' ? 'long' : m;
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+  if (animate) animateModeSwitch();
+  updateAllTabIndicators();
 }
 function switchMode(m){
   if (window.Chrono) Chrono.exit();
-  stopTimer(); setTab(m); initTimer(m); renderCycles(); saveTimerState();
+  stopTimer(); setTab(m, true); initTimer(m); renderCycles(); saveTimerState();
   if(window.Room)Room.onLocalChange();
 }
 
@@ -3182,7 +3184,7 @@ window.Goals = (function(){
       pos: items.length, updated: Date.now()
     };
     items.push(g);
-    if (!activeId) activeId = g.id;
+    activeId = g.id;
     save(); render(); push([g]);
   }
 
@@ -3228,9 +3230,26 @@ window.Goals = (function(){
     if (g) del(g.id);
   }
 
+  // Which goal should receive the next finished pomodoro?
+  function goalForSession(){
+    let g = active();
+    if (g && !g.done) return g;
+    const taskEl = document.getElementById('taskInput');
+    const task = taskEl ? String(taskEl.value || '').trim().toLowerCase() : '';
+    if (task){
+      g = items.filter(function(x){
+        return !x.done && String(x.title || '').trim().toLowerCase() === task;
+      })[0];
+      if (g) return g;
+    }
+    const open = items.filter(function(x){ return !x.done; });
+    if (open.length === 1) return open[0];
+    return null;
+  }
+
   // Called by onDone() when a focus session finishes.
   function onPomodoro(){
-    const g = active();
+    const g = goalForSession();
     if (!g) return;
     g.progress = (g.progress || 0) + 1;
     g.updated = Date.now();
@@ -3357,7 +3376,7 @@ window.Goals = (function(){
   }
 
   return { init:init, add:add, addFromInput:addFromInput, toggle:toggle, setActive:setActive,
-           remove:remove, onPomodoro:onPomodoro,
+           remove:remove, onPomodoro:onPomodoro, goalForSession:goalForSession,
            active:active, pull:pull, render:render };
 })();
 
@@ -3383,6 +3402,7 @@ window.Chrono = (function(){
     const chr = document.getElementById('switchChrono');
     if (pom) pom.classList.toggle('active', !active);
     if (chr) chr.classList.toggle('active', active);
+    if (typeof updateAllTabIndicators === 'function') updateAllTabIndicators();
   }
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
 
@@ -3420,6 +3440,7 @@ window.Chrono = (function(){
     const b = block(); if (b) b.classList.add('chrono-mode');
     syncSwitch();
     render(); save();
+    if (typeof animateModeSwitch === 'function') animateModeSwitch();
   }
 
   // Leaving the stopwatch banks whatever is on it, so a mode switch can
@@ -3435,6 +3456,7 @@ window.Chrono = (function(){
     if (typeof setTab === 'function' && typeof mode !== 'undefined') setTab(mode);
     syncSwitch();
     render(); save();
+    if (typeof animateModeSwitch === 'function') animateModeSwitch();
   }
 
   function start(){
@@ -3469,7 +3491,7 @@ window.Chrono = (function(){
 
     let blocks = 0;
     const per = (typeof MODES === 'object' && MODES.work) ? MODES.work : 25;
-    if (window.Goals && Goals.active()){
+    if (window.Goals && Goals.goalForSession && Goals.goalForSession()){
       blocks = Math.floor(mins / per);
       for (let i = 0; i < blocks; i++) Goals.onPomodoro();
     }
@@ -4117,17 +4139,52 @@ window.Planner = (function(){
 })();
 
 
-// ── VIEW SWITCH (focus ⇄ planner) ─────────────────────────────
+// ── VIEW SWITCH (focus ⇄ planner ⇄ stats) ─────────────────────
+function updateTabIndicator(container){
+  if (!container) return;
+  const ind = container.querySelector('.tab-indicator');
+  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active');
+  if (!ind || !active) return;
+  const cr = container.getBoundingClientRect();
+  const ar = active.getBoundingClientRect();
+  ind.style.width = ar.width + 'px';
+  ind.style.height = ar.height + 'px';
+  ind.style.transform = 'translate(' + (ar.left - cr.left) + 'px,' + (ar.top - cr.top) + 'px)';
+  ind.style.opacity = '1';
+}
+
+function updateAllTabIndicators(){
+  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch').forEach(updateTabIndicator);
+}
+
+function animateModeSwitch(){
+  if (typeof prefersReducedMotion === 'function' && prefersReducedMotion()) return;
+  const chronoOn = window.Chrono && Chrono.isActive && Chrono.isActive();
+  const el = chronoOn
+    ? document.getElementById('chronoDisplay')
+    : document.getElementById('timerDisplay');
+  if (!el || el.offsetParent === null) return;
+  el.classList.remove('mode-switch-bump');
+  void el.offsetWidth;
+  el.classList.add('mode-switch-bump');
+}
+
 function showView(name){
-  document.body.classList.toggle('view-planner', name === 'planner');
-  document.body.classList.toggle('view-stats', name === 'stats');
-  // Recompute on entry rather than on every logged session.
-  if (name === 'stats' && window.Stats) Stats.render();
-  document.querySelectorAll('[data-view]').forEach(function(b){
-    b.classList.toggle('active', b.getAttribute('data-view') === name);
-  });
-  try { localStorage.setItem('sf_view', name); } catch(e){}
-  window.scrollTo(0, 0);
+  const apply = function(){
+    document.body.classList.toggle('view-planner', name === 'planner');
+    document.body.classList.toggle('view-stats', name === 'stats');
+    if (name === 'stats' && window.Stats) Stats.render();
+    document.querySelectorAll('[data-view]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-view') === name);
+    });
+    try { localStorage.setItem('sf_view', name); } catch(e){}
+    window.scrollTo(0, 0);
+    updateAllTabIndicators();
+  };
+  if (typeof prefersReducedMotion === 'function' && !prefersReducedMotion() &&
+      typeof document.startViewTransition === 'function'){
+    document.startViewTransition(apply);
+  } else apply();
 }
 
 
@@ -4478,4 +4535,10 @@ I18N.apply();
 (function(){
   const saved = localStorage.getItem('sf_view');
   showView(saved === 'planner' || saved === 'stats' ? saved : 'focus');
+  requestAnimationFrame(updateAllTabIndicators);
 })();
+window.addEventListener('resize', function(){
+  clearTimeout(window._tabIndTO);
+  window._tabIndTO = setTimeout(updateAllTabIndicators, 100);
+});
+if (window.I18N) I18N.onChange(function(){ requestAnimationFrame(updateAllTabIndicators); });

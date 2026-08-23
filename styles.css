@@ -347,25 +347,28 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
   border-radius: 999px;
+  position: relative;
 }
 .switch-btn {
+  position: relative; z-index: 1;
   padding: 8px 22px; border-radius: 999px;
   font-size: 13.5px; font-weight: 600;
   color: var(--text-faint);
-  transition: all .2s var(--ease);
+  transition: color .2s var(--ease);
 }
 .switch-btn:hover { color: var(--text); }
-.switch-btn.active { background: var(--accent); color: var(--accent-ink); }
+.switch-btn.active { background: transparent; color: var(--accent-ink); }
 
-.mode-tabs { display: flex; gap: 3px; padding: 3px; background: var(--surface-2); border-radius: 999px; }
+.mode-tabs { display: flex; gap: 3px; padding: 3px; background: var(--surface-2); border-radius: 999px; position: relative; }
 .mode-tab {
+  position: relative; z-index: 1;
   padding: 7px 17px; border-radius: 999px;
   font-size: 13px; font-weight: 500;
   color: var(--text-faint);
-  transition: all .2s var(--ease);
+  transition: color .2s var(--ease);
 }
 .mode-tab:hover  { color: var(--text); }
-.mode-tab.active { background: var(--accent-soft); color: var(--accent); }
+.mode-tab.active { background: transparent; color: var(--accent); }
 
 .timer-controls { display: flex; align-items: center; gap: 12px; }
 
@@ -1227,15 +1230,66 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   border-radius: 999px;
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  position: relative;
 }
 .view-btn {
+  position: relative; z-index: 1;
   padding: 6px 18px; border-radius: 999px;
   font-size: 13px; font-weight: 600;
   color: var(--text-faint);
-  transition: all .18s var(--ease);
+  transition: color .22s var(--ease);
 }
 .view-btn:hover { color: var(--text); }
-.view-btn.active { background: var(--accent); color: var(--accent-ink); }
+.view-btn.active { background: transparent; color: var(--accent-ink); }
+
+/* Sliding pill behind the active tab in segmented controls. */
+.tab-indicator {
+  position: absolute; left: 0; top: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: transform .28s var(--ease), width .28s var(--ease), height .28s var(--ease), opacity .18s var(--ease);
+  will-change: transform, width;
+}
+.viewswitch .tab-indicator { background: var(--accent); }
+.mode-switch .tab-indicator { background: var(--accent); }
+.mode-tabs .tab-indicator { background: var(--accent-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-indicator { transition: none; }
+}
+
+/* View switch: crossfade the stage when changing Focus / Planner / Stats. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: viewExit .24s var(--ease) both;
+  }
+  ::view-transition-new(root) {
+    animation: viewEnter .34s var(--ease) both;
+  }
+}
+@keyframes viewExit {
+  to { opacity: 0; transform: translateY(-8px) scale(.992); }
+}
+@keyframes viewEnter {
+  from { opacity: 0; transform: translateY(10px) scale(.992); }
+}
+
+/* Timer mode tabs: gentle pulse when switching Focus / Break / Long or Pomodoro / Chrono. */
+@keyframes modeSwitchBump {
+  0%   { opacity: 1; transform: scale(1); }
+  45%  { opacity: .55; transform: scale(.985); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.timer-display.mode-switch-bump,
+.chrono-display.mode-switch-bump {
+  animation: modeSwitchBump .32s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .timer-display.mode-switch-bump,
+  .chrono-display.mode-switch-bump { animation: none; }
+}
 
 /* Only one view is on screen at a time. */
 .planner { display: none; }
