@@ -506,10 +506,11 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   border: 1px solid transparent;
   transition: background .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease), transform .18s var(--ease);
 }
-.goal-item:not(.done):not(.editing) { cursor: grab; touch-action: pan-y; }
+.goal-item:not(.done):not(.editing) { cursor: default; }
 .goal-item:not(.done):not(.editing) .goal-check,
 .goal-item:not(.done):not(.editing) .goal-actions,
-.goal-item:not(.done):not(.editing) .goal-edit { cursor: pointer; touch-action: auto; }
+.goal-item:not(.done):not(.editing) .goal-edit,
+.goal-item:not(.done):not(.editing) .goal-main { cursor: pointer; touch-action: auto; }
 .goal-item.is-dragging { cursor: grabbing; touch-action: none; }
 .goal-item:hover  { background: var(--surface-2); }
 .goal-item.active { border-color: var(--accent-soft); background: var(--accent-soft); }
@@ -524,19 +525,30 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
 .goal-item.editing { align-items: stretch; }
 
 .goal-drag {
-  flex: none; width: 18px; height: 22px; margin-top: 1px; padding: 0;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -4px 2px 0 -4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-faint);
   display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity .18s var(--ease), color .18s var(--ease);
-  pointer-events: none;
+  opacity: .55;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 8px;
+  transition: opacity .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
 }
 .goal-drag svg {
-  width: 14px; height: 14px; fill: none; stroke: currentColor;
+  width: 16px; height: 16px; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round;
 }
-.goal-item:hover .goal-drag, .goal-item.is-dragging .goal-drag { opacity: 1; }
+.goal-item:hover .goal-drag,
+.goal-item.is-dragging .goal-drag { opacity: 1; }
+.goal-drag:hover { color: var(--text); background: var(--surface-2); }
 .goal-item.done .goal-drag { display: none; }
-.goal-item.is-dragging .goal-drag { color: var(--accent); }
+.goal-item.is-dragging .goal-drag { color: var(--accent); cursor: grabbing; }
 
 .goal-check {
   flex: none; width: 17px; height: 17px; margin-top: 2px;
@@ -601,7 +613,7 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
 @media (max-width: 900px), (hover: none) {
   .goal-item:not(.done) .goal-actions .goal-edit-btn,
   .goal-item:not(.done) .goal-actions .goal-del { opacity: 1; }
-  .goal-item:not(.done):not(.editing) .goal-drag { opacity: .55; }
+  .goal-item:not(.done):not(.editing) .goal-drag { opacity: .7; }
 }
 
 .goal-edit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }

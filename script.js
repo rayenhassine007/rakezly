@@ -3471,11 +3471,8 @@ window.Goals = (function(){
   let ptrDrag = null;
   let goalDragSuppressClick = false;
 
-  function isGoalDragBlocked(el){
-    if (!el) return true;
-    return !!el.closest(
-      'button, input, textarea, select, a, .goal-edit, .goal-actions'
-    );
+  function isGoalDragHandle(el){
+    return !!(el && el.closest('.goal-drag'));
   }
 
   function clearDropTargets(list){
@@ -3550,13 +3547,12 @@ window.Goals = (function(){
     list.addEventListener('click', onGoalListClick);
     list.addEventListener('keydown', onGoalListKeydown);
 
-    // Pointer-only reorder — HTML5 drag + pointer capture fought each other
-    // and could leave the page unable to receive clicks after a hold.
+    // Reorder only from the left drag handle — keeps taps on the goal usable.
     list.addEventListener('pointerdown', function(e){
       if (e.button !== 0) return;
+      if (!isGoalDragHandle(e.target)) return;
       const row = e.target.closest('.goal-item');
       if (!row || row.classList.contains('done') || row.classList.contains('editing')) return;
-      if (isGoalDragBlocked(e.target)) return;
       if (ptrDrag) endPtrDrag();
       ptrDrag = {
         id: row.dataset.goalId, row: row, list: list,
@@ -3685,9 +3681,9 @@ window.Goals = (function(){
                '</div>' +
              '</div>');
           return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'">' +
-                   '<span class="goal-drag" aria-hidden="true">' +
+                   '<button type="button" class="goal-drag" aria-label="'+esc(t('goals.drag'))+'" title="'+esc(t('goals.drag'))+'">' +
                      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h2M9 12h2M9 18h2M13 6h2M13 12h2M13 18h2"/></svg>' +
-                   '</span>' +
+                   '</button>' +
                    '<button type="button" class="goal-check" data-goal-action="toggle" data-goal-id="'+g.id+'" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
                    mainBlock +
                    (!isEditing
