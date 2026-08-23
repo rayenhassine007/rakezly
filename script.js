@@ -35,10 +35,6 @@ function closeStudyPanel(){
   if (window.Study && Study.closeStudy) Study.closeStudy();
 }
 
-function closeBoardPanel(){
-  if (window.Study && Study.closeBoard) Study.closeBoard();
-}
-
 function closeRoomPanel(){
   if (window.Room && Room.close) Room.close();
 }
@@ -49,7 +45,6 @@ function closeDockPopovers(except){
   if (except !== 'theme') closeThemePanel();
   if (except !== 'player') closePlayerPanel();
   if (except !== 'study') closeStudyPanel();
-  if (except !== 'board') closeBoardPanel();
   if (except !== 'room') closeRoomPanel();
 }
 
@@ -2259,7 +2254,7 @@ window.Room = (function(){
     if (typeof closeDockPopovers === 'function') closeDockPopovers('room');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','#boardFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
@@ -2509,9 +2504,9 @@ window.Study = (function(){
   }
 
   let panelOpen = false;
-  let boardPanelOpen = false;
   let board = [], standing = null, boardLoading = false, boardErr = '';
   const BOARD_LIMIT = 300;
+  const BOARD_PAGE_SIZE = 20;
   let authMode = 'none';
   let authMsg = null;
   let authGateOpen = false;
@@ -2822,6 +2817,29 @@ window.Study = (function(){
     return r ? (h + 'h ' + r + 'm') : (h + 'h');
   }
 
+  function fmtBoardTime(mins){
+    const m = Math.max(0, Math.round(mins));
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return h + ':' + String(r).padStart(2, '0');
+  }
+
+  function avatarHue(name){
+    let h = 0;
+    const s = String(name || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h % 360;
+  }
+
+  function avatarInitial(name){
+    const s = String(name || '?').trim();
+    return esc((s[0] || '?').toUpperCase());
+  }
+
+  function boardPageCount(){
+    return Math.max(1, Math.ceil(board.length / BOARD_PAGE_SIZE) || 1);
+  }
+
   function logSession(minutes){
     const mins = Math.max(1, Math.min(300, Math.round(minutes)));
     const l = log();
@@ -2949,33 +2967,64 @@ window.Study = (function(){
            '</div>';
   }
 
-  function boardBlock(){
+  function renderLeaderboardPage(page){
+    page = Math.max(1, page || 1);
+    const totalPages = boardPageCount();
+    if (page > totalPages) page = totalPages;
+
     if (!window.Auth || !window.Auth.signedIn()){
-      // Blurred teaser — click opens the sign-in gate.
-      const fake = [1,2,3,4,5].map(function(n){
-        return '<div class="study-row">' +
-                 '<span class="study-row-rank">'+n+'</span>' +
-                 '<span class="study-row-name">••••••••</span>' +
-                 '<span class="study-row-mins">—</span>' +
+      const fake = [3,4,5,6,7,8,9,10,11,12].map(function(n){
+        return '<div class="lb-row">' +
+                 '<span class="lb-rank">'+n+'</span>' +
+                 '<span class="lb-avatar" style="--lb-hue:120" aria-hidden="true">•</span>' +
+                 '<span class="lb-name">••••••••</span>' +
+                 '<span class="lb-time">—</span>' +
                '</div>';
       }).join('');
-      return '<button type="button" class="study-board-lock" onclick="Study.openAuthGate()">' +
-               '<div class="study-board study-board-blurred" aria-hidden="true">'+fake+'</div>' +
-               '<span class="study-board-lock-label">' + esc(t('study.boardLocked')) + '</span>' +
-             '</button>';
+      return '<div class="lb-wrap">' +
+               '<button type="button" class="study-board-lock lb-lock" onclick="Study.openAuthGate()">' +
+                 '<div class="lb-list lb-list-blurred" aria-hidden="true">'+fake+'</div>' +
+                 '<span class="study-board-lock-label">' + esc(t('study.boardLocked')) + '</span>' +
+               '</button>' +
+               authGateBlock() +
+             '</div>';
     }
+
     if (boardLoading) return '<div class="study-board-msg">' + esc(t('study.loading')) + '</div>';
     if (boardErr)     return '<div class="study-board-msg study-board-err">'+esc(boardErr)+'</div>';
     if (!board.length) return '<div class="study-board-msg">'+esc(t('study.nobody'))+'</div>';
-    const rows = board.map(function(r){
-      return '<div class="study-row'+(r.is_me?' me':'')+'">' +
-               '<span class="study-row-rank">'+r.rank+'</span>' +
-               '<span class="study-row-name">'+esc(r.display_name)+'</span>' +
-               '<span class="study-row-mins">'+esc(fmt(r.minutes))+'</span>' +
+
+    const start = (page - 1) * BOARD_PAGE_SIZE;
+    const rows = board.slice(start, start + BOARD_PAGE_SIZE).map(function(r){
+      const hue = avatarHue(r.display_name);
+      return '<div class="lb-row'+(r.is_me?' me':'')+'">' +
+               '<span class="lb-rank">'+r.rank+'</span>' +
+               '<span class="lb-avatar" style="--lb-hue:'+hue+'" aria-hidden="true">'+avatarInitial(r.display_name)+'</span>' +
+               '<span class="lb-name">'+esc(r.display_name)+'</span>' +
+               '<span class="lb-time">'+esc(fmtBoardTime(r.minutes))+'</span>' +
              '</div>';
     }).join('');
-    return '<div class="study-board-scroll" tabindex="0" aria-label="'+esc(t('study.board'))+'">' +
-             '<div class="study-board">'+rows+'</div>' +
+
+    const prevDisabled = page <= 1;
+    const nextDisabled = page >= totalPages;
+    const pager = totalPages > 1
+      ? '<div class="lb-pager">' +
+          '<button type="button" class="lb-page-btn"' +
+            (prevDisabled ? ' disabled' : ' onclick="Stats.setBoardPage('+(page-1)+')"') +
+            ' aria-label="'+esc(t('stats.prevPage'))+'">&lt;</button>' +
+          '<span class="lb-page-num" aria-current="page">'+page+'</span>' +
+          '<button type="button" class="lb-page-btn"' +
+            (nextDisabled ? ' disabled' : ' onclick="Stats.setBoardPage('+(page+1)+')"') +
+            ' aria-label="'+esc(t('stats.nextPage'))+'">&gt;</button>' +
+        '</div>'
+      : '';
+
+    return '<div class="lb-wrap">' +
+             standingBlock() +
+             '<div class="lb-list" aria-label="'+esc(t('study.board'))+'">'+rows+'</div>' +
+             pager +
+             '<p class="lb-hint">'+esc(t('study.resetsMonday'))+'</p>' +
+             authGateBlock() +
            '</div>';
   }
 
@@ -3016,7 +3065,7 @@ window.Study = (function(){
   function render(){
     renderMini();
     updateStudyPanel();
-    updateBoardPanel();
+    if (window.Stats && Stats.render) Stats.render();
   }
 
   function updateStudyPanel(){
@@ -3038,47 +3087,15 @@ window.Study = (function(){
       pathWizardBlock();
   }
 
-  function updateBoardPanel(){
-    const btn = document.getElementById('boardFixedBtn');
-    if (btn) btn.classList.toggle('active', boardPanelOpen);
-    const panel = document.getElementById('boardPanel');
-    if (panel) panel.classList.toggle('open', boardPanelOpen);
-    const body = document.getElementById('boardBody');
-    if (!body || !boardPanelOpen) return;
-
-    body.innerHTML =
-      authBlock() +
-      standingBlock() +
-      '<div class="study-sec-label">' + esc(t('study.thisWeeksBoard')) + '</div>' +
-      boardBlock() +
-      '<div class="study-hint">' + esc(t('study.resetsMonday')) + '</div>' +
-      authGateBlock();
-  }
-
   function closeOtherPanels(){
     if (typeof closeDockPopovers === 'function') closeDockPopovers('study');
-  }
-
-  function closeBoardOtherPanels(){
-    if (typeof closeDockPopovers === 'function') closeDockPopovers('board');
   }
 
   function togglePanel(){
     panelOpen = !panelOpen;
     if (panelOpen){
-      boardPanelOpen = false;
       closeOtherPanels();
       syncPathGate();
-    }
-    render();
-  }
-
-  function toggleBoardPanel(){
-    boardPanelOpen = !boardPanelOpen;
-    if (boardPanelOpen){
-      panelOpen = false;
-      closeBoardOtherPanels();
-      loadBoard();
     }
     render();
   }
@@ -3088,15 +3105,8 @@ window.Study = (function(){
     render();
   }
 
-  function closeBoard(){
-    boardPanelOpen = false;
-    authGateOpen = false;
-    render();
-  }
-
   function closeAll(){
     panelOpen = false;
-    boardPanelOpen = false;
     authGateOpen = false;
     render();
   }
@@ -3109,8 +3119,8 @@ window.Study = (function(){
     authGateOpen = true;
     authMode = 'none';
     authMsg = null;
-    boardPanelOpen = true;
-    closeBoardOtherPanels();
+    if (window.Stats && Stats.setTab) Stats.setTab('board');
+    if (typeof showView === 'function') showView('stats');
     render();
   }
   function closeAuthGate(){ authGateOpen = false; authMsg = null; render(); }
@@ -3174,29 +3184,24 @@ window.Study = (function(){
       loadBoard();
       render();
     });
-    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','#boardFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
       const b = document.querySelector(sel);
       if (b) b.addEventListener('click', function(){
         if (panelOpen){ panelOpen = false; render(); }
       });
     });
-    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
-      const b = document.querySelector(sel);
-      if (b) b.addEventListener('click', function(){
-        if (boardPanelOpen){ boardPanelOpen = false; authGateOpen = false; render(); }
-      });
-    });
   }
 
   return { init:init, doGoogle:doGoogle,
-           close: closeAll, closeStudy:closeStudy, closeBoard:closeBoard,
+           close: closeAll, closeStudy:closeStudy,
            hasStudyPath:hasStudyPath, needsStudyPath:needsStudyPath, pathLabel:pathLabel, getPath:getPath,
            pickPathLevel:pickPathLevel, pickHsGrade:pickHsGrade, pickHsTrack:pickHsTrack,
            pickCollegeKind:pickCollegeKind, pickCollegeTrack:pickCollegeTrack, saveLicensePath:saveLicensePath,
            pathBack:pathBack, changePath:changePath, cancelPathWizard:cancelPathWizard,
-           logSession:logSession, flush:flush, fmt:fmt,
+           logSession:logSession, flush:flush, fmt:fmt, loadBoard:loadBoard,
+           boardPageCount:boardPageCount, renderLeaderboardPage:renderLeaderboardPage,
            entries:log, sumSince:sumSince,
-           togglePanel:togglePanel, toggleBoardPanel:toggleBoardPanel,
+           togglePanel:togglePanel,
            setAuthMode:setAuthMode, doAuth:doAuth, doSignOut:doSignOut, doRename:doRename,
            openAuthGate:openAuthGate, closeAuthGate:closeAuthGate,
            render:render };
@@ -3835,6 +3840,8 @@ window.I18N = (function(){
   const DICT = {
     en: {
       'nav.focus': 'Focus', 'nav.planner': 'Planner', 'nav.stats': 'Stats',
+      'stats.heading': 'Stats', 'stats.yours': 'Your study', 'stats.leaderboard': 'Leaderboard',
+      'stats.prevPage': 'Previous page', 'stats.nextPage': 'Next page',
       'stats.title': 'Your study', 'stats.thisWeek': 'This week',
       'stats.avgDay': 'Average day', 'stats.streak': 'Streak',
       'stats.days': 'd', 'stats.best': 'Best day',
@@ -3998,6 +4005,8 @@ window.I18N = (function(){
 
     fr: {
       'nav.focus': 'Focus', 'nav.planner': 'Planning', 'nav.stats': 'Stats',
+      'stats.heading': 'Stats', 'stats.yours': 'Ton étude', 'stats.leaderboard': 'Classement',
+      'stats.prevPage': 'Page précédente', 'stats.nextPage': 'Page suivante',
       'stats.title': 'Ton étude', 'stats.thisWeek': 'Cette semaine',
       'stats.avgDay': 'Moyenne / jour', 'stats.streak': 'Série',
       'stats.days': 'j', 'stats.best': 'Meilleur jour',
@@ -4466,7 +4475,7 @@ function animateModeSwitch(){
 function showView(name){
   document.body.classList.toggle('view-planner', name === 'planner');
   document.body.classList.toggle('view-stats', name === 'stats');
-  if (name === 'stats' && window.Stats) Stats.render();
+  if (name === 'stats' && window.Stats) Stats.onShow();
   document.querySelectorAll('[data-view]').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
@@ -4651,10 +4660,68 @@ document.addEventListener('keydown', function(e){
 // than a categorical palette — which also means it re-tints per theme
 // instead of fighting four of them.
 window.Stats = (function(){
+  const K_TAB = 'sf_stats_tab';
   let range = 'week';   // week | month | all
+  let tab = 'study';    // study | board
+  let boardPage = 1;
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+  function readTab(){
+    try {
+      const v = localStorage.getItem(K_TAB);
+      if (v === 'board' || v === 'study') return v;
+    } catch(e){}
+    return 'study';
+  }
+
+  function clampBoardPage(){
+    if (window.Study && Study.boardPageCount){
+      const max = Study.boardPageCount();
+      if (boardPage > max) boardPage = max;
+      if (boardPage < 1) boardPage = 1;
+    }
+  }
+
+  function setTab(next){
+    tab = (next === 'board') ? 'board' : 'study';
+    try { localStorage.setItem(K_TAB, tab); } catch(e){}
+    if (tab === 'board'){
+      boardPage = 1;
+      if (window.Study && Study.loadBoard) Study.loadBoard();
+    }
+    render();
+  }
+
+  function setBoardPage(p){
+    boardPage = Math.max(1, p);
+    clampBoardPage();
+    render();
+  }
+
+  function openLeaderboard(){
+    setTab('board');
+    if (typeof showView === 'function') showView('stats');
+  }
+
+  function onShow(){
+    if (tab === 'board' && window.Study && Study.loadBoard) Study.loadBoard();
+    render();
+  }
+
+  function tabsBar(){
+    return '<div class="stats-tabs" role="tablist">' +
+      '<button type="button" class="stats-tab'+(tab === 'study' ? ' active' : '')+'" role="tab" ' +
+        'aria-selected="'+(tab === 'study')+'" onclick="Stats.setTab(\'study\')">' +
+        esc(t('stats.yours')) +
+      '</button>' +
+      '<button type="button" class="stats-tab'+(tab === 'board' ? ' active' : '')+'" role="tab" ' +
+        'aria-selected="'+(tab === 'board')+'" onclick="Stats.setTab(\'board\')">' +
+        esc(t('stats.leaderboard')) +
+      '</button>' +
+    '</div>';
+  }
 
   function locale(){ return window.I18N && I18N.current() === 'fr' ? 'fr-FR' : 'en-GB'; }
   function fmt(m){ return window.Study ? Study.fmt(m) : m + 'm'; }
@@ -4757,15 +4824,25 @@ window.Stats = (function(){
   function render(){
     const host = document.getElementById('statsBody');
     if (!host) return;
-    host.innerHTML = statTiles() + dailyChart();
+    clampBoardPage();
+    let body = tabsBar();
+    if (tab === 'study'){
+      body += statTiles() + dailyChart();
+    } else if (window.Study && Study.renderLeaderboardPage){
+      body += Study.renderLeaderboardPage(boardPage);
+    }
+    host.innerHTML = body;
   }
 
   function init(){
+    tab = readTab();
     render();
     if (window.I18N) I18N.onChange(function(){ render(); });
   }
 
-  return { init:init, render:render, setRange:setRange, streak:streak, daily:daily };
+  return { init:init, render:render, onShow:onShow, setRange:setRange,
+           setTab:setTab, setBoardPage:setBoardPage, openLeaderboard:openLeaderboard,
+           streak:streak, daily:daily };
 })();
 
 

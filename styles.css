@@ -838,7 +838,7 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 
 .study-board-msg { font-size: 12px; line-height: 1.6; color: var(--text-faint); padding: 6px 0; }
 .study-board-err { color: var(--danger); }
-#studyBody, #boardBody { position: relative; }
+#studyBody { position: relative; }
 .study-board-scroll {
   max-height: min(58vh, 520px);
   overflow-y: auto;
@@ -1803,6 +1803,109 @@ body.view-stats .stage {
 
 .stats-card { padding: 20px 22px 22px; }
 
+.stats-tabs {
+  display: flex; gap: 6px; margin-bottom: 18px;
+  padding: 4px; border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+.stats-tab {
+  flex: 1; min-width: 0;
+  padding: 8px 14px; border-radius: 999px;
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  border: 0; background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  transition: color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
+}
+.stats-tab:hover { color: var(--text-dim); }
+.stats-tab.active {
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+
+.lb-wrap { position: relative; margin-top: 4px; }
+.lb-lock { min-height: 280px; border-radius: var(--radius-sm); }
+.lb-list {
+  display: flex; flex-direction: column;
+  border-top: 1px solid var(--border-soft);
+}
+.lb-list-blurred {
+  filter: blur(5px);
+  opacity: .55;
+  pointer-events: none;
+  user-select: none;
+}
+.lb-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+.lb-row.me { background: var(--accent-soft); }
+.lb-rank {
+  width: 24px; flex: none; text-align: right;
+  color: var(--text-faint); font-variant-numeric: tabular-nums;
+}
+.lb-row.me .lb-rank { color: var(--accent); font-weight: 600; }
+.lb-avatar {
+  width: 28px; height: 28px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-size: 12px; font-weight: 600;
+  color: #fff;
+  background: hsl(var(--lb-hue, 200) 55% 48%);
+}
+.lb-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text);
+}
+.lb-time {
+  flex: none; min-width: 52px; text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.lb-row.me .lb-time { color: var(--accent); font-weight: 600; }
+.lb-pager {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; margin-top: 16px;
+}
+.lb-page-btn {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font: inherit; font-size: 14px;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
+}
+.lb-page-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--accent-soft);
+}
+.lb-page-btn:disabled { opacity: .35; cursor: default; }
+.lb-page-num {
+  min-width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+  font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.lb-hint {
+  margin: 14px 0 0;
+  font-size: 11px; line-height: 1.5;
+  color: var(--text-faint); text-align: center;
+}
+.lb-wrap .study-standing { margin-bottom: 12px; }
+.lb-wrap .study-auth-gate { border-radius: var(--radius-sm); }
+
 /* Headline figures — hero numbers, not a chart. */
 .st-tiles {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1922,6 +2025,9 @@ body.view-stats .stage {
   .st-row-name { width: 88px; }
   .st-row-val { width: 54px; }
   .stats-card { padding: 16px 15px 18px; }
+  .stats-tab { padding: 8px 10px; font-size: 12px; }
+  .lb-row { gap: 10px; padding: 9px 2px; font-size: 12.5px; }
+  .lb-avatar { width: 26px; height: 26px; font-size: 11px; }
 }
 
 /* Study path onboarding (required once after sign-in).
