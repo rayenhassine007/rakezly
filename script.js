@@ -2587,10 +2587,7 @@ window.Study = (function(){
   }
 
   function syncPathGate(){
-    if (needsStudyPath()){
-      pathGateOpen = true;
-      panelOpen = true;
-    }
+    pathGateOpen = needsStudyPath();
   }
 
   async function persistPath(p){
@@ -3065,6 +3062,7 @@ window.Study = (function(){
   function render(){
     renderMini();
     updateStudyPanel();
+    updatePathGate();
     if (window.Stats && Stats.render) Stats.render();
   }
 
@@ -3083,8 +3081,14 @@ window.Study = (function(){
       '<div class="study-mine">' +
         '<div class="study-mine-val">'+esc(fmt(sumSince(weekStart())))+'</div>' +
         '<div class="study-mine-sub">'+esc(fmt(sumSince(dayStart())))+' today</div>' +
-      '</div>' +
-      pathWizardBlock();
+      '</div>';
+  }
+
+  function updatePathGate(){
+    const root = document.getElementById('pathGateRoot');
+    if (!root) return;
+    root.innerHTML = pathWizardBlock();
+    document.body.classList.toggle('path-gate-open', pathGateOpen);
   }
 
   function closeOtherPanels(){
@@ -3173,10 +3177,10 @@ window.Study = (function(){
 
   function init(){
     render();
-    const body = document.getElementById('studyBody');
-    if (body && !body.dataset.pathBound){
-      body.dataset.pathBound = '1';
-      body.addEventListener('click', onPathWizardClick, true);
+    const gateRoot = document.getElementById('pathGateRoot');
+    if (gateRoot && !gateRoot.dataset.pathBound){
+      gateRoot.dataset.pathBound = '1';
+      gateRoot.addEventListener('click', onPathWizardClick, true);
     }
     if (window.Auth) window.Auth.onChange(function(){
       if (window.Auth.signedIn()) authGateOpen = false;
@@ -4447,7 +4451,7 @@ window.Planner = (function(){
 function updateTabIndicator(container){
   if (!container) return;
   const ind = container.querySelector('.tab-indicator');
-  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active');
+  const active = container.querySelector('.view-btn.active, .mode-tab.active, .switch-btn.active, .stats-tab.active');
   if (!ind || !active) return;
   const cr = container.getBoundingClientRect();
   const ar = active.getBoundingClientRect();
@@ -4458,7 +4462,7 @@ function updateTabIndicator(container){
 }
 
 function updateAllTabIndicators(){
-  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch').forEach(updateTabIndicator);
+  document.querySelectorAll('.viewswitch, .mode-tabs, .mode-switch, .stats-tabs').forEach(updateTabIndicator);
 }
 
 function animateModeSwitch(){
@@ -4712,6 +4716,7 @@ window.Stats = (function(){
 
   function tabsBar(){
     return '<div class="stats-tabs" role="tablist">' +
+      '<span class="tab-indicator" aria-hidden="true"></span>' +
       '<button type="button" class="stats-tab'+(tab === 'study' ? ' active' : '')+'" role="tab" ' +
         'aria-selected="'+(tab === 'study')+'" onclick="Stats.setTab(\'study\')">' +
         esc(t('stats.yours')) +
@@ -4832,6 +4837,7 @@ window.Stats = (function(){
       body += Study.renderLeaderboardPage(boardPage);
     }
     host.innerHTML = body;
+    requestAnimationFrame(updateAllTabIndicators);
   }
 
   function init(){

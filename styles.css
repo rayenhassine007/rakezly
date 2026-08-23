@@ -1325,6 +1325,7 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .viewswitch .tab-indicator { background: var(--accent); }
 .mode-switch .tab-indicator { background: var(--accent); }
 .mode-tabs .tab-indicator { background: var(--accent-soft); }
+.stats-tabs .tab-indicator { background: var(--accent); }
 
 /* Timer mode tabs: gentle pulse when switching Focus / Break / Long or Pomodoro / Chrono. */
 @keyframes modeSwitchBump {
@@ -1804,25 +1805,24 @@ body.view-stats .stage {
 .stats-card { padding: 20px 22px 22px; }
 
 .stats-tabs {
-  display: flex; gap: 6px; margin-bottom: 18px;
+  display: flex; gap: 4px; margin-bottom: 18px;
   padding: 4px; border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
+  position: relative;
 }
 .stats-tab {
+  position: relative; z-index: 1;
   flex: 1; min-width: 0;
   padding: 8px 14px; border-radius: 999px;
-  font: inherit; font-size: 12.5px; font-weight: 500;
+  font: inherit; font-size: 12.5px; font-weight: 600;
   border: 0; background: transparent;
   color: var(--text-faint); cursor: pointer;
-  transition: color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
+  transition: color .22s var(--ease);
 }
-.stats-tab:hover { color: var(--text-dim); }
-.stats-tab.active {
-  color: var(--text);
-  background: var(--bg);
-  box-shadow: 0 1px 4px rgba(0,0,0,.12);
-}
+.stats-tab:hover { color: var(--text); }
+.stats-tab.active { color: var(--accent-ink); }
+.stats-tabs .tab-indicator { background: var(--accent); }
 
 .lb-wrap { position: relative; margin-top: 4px; }
 .lb-lock { min-height: 280px; border-radius: var(--radius-sm); }
@@ -2031,7 +2031,9 @@ body.view-stats .stage {
 }
 
 /* Study path onboarding (required once after sign-in).
-   Uses the active theme tokens, stepped darker than the main glass surfaces. */
+   Rendered in #pathGateRoot at body level so fixed positioning is not
+   trapped inside the transformed study popover. */
+body.path-gate-open { overflow: hidden; }
 .study-path-gate {
   position: fixed; inset: 0; z-index: 1200;
   display: flex; align-items: center; justify-content: center;
@@ -2042,7 +2044,12 @@ body.view-stats .stage {
 }
 .study-path-gate-card {
   width: min(420px, 100%);
-  max-height: min(90vh, 640px); overflow: auto;
+  max-height: min(90vh, 640px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-faint) 45%, transparent) transparent;
   padding: 18px 16px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
@@ -2051,6 +2058,12 @@ body.view-stats .stage {
   -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
 }
+.study-path-gate-card::-webkit-scrollbar { width: 6px; }
+.study-path-gate-card::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-faint) 35%, transparent);
+  border-radius: 999px;
+}
+.study-path-gate-card::-webkit-scrollbar-track { background: transparent; }
 .study-path-gate-title {
   font-family: var(--font-display);
   font-size: 15px; font-weight: 600; margin-bottom: 6px;
