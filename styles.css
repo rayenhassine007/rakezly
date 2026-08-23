@@ -1811,7 +1811,7 @@ body.view-stats .stage {
 .stats-card { padding: 20px 22px 22px; }
 
 .stats-tabs {
-  display: flex; gap: 4px; margin-bottom: 18px;
+  display: flex; gap: 3px; margin-bottom: 18px;
   padding: 4px; border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
@@ -1820,14 +1820,14 @@ body.view-stats .stage {
 .stats-tab {
   position: relative; z-index: 1;
   flex: 1; min-width: 0;
-  padding: 8px 14px; border-radius: 999px;
-  font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 17px; border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 600;
   border: 0; background: transparent;
   color: var(--text-faint); cursor: pointer;
   transition: color .22s var(--ease);
 }
 .stats-tab:hover { color: var(--text); }
-.stats-tab.active { color: var(--accent-ink); }
+.stats-tab.active { background: transparent; color: var(--accent-ink); }
 
 .lb-wrap { position: relative; margin-top: 4px; }
 .lb-lock { min-height: 280px; border-radius: var(--radius-sm); }

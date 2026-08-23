@@ -3065,7 +3065,9 @@ window.Study = (function(){
     renderMini();
     updateStudyPanel();
     updatePathGate();
-    if (window.Stats && Stats.render) Stats.render();
+    if (window.Stats && Stats.renderContent && document.body.classList.contains('view-stats')) {
+      Stats.renderContent();
+    }
   }
 
   function updateStudyPanel(){
@@ -4065,7 +4067,7 @@ window.I18N = (function(){
 
       'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
       'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
-      'goals.hint': 'Touche un objectif pour le cibler — glisse pour réordonner, modifie si besoin.',
+      'goals.hint': 'Touche un objectif pour le cibler — glisse n’importe où sur la ligne pour réordonner.',
       'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
       'goals.complete': 'Objectif atteint : {title}',
       'goals.added': 'Ajouté aux objectifs du jour',
@@ -4717,43 +4719,47 @@ window.Stats = (function(){
   }
 
   function setTab(next){
+    const prev = tab;
     tab = (next === 'board') ? 'board' : 'study';
     try { localStorage.setItem(K_TAB, tab); } catch(e){}
+    updateTabsUI();
     if (tab === 'board'){
       boardPage = 1;
       if (window.Study && Study.loadBoard) Study.loadBoard();
+      else renderContent();
+    } else if (prev !== tab) {
+      renderContent();
     }
-    render();
   }
 
   function setBoardPage(p){
     boardPage = Math.max(1, p);
     clampBoardPage();
-    render();
+    renderContent();
   }
 
   function openLeaderboard(){
-    setTab('board');
+    if (tab !== 'board') setTab('board');
+    else renderContent();
     if (typeof showView === 'function') showView('stats');
   }
 
   function onShow(){
+    updateTabsUI();
     if (tab === 'board' && window.Study && Study.loadBoard) Study.loadBoard();
-    render();
+    else renderContent();
   }
 
-  function tabsBar(){
-    return '<div class="stats-tabs" role="tablist">' +
-      '<span class="tab-indicator" aria-hidden="true"></span>' +
-      '<button type="button" class="stats-tab'+(tab === 'study' ? ' active' : '')+'" role="tab" ' +
-        'aria-selected="'+(tab === 'study')+'" onclick="Stats.setTab(\'study\')">' +
-        esc(t('stats.yours')) +
-      '</button>' +
-      '<button type="button" class="stats-tab'+(tab === 'board' ? ' active' : '')+'" role="tab" ' +
-        'aria-selected="'+(tab === 'board')+'" onclick="Stats.setTab(\'board\')">' +
-        esc(t('stats.leaderboard')) +
-      '</button>' +
-    '</div>';
+  function updateTabsUI(){
+    const tabs = document.querySelector('.stats-tabs');
+    if (!tabs) return;
+    tabs.querySelectorAll('.stats-tab').forEach(function(btn){
+      const key = btn.getAttribute('data-stats-tab');
+      const active = (key === 'board') ? tab === 'board' : tab === 'study';
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    updateTabIndicator(tabs);
   }
 
   function locale(){ return window.I18N && I18N.current() === 'fr' ? 'fr-FR' : 'en-GB'; }
@@ -4854,27 +4860,33 @@ window.Stats = (function(){
 
   function subjectChart(){ return ''; }
 
-  function render(){
+  function renderContent(){
     const host = document.getElementById('statsBody');
     if (!host) return;
     clampBoardPage();
-    let body = tabsBar();
     if (tab === 'study'){
-      body += statTiles() + dailyChart();
+      host.innerHTML = statTiles() + dailyChart();
     } else if (window.Study && Study.renderLeaderboardPage){
-      body += Study.renderLeaderboardPage(boardPage);
+      host.innerHTML = Study.renderLeaderboardPage(boardPage);
+    } else {
+      host.innerHTML = '';
     }
-    host.innerHTML = body;
-    requestAnimationFrame(updateAllTabIndicators);
+  }
+
+  function render(){
+    updateTabsUI();
+    renderContent();
   }
 
   function init(){
     tab = readTab();
-    render();
-    if (window.I18N) I18N.onChange(function(){ render(); });
+    updateTabsUI();
+    renderContent();
+    if (tab === 'board' && window.Study && Study.loadBoard) Study.loadBoard();
+    if (window.I18N) I18N.onChange(function(){ updateTabsUI(); renderContent(); });
   }
 
-  return { init:init, render:render, onShow:onShow, setRange:setRange,
+  return { init:init, render:render, renderContent:renderContent, onShow:onShow, setRange:setRange,
            setTab:setTab, setBoardPage:setBoardPage, openLeaderboard:openLeaderboard,
            streak:streak, daily:daily };
 })();

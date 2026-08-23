@@ -238,6 +238,13 @@
           <h2 class="pane-title" data-i18n="stats.heading">Stats</h2>
         </span>
       </div>
+      <div class="stats-tabs" role="tablist">
+        <span class="tab-indicator" aria-hidden="true"></span>
+        <button type="button" class="stats-tab active" role="tab" data-stats-tab="study"
+                aria-selected="true" onclick="Stats.setTab('study')" data-i18n="stats.yours">Your study</button>
+        <button type="button" class="stats-tab" role="tab" data-stats-tab="board"
+                aria-selected="false" onclick="Stats.setTab('board')" data-i18n="stats.leaderboard">Leaderboard</button>
+      </div>
       <div id="statsBody"></div>
     </div>
   </section>
