@@ -3126,7 +3126,11 @@ window.Study = (function(){
 window.Goals = (function(){
   const K_ITEMS = 'sf_goals', K_DAY = 'sf_goals_day', K_ACTIVE = 'sf_goal_active';
 
-  let items = [], activeId = null;
+  let items = [], activeId = null, editingId = null, reorderDragId = null;
+
+  function sortItems(){
+    items.sort(function(a, b){ return (a.pos || 0) - (b.pos || 0); });
+  }
 
   function toast(m){ if (typeof showToast === 'function') showToast(m); }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
@@ -3161,6 +3165,7 @@ window.Goals = (function(){
       if (dropped > 0) setTimeout(function(){ toast(t('goals.newDay', { n: dropped })); }, 900);
     }
     if (activeId && !items.some(function(g){ return g.id === activeId; })) activeId = null;
+    sortItems();
   }
 
   function save(){
@@ -3226,8 +3231,192 @@ window.Goals = (function(){
     const g = find(id);
     items = items.filter(function(x){ return x.id !== id; });
     if (activeId === id) activeId = null;
+    if (editingId === id) editingId = null;
+    items.forEach(function(x, i){ x.pos = i; });
     save(); render();
     if (g) del(g.id);
+  }
+
+  function startEdit(id){
+    const g = find(id); if (!g) return;
+    editingId = id;
+    render();
+    const inp = document.querySelector('.goal-edit-title');
+    if (inp){ inp.focus(); inp.select(); }
+  }
+
+  function cancelEdit(){
+    editingId = null;
+    render();
+  }
+
+  function saveEdit(id){
+    const g = find(id); if (!g) return;
+    const titleEl = document.querySelector('.goal-edit-title');
+    const estEl = document.querySelector('.goal-edit-est');
+    const title = titleEl ? String(titleEl.value || '').trim().slice(0, 120) : '';
+    const est = Math.max(1, Math.min(20, parseInt(estEl && estEl.value, 10) || 1));
+    if (!title){ toast(t('goals.needTitle')); return; }
+    g.title = title;
+    g.est = est;
+    if (g.progress > g.est) g.progress = g.est;
+    if (!g.done && g.progress >= g.est){
+      g.done = true;
+      if (activeId === id){
+        const next = items.filter(function(x){ return !x.done; })[0];
+        activeId = next ? next.id : null;
+      }
+    } else if (g.done && g.progress < g.est){
+      g.done = false;
+    }
+    g.updated = Date.now();
+    editingId = null;
+    save(); render(); push([g]);
+    toast(t('goals.updated'));
+  }
+
+  function reorderGoals(fromId, toId){
+    if (!fromId || !toId || fromId === toId) return;
+    const fromIdx = items.findIndex(function(g){ return g.id === fromId; });
+    const toIdx = items.findIndex(function(g){ return g.id === toId; });
+    if (fromIdx < 0 || toIdx < 0) return;
+    const moved = items.splice(fromIdx, 1)[0];
+    items.splice(toIdx, 0, moved);
+    items.forEach(function(g, i){
+      g.pos = i;
+      g.updated = Date.now();
+    });
+    save(); render(); push(items);
+  }
+
+  function goalEditBlock(g){
+    return '<div class="goal-edit">' +
+             '<input class="goal-edit-title study-input" type="text" maxlength="120" value="'+esc(g.title)+'" ' +
+               'placeholder="'+esc(t('goals.add'))+'" aria-label="'+esc(t('goals.editTitle'))+'">' +
+             '<div class="goal-edit-row">' +
+               '<label class="goal-edit-est-wrap">' +
+                 '<span class="goal-edit-est-label">'+esc(t('goals.est'))+'</span>' +
+                 '<input class="goal-edit-est" type="number" min="1" max="20" value="'+g.est+'" aria-label="'+esc(t('goals.est'))+'">' +
+               '</label>' +
+               '<button type="button" class="goal-edit-save study-mini-btn" data-goal-action="save" data-goal-id="'+g.id+'">'+esc(t('goals.save'))+'</button>' +
+               '<button type="button" class="goal-edit-cancel study-link" data-goal-action="cancel">'+esc(t('goals.cancel'))+'</button>' +
+             '</div>' +
+           '</div>';
+  }
+
+  function onGoalListClick(e){
+    const btn = e.target.closest('[data-goal-action]');
+    if (btn){
+      e.preventDefault();
+      e.stopPropagation();
+      const action = btn.getAttribute('data-goal-action');
+      const row = btn.closest('.goal-item');
+      const id = btn.getAttribute('data-goal-id') || (row ? row.dataset.goalId : '');
+      if (action === 'toggle' && id) toggle(id);
+      else if (action === 'focus' && id) setActive(id);
+      else if (action === 'remove' && id) remove(id);
+      else if (action === 'edit' && id) startEdit(id);
+      else if (action === 'save' && id) saveEdit(id);
+      else if (action === 'cancel') cancelEdit();
+      return;
+    }
+    const main = e.target.closest('.goal-main');
+    if (main && !editingId){
+      const row = main.closest('.goal-item');
+      if (row && row.dataset.goalId) setActive(row.dataset.goalId);
+    }
+  }
+
+  function onGoalListKeydown(e){
+    if (e.key !== 'Enter') return;
+    const inEdit = e.target.closest('.goal-edit');
+    if (!inEdit) return;
+    e.preventDefault();
+    const row = inEdit.closest('.goal-item');
+    if (row && row.dataset.goalId) saveEdit(row.dataset.goalId);
+  }
+
+  let ptrDrag = null;
+
+  function clearDropTargets(list){
+    if (!list) return;
+    list.querySelectorAll('.goal-item').forEach(function(el){
+      el.classList.remove('goal-drop-target', 'is-dragging');
+      el.style.transform = '';
+      el.style.zIndex = '';
+    });
+  }
+
+  function bindGoalList(){
+    const list = document.getElementById('goalsList');
+    if (!list || list.dataset.bound) return;
+    list.dataset.bound = '1';
+    list.addEventListener('click', onGoalListClick);
+    list.addEventListener('keydown', onGoalListKeydown);
+
+    list.addEventListener('dragstart', function(e){
+      const handle = e.target.closest('.goal-drag');
+      if (!handle) return;
+      const row = handle.closest('.goal-item');
+      if (!row || row.classList.contains('done')){ e.preventDefault(); return; }
+      reorderDragId = row.dataset.goalId;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', reorderDragId); } catch(err){}
+      row.classList.add('is-dragging');
+    });
+    list.addEventListener('dragend', function(){
+      reorderDragId = null;
+      clearDropTargets(list);
+    });
+    list.addEventListener('dragover', function(e){
+      if (!reorderDragId) return;
+      e.preventDefault();
+      const row = e.target.closest('.goal-item');
+      list.querySelectorAll('.goal-item').forEach(function(el){
+        el.classList.toggle('goal-drop-target', !!(row && el === row && el.dataset.goalId !== reorderDragId));
+      });
+    });
+    list.addEventListener('drop', function(e){
+      e.preventDefault();
+      const row = e.target.closest('.goal-item');
+      if (row && reorderDragId && row.dataset.goalId !== reorderDragId){
+        reorderGoals(reorderDragId, row.dataset.goalId);
+      }
+      reorderDragId = null;
+      clearDropTargets(list);
+    });
+
+    list.addEventListener('pointerdown', function(e){
+      const handle = e.target.closest('.goal-drag');
+      if (!handle || e.button !== 0) return;
+      const row = handle.closest('.goal-item');
+      if (!row || row.classList.contains('done')) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      ptrDrag = { id: row.dataset.goalId, row: row, list: list, startY: e.clientY, overId: null };
+      row.classList.add('is-dragging');
+    });
+    list.addEventListener('pointermove', function(e){
+      if (!ptrDrag) return;
+      const dy = e.clientY - ptrDrag.startY;
+      ptrDrag.row.style.transform = 'translateY(' + dy + 'px)';
+      ptrDrag.row.style.zIndex = '3';
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const target = el && el.closest('.goal-item');
+      ptrDrag.list.querySelectorAll('.goal-item').forEach(function(item){
+        item.classList.toggle('goal-drop-target',
+          !!(target && item === target && item.dataset.goalId !== ptrDrag.id));
+      });
+      ptrDrag.overId = (target && target.dataset.goalId !== ptrDrag.id) ? target.dataset.goalId : null;
+    });
+    function endPtrDrag(){
+      if (!ptrDrag) return;
+      if (ptrDrag.overId) reorderGoals(ptrDrag.id, ptrDrag.overId);
+      clearDropTargets(ptrDrag.list);
+      ptrDrag = null;
+    }
+    list.addEventListener('pointerup', endPtrDrag);
+    list.addEventListener('pointercancel', endPtrDrag);
   }
 
   // Which goal should receive the next finished pomodoro?
@@ -3325,19 +3514,32 @@ window.Goals = (function(){
       } else {
         list.innerHTML = items.map(function(g){
           const isActive = (g.id === activeId);
+          const isEditing = (g.id === editingId);
           const dots = Array.from({length: Math.min(g.est, 8)}, function(_, i){
             return '<span class="goal-dot'+(i < g.progress ? ' filled' : '')+'"></span>';
           }).join('');
-          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+'">' +
-                   '<button class="goal-check" onclick="Goals.toggle(\''+g.id+'\')" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
-                   '<div class="goal-main" onclick="Goals.setActive(\''+g.id+'\')" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
-                     '<div class="goal-title">'+esc(g.title)+'</div>' +
-                     '<div class="goal-meta">' +
-                       '<span class="goal-dots">'+dots+'</span>' +
-                       '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
-                     '</div>' +
-                   '</div>' +
-                   '<button class="goal-del" onclick="Goals.remove(\''+g.id+'\')" title="remove">×</button>' +
+          const mainBlock = isEditing ? goalEditBlock(g) :
+            ('<div class="goal-main" data-goal-action="focus" data-goal-id="'+g.id+'" title="'+(isActive?'focusing on this':'click to focus this goal')+'">' +
+               '<div class="goal-title">'+esc(g.title)+'</div>' +
+               '<div class="goal-meta">' +
+                 '<span class="goal-dots">'+dots+'</span>' +
+                 '<span class="goal-prog">'+Math.min(g.progress, g.est)+'/'+g.est+'</span>' +
+               '</div>' +
+             '</div>');
+          return '<div class="goal-item'+(g.done?' done':'')+(isActive?' active':'')+(isEditing?' editing':'')+'" data-goal-id="'+g.id+'">' +
+                   '<button type="button" class="goal-drag" draggable="true" data-goal-id="'+g.id+'" ' +
+                     'aria-label="'+esc(t('goals.drag'))+'" title="'+esc(t('goals.drag'))+'">' +
+                     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h2M9 12h2M9 18h2M13 6h2M13 12h2M13 18h2"/></svg>' +
+                   '</button>' +
+                   '<button type="button" class="goal-check" data-goal-action="toggle" data-goal-id="'+g.id+'" title="'+(g.done?'reopen':'mark done')+'">'+(g.done?'✓':'')+'</button>' +
+                   mainBlock +
+                   (!isEditing
+                     ? ('<button type="button" class="goal-edit-btn" data-goal-action="edit" data-goal-id="'+g.id+'" ' +
+                          'aria-label="'+esc(t('goals.edit'))+'" title="'+esc(t('goals.edit'))+'">' +
+                          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 000-2.12l-2.38-2.38a1.5 1.5 0 00-2.12 0L4 15.5V20z"/><path d="M13.5 6.5l2 2"/></svg>' +
+                        '</button>' +
+                        '<button type="button" class="goal-del" data-goal-action="remove" data-goal-id="'+g.id+'" title="remove">×</button>')
+                     : '') +
                  '</div>';
         }).join('');
       }
@@ -3373,10 +3575,12 @@ window.Goals = (function(){
     });
 
     if (window.Auth) window.Auth.onChange(function(u){ if (u) pull(); });
+    bindGoalList();
   }
 
   return { init:init, add:add, addFromInput:addFromInput, toggle:toggle, setActive:setActive,
            remove:remove, onPomodoro:onPomodoro, goalForSession:goalForSession,
+           startEdit:startEdit, saveEdit:saveEdit, cancelEdit:cancelEdit, reorderGoals:reorderGoals,
            active:active, pull:pull, render:render };
 })();
 
@@ -3572,11 +3776,14 @@ window.I18N = (function(){
 
       'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
       'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
-      'goals.hint': 'Tap a goal to focus it — finished sessions count toward it.',
+      'goals.hint': 'Tap a goal to focus it — drag to reorder, edit to fix mistakes.',
       'goals.empty': 'Nothing yet — add what you want to finish today',
       'goals.complete': 'Goal complete: {title}',
       'goals.added': "Added to today's goals",
       'goals.newDay': 'New day — {n} goal(s) cleared',
+      'goals.edit': 'Edit goal', 'goals.save': 'Save', 'goals.cancel': 'Cancel',
+      'goals.drag': 'Drag to reorder', 'goals.editTitle': 'Goal name',
+      'goals.updated': 'Goal updated', 'goals.needTitle': 'Give the goal a name',
 
       'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
@@ -3732,11 +3939,14 @@ window.I18N = (function(){
 
       'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
       'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
-      'goals.hint': 'Touche un objectif pour le cibler — les sessions terminées y sont comptées.',
+      'goals.hint': 'Touche un objectif pour le cibler — glisse pour réordonner, modifie si besoin.',
       'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
       'goals.complete': 'Objectif atteint : {title}',
       'goals.added': 'Ajouté aux objectifs du jour',
       'goals.newDay': 'Nouveau jour — {n} objectif(s) effacé(s)',
+      'goals.edit': 'Modifier', 'goals.save': 'Enregistrer', 'goals.cancel': 'Annuler',
+      'goals.drag': 'Glisser pour réordonner', 'goals.editTitle': 'Nom de l’objectif',
+      'goals.updated': 'Objectif mis à jour', 'goals.needTitle': 'Donne un nom à l’objectif',
 
       'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
@@ -4158,7 +4368,6 @@ function updateAllTabIndicators(){
 }
 
 function animateModeSwitch(){
-  if (typeof prefersReducedMotion === 'function' && prefersReducedMotion()) return;
   const chronoOn = window.Chrono && Chrono.isActive && Chrono.isActive();
   const el = chronoOn
     ? document.getElementById('chronoDisplay')
@@ -4170,6 +4379,7 @@ function animateModeSwitch(){
 }
 
 function showView(name){
+  const stage = document.querySelector('.stage');
   const apply = function(){
     document.body.classList.toggle('view-planner', name === 'planner');
     document.body.classList.toggle('view-stats', name === 'stats');
@@ -4181,9 +4391,19 @@ function showView(name){
     window.scrollTo(0, 0);
     updateAllTabIndicators();
   };
-  if (typeof prefersReducedMotion === 'function' && !prefersReducedMotion() &&
-      typeof document.startViewTransition === 'function'){
+  if (typeof document.startViewTransition === 'function'){
     document.startViewTransition(apply);
+  } else if (stage){
+    stage.classList.add('view-switch-out');
+    setTimeout(function(){
+      apply();
+      stage.classList.remove('view-switch-out');
+      stage.classList.add('view-switch-in');
+      stage.addEventListener('animationend', function done(){
+        stage.classList.remove('view-switch-in');
+        stage.removeEventListener('animationend', done);
+      });
+    }, 180);
   } else apply();
 }
 
@@ -4192,15 +4412,11 @@ function showView(name){
 
 
 // ── CELEBRATION & MICRO-INTERACTIONS ──────────────────────────
-// Small, meaningful feedback: a burst when a goal is finished, a pop when a
-// tracked number changes. Both no-op under prefers-reduced-motion so the
-// calm setting stays genuinely calm.
 function prefersReducedMotion(){
-  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return false;
 }
 
 function burstConfetti(origin){
-  if (prefersReducedMotion()) return;
   const styles = getComputedStyle(document.body);
   const colours = ['--accent', '--break', '--long']
     .map(v => styles.getPropertyValue(v).trim())
@@ -4234,7 +4450,7 @@ function burstConfetti(origin){
 
 // Re-triggers the CSS animation by forcing a reflow between class removals.
 function bump(el){
-  if (!el || prefersReducedMotion()) return;
+  if (!el) return;
   el.classList.remove('bump');
   void el.offsetWidth;
   el.classList.add('bump');

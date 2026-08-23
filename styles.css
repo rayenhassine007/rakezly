@@ -497,16 +497,36 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .goals-empty { font-size: 12px; color: var(--text-faint); line-height: 1.6; padding: 2px 0 6px; }
 
 .goal-item {
-  display: flex; align-items: flex-start; gap: 10px;
+  display: flex; align-items: flex-start; gap: 8px;
   padding: 8px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  transition: background .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease);
+  transition: background .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease), transform .18s var(--ease);
 }
 .goal-item:hover  { background: var(--surface-2); }
 .goal-item.active { border-color: var(--accent-soft); background: var(--accent-soft); }
 .goal-item.done   { opacity: .42; }
 .goal-item.done .goal-title { text-decoration: line-through; }
+.goal-item.is-dragging { opacity: .72; }
+.goal-item.goal-drop-target {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.goal-item.editing { align-items: stretch; }
+
+.goal-drag {
+  flex: none; width: 18px; height: 22px; margin-top: 1px; padding: 0;
+  color: var(--text-faint); cursor: grab; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .18s var(--ease), color .18s var(--ease);
+}
+.goal-drag svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round;
+}
+.goal-item:hover .goal-drag, .goal-item.is-dragging .goal-drag { opacity: 1; }
+.goal-item.done .goal-drag { display: none; }
+.goal-drag:active { cursor: grabbing; color: var(--accent); }
 
 .goal-check {
   flex: none; width: 17px; height: 17px; margin-top: 2px;
@@ -530,11 +550,42 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .goal-dot.filled { background: var(--accent); }
 .goal-prog { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
+.goal-edit-btn {
+  flex: none; width: 22px; height: 22px; padding: 4px;
+  color: var(--text-faint); opacity: 0;
+  transition: all .18s var(--ease);
+}
+.goal-edit-btn svg {
+  width: 100%; height: 100%; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.goal-item:hover .goal-edit-btn, .goal-item.editing .goal-edit-btn { opacity: 1; }
+.goal-edit-btn:hover { color: var(--accent); }
+.goal-item.done .goal-edit-btn { display: none; }
+
+.goal-edit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.goal-edit-title { width: 100%; padding: 8px 10px; font-size: 13px; }
+.goal-edit-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.goal-edit-est-wrap {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-faint);
+}
+.goal-edit-est {
+  width: 46px; padding: 6px 4px; text-align: center;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 13px;
+}
+.goal-edit-save { width: auto; padding: 6px 12px; font-size: 11.5px; }
+.goal-edit-cancel { font-size: 11.5px; padding: 4px 2px; }
+
 .goal-del {
   flex: none; color: var(--text-faint); font-size: 16px; line-height: 1;
   padding: 0 2px; opacity: 0; transition: all .18s var(--ease);
 }
 .goal-item:hover .goal-del { opacity: 1; }
+.goal-item.editing .goal-del { display: none; }
 .goal-del:hover { color: var(--danger); }
 
 .goal-add-row { display: flex; gap: 6px; margin-top: 12px; }
@@ -1209,14 +1260,6 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   .player-panel { width: 100%; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-}
-
 
 /* ══════════════════════════════════════════════════════════════
    18  VIEW SWITCH, LANGUAGE, PLANNER
@@ -1256,18 +1299,12 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .mode-switch .tab-indicator { background: var(--accent); }
 .mode-tabs .tab-indicator { background: var(--accent-soft); }
 
-@media (prefers-reduced-motion: reduce) {
-  .tab-indicator { transition: none; }
-}
-
 /* View switch: crossfade the stage when changing Focus / Planner / Stats. */
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root) {
-    animation: viewExit .24s var(--ease) both;
-  }
-  ::view-transition-new(root) {
-    animation: viewEnter .34s var(--ease) both;
-  }
+::view-transition-old(root) {
+  animation: viewExit .24s var(--ease) both;
+}
+::view-transition-new(root) {
+  animation: viewEnter .34s var(--ease) both;
 }
 @keyframes viewExit {
   to { opacity: 0; transform: translateY(-8px) scale(.992); }
@@ -1286,9 +1323,14 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
 .chrono-display.mode-switch-bump {
   animation: modeSwitchBump .32s var(--ease);
 }
-@media (prefers-reduced-motion: reduce) {
-  .timer-display.mode-switch-bump,
-  .chrono-display.mode-switch-bump { animation: none; }
+
+.stage.view-switch-out {
+  opacity: 0;
+  transform: translateY(-8px) scale(.992);
+  transition: opacity .24s var(--ease), transform .24s var(--ease);
+}
+.stage.view-switch-in {
+  animation: viewEnter .34s var(--ease) both;
 }
 
 /* Only one view is on screen at a time. */
