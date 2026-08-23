@@ -209,7 +209,10 @@ function toggleBgPanel() {
   document.getElementById('bgPanel').classList.toggle('open', bgPanelOpen);
   document.querySelector('.btn-bg-toggle').classList.toggle('active', bgPanelOpen);
   if (bgPanelOpen) updateRemoveDefaultBtnVisibility();
-  // close theme panel
+  // close settings panel
+  settingsPanelOpen = false;
+  document.getElementById('settingsSlidePanel').classList.remove('open');
+  document.getElementById('settingsFixedBtn').classList.remove('active');
   document.getElementById('themePanel').classList.remove('open');
   document.getElementById('themeFixedBtn').classList.remove('active');
   // close player panel
@@ -647,6 +650,8 @@ function togglePlayerPanel() {
   const btn   = document.getElementById('playerFixedBtn');
   const isOpen = panel.classList.contains('open');
   document.getElementById('bgPanel').classList.remove('open');
+  bgPanelOpen = false;
+  settingsPanelOpen = false;
   document.getElementById('settingsSlidePanel').classList.remove('open');
   document.getElementById('themePanel').classList.remove('open');
   document.getElementById('settingsFixedBtn').classList.remove('active');
@@ -1375,6 +1380,8 @@ function toggleThemePanel() {
   const btn = document.getElementById('themeFixedBtn');
   const isOpen = panel.classList.contains('open');
   document.getElementById('bgPanel').classList.remove('open');
+  bgPanelOpen = false;
+  settingsPanelOpen = false;
   document.getElementById('settingsSlidePanel').classList.remove('open');
   document.getElementById('settingsFixedBtn').classList.remove('active');
   document.querySelector('.btn-bg-toggle').classList.remove('active');
@@ -4282,7 +4289,8 @@ document.addEventListener('click', function(e){
   clickOrigin = (el && el.closest) ? {
     inPanel: !!(el.closest('.popover') || el.closest('.study-path-gate')),
     onDock:  !!el.closest('.dock-btn'),
-    onLang:  !!el.closest('.lang-toggle')
+    onLang:  !!el.closest('.lang-toggle'),
+    opensPanel: !!el.closest('.study-mini-btn')
   } : null;
 }, true);
 
@@ -4290,7 +4298,7 @@ document.addEventListener('click', function(){
   // Inside a popover, or on the control that opens one — those manage
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
-  if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang)) return;
+  if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang || clickOrigin.opensPanel)) return;
   closeAllPanels();
 });
 

@@ -1568,8 +1568,6 @@ body.view-planner .stage {
     box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.34);
   }
   .dock-btn { width: 40px; height: 40px; padding: 9px; }
-  /* Language lives in Settings on phones — no room for it here. */
-  .dock .lang-toggle { display: none; }
 
   /* Keep the last card clear of the bottom bar. */
   .stage { padding-bottom: 84px; }
