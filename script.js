@@ -2478,12 +2478,12 @@ window.Auth = (function(){
 
   async function rename(newName){
     const cl = window.SB.get();
-    if (!cl || !user) return { ok:false, msg:'Not signed in' };
+    if (!cl || !user || !user.id) return { ok:false, msg:'Not signed in' };
     const n = String(newName || '').trim();
     if (n.length < 2 || n.length > 24) return { ok:false, msg:'Name must be 2–24 characters' };
     const r = await cl.from('profiles').update({ display_name: n }).eq('id', user.id);
     if (r.error) return { ok:false, msg:r.error.message };
-    profile = profile || {}; profile.display_name = n;
+    profile = profile || {}; profile.display_name = n; profile.id = user.id;
     emit();
     return { ok:true, msg:'Name updated' };
   }
@@ -2500,8 +2500,9 @@ window.Auth = (function(){
     try { localStorage.setItem('sf_study_path', JSON.stringify(path)); } catch(e){}
     profile = profile || {};
     profile.study_path = path;
+    if (user && user.id) profile.id = user.id;
     const cl = window.SB.get();
-    if (!cl || !user) return { ok:true, msg:'Saved locally' };
+    if (!cl || !user || !user.id) return { ok:true, msg:'Saved locally' };
     const r = await cl.from('profiles').update({ study_path: path }).eq('id', user.id);
     if (r.error) {
       if (isMissingStudyPathColumn(r.error)) {

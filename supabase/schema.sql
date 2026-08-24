@@ -11,6 +11,8 @@
 --     individual sessions just to build a ranking.
 --   * "This week" means the current ISO week (starts Monday), so the board
 --     resets every Monday and newcomers always have a reachable target.
+--   * App queries also filter by auth.uid() / user_id before using rows
+--     (defense in depth on top of these policies).
 -- ============================================================================
 
 
