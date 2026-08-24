@@ -2356,6 +2356,9 @@ window.Auth = (function(){
   function emit(){ listeners.forEach(function(f){ try { f(user); } catch(e){ console.warn('auth listener', e); } }); }
 
   function signedIn(){ return !!user; }
+  // True only when the signed-in account matches this id — used before
+  // accepting any profile/session/goal row from Supabase.
+  function owns(id){ return !!(user && id && user.id === id); }
   function id(){ return user ? user.id : null; }
   function name(){
     if (profile && profile.display_name) return profile.display_name;
@@ -2382,11 +2385,18 @@ window.Auth = (function(){
     const cl = window.SB.get();
     if (!cl || !user){ profile = null; return; }
     try {
-      let r = await cl.from('profiles').select('display_name, study_path').eq('id', user.id).maybeSingle();
+      let r = await cl.from('profiles').select('id, display_name, study_path').eq('id', user.id).maybeSingle();
       if (r.error && isMissingStudyPathColumn(r.error)) {
-        r = await cl.from('profiles').select('display_name').eq('id', user.id).maybeSingle();
+        r = await cl.from('profiles').select('id, display_name').eq('id', user.id).maybeSingle();
       }
       if (r.error) throw r.error;
+      // Never keep a row that is not this account's (RLS should already
+      // enforce this; the check is defense in depth before UI use).
+      if (r.data && r.data.id && r.data.id !== user.id){
+        console.warn('profile load: rejected non-owned row');
+        profile = null;
+        return;
+      }
       profile = r.data || null;
       if (profile && profile.study_path) {
         try { localStorage.setItem('sf_study_path', JSON.stringify(profile.study_path)); } catch(e){}
@@ -2507,7 +2517,7 @@ window.Auth = (function(){
     return { ok:true, msg:'Study path saved' };
   }
 
-  return { init:init, onChange:onChange, signedIn:signedIn, id:id, name:name,
+  return { init:init, onChange:onChange, signedIn:signedIn, id:id, owns:owns, name:name,
            studyPathRaw:studyPathRaw, saveStudyPath:saveStudyPath,
            google:google, signUp:signUp, signIn:signIn, signOut:signOut, rename:rename };
 })();
@@ -2887,15 +2897,18 @@ window.Study = (function(){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
     const uid = window.Auth.id();
+    if (!uid) return;
     const cutoff = Date.now() - SYNC_WINDOW_DAYS*86400000;
     const l = log();
     const pending = l.filter(function(e){ return e.u && e.t >= cutoff; });
     if (!pending.length) return;
 
+    // Always stamp the signed-in user — never trust a client-supplied owner.
     const rows = pending.map(function(e){
       return { id: e.i, user_id: uid, subject: SESSION_SUBJECT, preset: true,
                minutes: e.m, started_at: new Date(e.t).toISOString() };
-    });
+    }).filter(function(row){ return row.user_id === uid; });
+    if (!rows.length) return;
     try {
       const r = await cl.from('study_sessions').upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
       if (r.error){ console.warn('study flush', r.error); return; }
@@ -3622,7 +3635,9 @@ window.Goals = (function(){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
     const uid = window.Auth.id();
-    const rows = (subset || items).map(function(g){ return row(g, uid); });
+    if (!uid) return;
+    const rows = (subset || items).map(function(g){ return row(g, uid); })
+      .filter(function(r){ return r.user_id === uid; });
     if (!rows.length) return;
     try {
       const r = await cl.from('goals').upsert(rows, { onConflict: 'id' });
@@ -3633,17 +3648,26 @@ window.Goals = (function(){
   async function del(id){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
-    try { await cl.from('goals').delete().eq('id', id); } catch(e){ console.warn('goals delete', e); }
+    const uid = window.Auth.id();
+    if (!uid || !id) return;
+    try {
+      await cl.from('goals').delete().eq('id', id).eq('user_id', uid);
+    } catch(e){ console.warn('goals delete', e); }
   }
 
   // On sign-in: merge today's remote goals in, newest edit wins, then push back.
   async function pull(){
     const cl = window.SB.get();
     if (!cl || !window.Auth || !window.Auth.signedIn()) return;
+    const uid = window.Auth.id();
+    if (!uid) return;
     try {
-      const r = await cl.from('goals').select('*').eq('day', today());
+      // Scope by owner first — RLS is the real gate; this stops accidental
+      // use of another account's rows if a policy were ever misconfigured.
+      const r = await cl.from('goals').select('*').eq('user_id', uid).eq('day', today());
       if (r.error){ console.warn('goals pull', r.error); return; }
       (r.data || []).forEach(function(rr){
+        if (rr.user_id && rr.user_id !== uid) return;
         const local = find(rr.id);
         const remote = { id: rr.id, day: rr.day, title: rr.title, subject: rr.subject,
                          est: rr.est_pomos, progress: rr.done_pomos, done: rr.done,
