@@ -3985,6 +3985,8 @@ window.I18N = (function(){
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
       'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
+      'dock.study': 'Sign in', 'dock.room': 'Room', 'dock.player': 'Music',
+      'dock.theme': 'Theme', 'dock.settings': 'Settings', 'dock.fullscreen': 'Full',
 
       'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
       'timer.chronoTip': "Study stopwatch: counts up instead of down",
@@ -4155,6 +4157,8 @@ window.I18N = (function(){
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
       'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',
+      'dock.study': 'Connexion', 'dock.room': 'Salle', 'dock.player': 'Musique',
+      'dock.theme': 'Thème', 'dock.settings': 'Réglages', 'dock.fullscreen': 'Plein',
 
       'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
       'timer.chronoTip': "Chronomètre d'étude: compte à l'endroit",
