@@ -103,7 +103,7 @@ function forceVideoResume() {
   if (!video || !video.src) return;
   setTimeout(() => {
     video.play().catch(() => {});
-    // Check 1s later if timeupdate has fired — if not, video is truly stuck
+    // Check 1s later if timeupdate has fired. if not, video is truly stuck
     setTimeout(() => {
       if (Date.now() - _lastTimeUpdate > 950) {
         video.load(); video.play().catch(() => {});
@@ -183,7 +183,7 @@ function updateBgBadge(theme) {
   if (badge) badge.textContent = (names[theme] || 'This') + ' background';
 }
 
-// Cache Object URLs per theme — avoids recreating them on every switch
+// Cache Object URLs per theme. avoids recreating them on every switch
 // so iframes/videos are never torn down and reloaded unnecessarily
 const _urlCache = {}; // theme -> { url, isHTML, isVideo, name }
 
@@ -217,7 +217,7 @@ function applyBgFromRecord(rec, theme) {
 
   const entry = getOrCreateURL(theme || currentTheme, rec);
 
-  // Only update if the src actually changed — prevents iframe reload
+  // Only update if the src actually changed. prevents iframe reload
   if (entry.isHTML) {
     video.classList.remove('ready'); video.src = ''; video.style.display = 'none';
     document.body.style.backgroundImage = '';
@@ -537,7 +537,7 @@ function updateDisplay(){
   const m=Math.floor(remainSecs/60),s=remainSecs%60;
   document.getElementById('tMins').textContent=m.toString().padStart(2,'0');
   document.getElementById('tSecs').textContent=s.toString().padStart(2,'0');
-  document.title=`${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')} — rakezly`;
+  document.title=`${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')} · rakezly`;
 }
 function updateBar(){
   const pct = (remainSecs/totalSecs*100);
@@ -590,7 +590,7 @@ function skipSession(){
   stopTimer();
   if(mode==='work'){
     // Credit the minutes actually focused before skipping. Goal progress is
-    // deliberately not ticked — a partial session isn't a finished pomodoro.
+    // deliberately not ticked. a partial session isn't a finished pomodoro.
     const minsPassed = Math.floor((totalSecs - remainSecs) / 60);
     if(minsPassed >= 1 && window.Study) Study.logSession(minsPassed);
   }
@@ -643,7 +643,7 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 // ── MUSIC PLAYER PANEL ──────────────────────────────────────
 // Shared rooms sync YouTube only (reliable play/pause/seek).
 // Spotify / SoundCloud still work alone, as simple local embeds.
-// Mute is always local — it never leaves this browser.
+// Mute is always local. it never leaves this browser.
 let currentPlayerRaw = '';
 let currentPlayerSrc = null;
 let playerApplyingRemote = false;
@@ -698,7 +698,7 @@ function togglePlayerPanel() {
   syncPlayerRoomMode();
 }
 
-// Only push music on explicit user actions — never from embed state
+// Only push music on explicit user actions. never from embed state
 // events (those caused sync loops that froze Clear / controls).
 function notifyMusicLocal(){
   if (playerApplyingRemote || !inSharedRoom()) return;
@@ -718,7 +718,7 @@ function guardMusicControl(){
 }
 
 // YT.Player replaces the <iframe> node. Always tear it down and ensure a
-// fresh iframe exists before loading another source — otherwise Clear and
+// fresh iframe exists before loading another source. otherwise Clear and
 // Spotify/SoundCloud loads silently break.
 function ensurePlayerIframe(){
   const wrap = document.getElementById('playerEmbedWrap');
@@ -759,7 +759,7 @@ function loadPlayerUrl(opt) {
   const embedUrl = resolvePlayerEmbed(raw);
   if (!embedUrl) { if (!fromRemote) showToast('That link is not supported'); return; }
 
-  // Shared rooms: YouTube only — Spotify/SoundCloud embeds can't be synced
+  // Shared rooms: YouTube only. Spotify/SoundCloud embeds can't be synced
   // reliably and were breaking Clear / controls.
   if (inSharedRoom() && embedUrl.src !== 'youtube') {
     if (!fromRemote) {
@@ -801,7 +801,7 @@ function loadPlayerUrl(opt) {
     iframe.src = embedUrl.url;
     initSCWidget({ seekSec: knownPositionSec, playing: opts.playing });
   } else if (embedUrl.src === 'spotify') {
-    // Local-only embed — no IFrame API (it fought the DOM and froze the panel).
+    // Local-only embed. no IFrame API (it fought the DOM and froze the panel).
     controls.classList.remove('visible');
     iframe.src = embedUrl.url;
   }
@@ -1143,7 +1143,7 @@ function toggleLocalMute(){
 }
 function isLocalMuted(){ return localMusicMuted; }
 
-// ── MUSIC SNAPSHOT (for room sync — YouTube only) ──────────
+// ── MUSIC SNAPSHOT (for room sync. YouTube only) ──────────
 function getMusicSnapshot(){
   const src = getActiveSrc();
   let playing = false;
@@ -1283,16 +1283,16 @@ function init(){
 }
 
 const QUOTES = [
-  {t:"The secret of getting ahead is getting started.", a:"— Mark Twain"},
-  {t:"Focus on being productive instead of busy.", a:"— Tim Ferriss"},
-  {t:"You don't have to be great to start, but you have to start to be great.", a:"— Zig Ziglar"},
-  {t:"It's not that I'm so smart, it's just that I stay with problems longer.", a:"— Albert Einstein"},
-  {t:"Done is better than perfect.", a:"— Sheryl Sandberg"},
-  {t:"The way to get started is to quit talking and begin doing.", a:"— Walt Disney"},
-  {t:"Energy and persistence conquer all things.", a:"— Benjamin Franklin"},
-  {t:"Concentration is the root of all the higher abilities in man.", a:"— Bruce Lee"},
-  {t:"One hour of focused work is worth more than a day of distraction.", a:"— Anonymous"},
-  {t:"Small steps every day lead to giant leaps over time.", a:"— Anonymous"},
+  {t:"The secret of getting ahead is getting started.", a:"Mark Twain"},
+  {t:"Focus on being productive instead of busy.", a:"Tim Ferriss"},
+  {t:"You don't have to be great to start, but you have to start to be great.", a:"Zig Ziglar"},
+  {t:"It's not that I'm so smart, it's just that I stay with problems longer.", a:"Albert Einstein"},
+  {t:"Done is better than perfect.", a:"Sheryl Sandberg"},
+  {t:"The way to get started is to quit talking and begin doing.", a:"Walt Disney"},
+  {t:"Energy and persistence conquer all things.", a:"Benjamin Franklin"},
+  {t:"Concentration is the root of all the higher abilities in man.", a:"Bruce Lee"},
+  {t:"One hour of focused work is worth more than a day of distraction.", a:"Anonymous"},
+  {t:"Small steps every day lead to giant leaps over time.", a:"Anonymous"},
 ];
 let quoteIndex = -1;
 let quoteTimer = null;
@@ -1338,7 +1338,7 @@ const THEME_DEFAULT_BG = {
 };
 
 // Lofi is the default: it carries the cosy study-room look best.
-// 'cyber' and 'edo-gold' were retired — migrate anyone still stored on them.
+// 'cyber' and 'edo-gold' were retired. migrate anyone still stored on them.
 const RETIRED_THEMES = ['cyber', 'edo-gold'];
 let currentTheme = localStorage.getItem('sf_theme') || 'lofi';
 if (RETIRED_THEMES.indexOf(currentTheme) !== -1) {
@@ -1360,7 +1360,7 @@ async function applyTheme(t) {
   // Load user's saved background for this theme
   const rec = await loadBgForTheme(t);
   if (rec) {
-    // User has a custom bg — use it
+    // User has a custom bg. use it
     applyBgFromRecord(rec, t);
   } else {
     // Check if user removed the default bg for this theme
@@ -1401,7 +1401,7 @@ function applyDefaultThemeBg(t) {
   video.onerror = () => {
     video.classList.remove('ready');
     console.warn('Theme background video failed to load:', url,
-                 '— falling back to the theme gradient.');
+                 ' falling back to the theme gradient.');
   };
   document.getElementById('uploadText').textContent = 'Upload a video, image or HTML';
   document.getElementById('mediaUpload').value = '';
@@ -1586,7 +1586,7 @@ scheduleClock();
 // snapshot; receivers apply it (guarded against re-broadcast loops).
 // Fully non-blocking: if Supabase is unavailable, the timer keeps working.
 // ── SHARED SUPABASE CLIENT ────────────────────────────────────
-// One client for realtime rooms, auth, study sessions and goals — creating
+// One client for realtime rooms, auth, study sessions and goals. creating
 // several would give each its own auth/realtime state.
 window.SB = (function(){
   const SB_URL = 'https://kucqirnkgrtebmowzwlw.supabase.co';
@@ -1612,7 +1612,7 @@ window.SB = (function(){
     return client;
   }
 
-  // The Supabase CDN script is async — run cb once the library shows up.
+  // The Supabase CDN script is async. run cb once the library shows up.
   function ready(cb){
     let tries = 0;
     (function wait(){
@@ -1679,7 +1679,7 @@ window.Room = (function(){
     return displayName().length < 2;
   }
   function saveNameFromInput(){
-    // Guests only — signed-in users keep their Auth display name.
+    // Guests only. signed-in users keep their Auth display name.
     if (window.Auth && window.Auth.signedIn()) return displayName();
     const el = document.getElementById('roomNameInput');
     if (!el) return displayName();
@@ -1842,7 +1842,7 @@ window.Room = (function(){
     if (!people.length) return null;
     if (missingHostId){
       const idx = people.findIndex(function(p){ return p.id === missingHostId; });
-      // Host not in list — pick earliest joiner overall.
+      // Host not in list. pick earliest joiner overall.
       if (idx < 0) return people[0].id;
     }
     return people[0].id;
@@ -1865,7 +1865,7 @@ window.Room = (function(){
       return;
     }
 
-    // Still the token holder and reconnecting — reclaim immediately.
+    // Still the token holder and reconnecting. reclaim immediately.
     if (code && iOwnHostToken(code)) {
       hostMissingSince = null;
       claimHost({ permanent: true, openLocks: false, rotateToken: false });
@@ -2082,7 +2082,7 @@ window.Room = (function(){
     }
 
     stashPersonal();
-    // Shared rooms only sync YouTube — drop Spotify/SoundCloud embeds on entry.
+    // Shared rooms only sync YouTube. drop Spotify/SoundCloud embeds on entry.
     if (typeof currentPlayerSrc !== 'undefined' && currentPlayerSrc && currentPlayerSrc !== 'youtube') {
       if (typeof clearPlayer === 'function') clearPlayer({ fromRemote: true });
     }
@@ -2346,7 +2346,7 @@ window.Room = (function(){
 
 // ── AUTH ──────────────────────────────────────────────────────
 // Signing in is optional. Guests keep the full pomodoro + goals + local
-// study log, and can read the leaderboard — they just can't appear on it.
+// study log, and can read the leaderboard. they just can't appear on it.
 window.Auth = (function(){
   let user = null, profile = null, settled = false;
   const listeners = [];
@@ -2403,7 +2403,7 @@ window.Auth = (function(){
     if (user) await loadProfile(); else profile = null;
     settled = true;
     emit();
-    // Newly signed in — push everything that was captured as a guest.
+    // Newly signed in. push everything that was captured as a guest.
     if (user && user.id !== before){
       if (window.Study) window.Study.flush();
       if (window.Goals) window.Goals.pull();
@@ -2463,7 +2463,7 @@ window.Auth = (function(){
     const cl = window.SB.get();
     if (!cl) return;
     await cl.auth.signOut();
-    toast('Signed out — your study time stays on this device');
+    toast('Signed out. Your study time stays on this device');
   }
 
   async function rename(newName){
@@ -2520,7 +2520,7 @@ window.Study = (function(){
   const MAX_LOG_DAYS = 120;
   const SYNC_WINDOW_DAYS = 14;
 
-  // Tunisian lycée + prépa study paths (profile metadata — not used to split the board).
+  // Tunisian lycée + prépa study paths (profile metadata. not used to split the board).
   const HS_GRADES = {
     '1': null,
     '2': ['Lettres', 'Économie et gestion', 'Informatique', 'Sciences'],
@@ -2532,7 +2532,7 @@ window.Study = (function(){
 
   function normalizePath(p){
     if (!p || p.level !== 'college') return p;
-    // Legacy: licence lived under prepa integ — lift it to its own college path.
+    // Legacy: licence lived under prepa integ. lift it to its own college path.
     if (p.collegeKind === 'prepa_integ' && p.collegeTrack === 'license') {
       return { level: 'college', collegeKind: 'license', licenseName: p.licenseName || '' };
     }
@@ -2907,7 +2907,7 @@ window.Study = (function(){
     } catch(e){ console.warn('study flush', e); }
   }
 
-  // ── leaderboard (total study time this week — no subject filter) ──
+  // ── leaderboard (total study time this week. no subject filter) ──
   async function loadBoard(){
     if (!window.Auth || !window.Auth.signedIn()){
       board = []; standing = null; boardLoading = false; boardErr = '';
@@ -2926,7 +2926,7 @@ window.Study = (function(){
       if (!s.error && s.data && s.data.length) standing = s.data[0];
     } catch(e){
       board = []; boardErr = (e && e.message) ? e.message : t('study.unavailable');
-      console.warn('Leaderboard failed — see supabase/SETUP.md:', e);
+      console.warn('Leaderboard failed - see supabase/SETUP.md:', e);
     }
     boardLoading = false; render();
   }
@@ -3013,7 +3013,7 @@ window.Study = (function(){
                  '<span class="lb-rank">'+n+'</span>' +
                  '<span class="lb-avatar" style="--lb-hue:120" aria-hidden="true">•</span>' +
                  '<span class="lb-name">••••••••</span>' +
-                 '<span class="lb-time">—</span>' +
+                 '<span class="lb-time">-</span>' +
                '</div>';
       }).join('');
       return '<div class="lb-wrap">' +
@@ -3548,7 +3548,7 @@ window.Goals = (function(){
     list.addEventListener('click', onGoalListClick);
     list.addEventListener('keydown', onGoalListKeydown);
 
-    // Reorder only from the left drag handle — keeps taps on the goal usable.
+    // Reorder only from the left drag handle. keeps taps on the goal usable.
     list.addEventListener('pointerdown', function(e){
       if (e.button !== 0) return;
       if (!isGoalDragHandle(e.target)) return;
@@ -3915,14 +3915,14 @@ window.I18N = (function(){
       'stats.bySubject': 'By subject', 'stats.week': 'Week',
       'stats.month': 'Month', 'stats.all': 'All time',
       'stats.total': 'Total {time}',
-      'stats.empty': 'No sessions in this range yet — finish a focus session and it shows up here.',
+      'stats.empty': 'No sessions in this range yet. Finish a focus session and it shows up here.',
       'tip.study': 'Study time', 'tip.board': 'Leaderboard', 'tip.room': 'Shared room',
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
       'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
 
       'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
-      'timer.chronoTip': "Study stopwatch — counts up instead of down",
+      'timer.chronoTip': "Study stopwatch: counts up instead of down",
       'timer.focus': 'Focus', 'timer.break': 'Break', 'timer.long': 'Long break',
       'timer.start': 'Start', 'timer.pause': 'Pause', 'timer.resume': 'Resume',
       'timer.reset': 'Reset', 'timer.skip': 'Skip',
@@ -3934,11 +3934,11 @@ window.I18N = (function(){
 
       'goals.title': "Today's goals", 'goals.add': 'Add a goal…',
       'goals.addBtn': 'Add goal', 'goals.est': 'Estimated pomodoros',
-      'goals.hint': 'Tap a goal to focus it — edit/delete buttons are always visible on phones.',
-      'goals.empty': 'Nothing yet — add what you want to finish today',
+      'goals.hint': 'Tap a goal to focus it, edit/delete buttons are always visible on phones.',
+      'goals.empty': 'Nothing yet. Add what you want to finish today',
       'goals.complete': 'Goal complete: {title}',
       'goals.added': "Added to today's goals",
-      'goals.newDay': 'New day — {n} goal(s) cleared',
+      'goals.newDay': 'New day. {n} goal(s) cleared',
       'goals.edit': 'Edit goal', 'goals.save': 'Save', 'goals.cancel': 'Cancel',
       'goals.drag': 'Drag to reorder', 'goals.editTitle': 'Goal name',
       'goals.updated': 'Goal updated', 'goals.needTitle': 'Give the goal a name',
@@ -3946,7 +3946,7 @@ window.I18N = (function(){
       'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
       'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
-      'study.guest': "You're a guest — your time is saved on this device. Sign in to unlock the leaderboard.",
+      'study.guest': "You're a guest. Your time is saved on this device. Sign in to unlock the leaderboard.",
       'study.boardLocked': 'Sign in to see the leaderboard',
       'study.boardGateTitle': 'Leaderboard is for members',
       'study.boardGateMsg': 'Sign in or create an account to see weekly rankings and your place on the board.',
@@ -3955,10 +3955,10 @@ window.I18N = (function(){
       'study.signout': 'Sign out', 'study.rename': 'Rename',
       'study.email': 'Email', 'study.password': 'Password', 'study.name': 'Display name',
       'study.loading': 'Loading…',
-      'study.resetsMonday': 'The board resets every Monday — ranked by total study time',
+      'study.resetsMonday': 'The board resets every Monday, ranked by total study time',
       'study.rankEmpty': 'Log a focus session to get your rank',
       'study.percentile': 'You studied more than <b>{pct}%</b> of candidates this week',
-      'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet — be first',
+      'study.of': 'of', 'study.nobody': 'Nobody has logged time this week yet. Be first',
       'study.unavailable': 'Leaderboard unavailable',
       'study.needBoth': 'Enter an email and a password.',
       'study.working': 'Working…', 'study.signedOut': 'Signed out. Your study time stays on this device.',
@@ -3966,7 +3966,7 @@ window.I18N = (function(){
       'study.unavailableAuth': 'Sign-in is unavailable right now.',
 
       'path.gateTitle': 'What are you studying?',
-      'path.gateMsg': 'Pick your level so we know who you are — required once after sign-in.',
+      'path.gateMsg': 'Pick your level so we know who you are. Required once after sign-in.',
       'path.pickLevel': 'School level',
       'path.pickGrade': 'Which year?',
       'path.pickTrack': 'Which track?',
@@ -4000,14 +4000,14 @@ window.I18N = (function(){
       'room.code': 'Room code', 'room.leave': 'Leave room',
       'room.hint': 'Share the link or code. Music and the timer stay in sync while you are in the room.',
       'room.online': 'online', 'room.connecting': 'Connecting…',
-      'room.failed': 'Connection failed — try again',
+      'room.failed': 'Connection failed. Try again',
       'room.created': 'Room created',
       'room.reclaimed': 'Back as host',
       'room.youHost': 'you are host',
       'room.youAreNowHost': 'You are now the host',
-      'room.hostMissing': 'Host disconnected — waiting before passing the role…',
-      'room.hostMissingToast': 'Host left the room — next host in 35 seconds',
-      'room.hostMissingCountdown': 'Host disconnected — next host in {s}s',
+      'room.hostMissing': 'Host disconnected. Waiting before passing the role…',
+      'room.hostMissingToast': 'Host left the room. Next host in 35 seconds',
+      'room.hostMissingCountdown': 'Host disconnected. Next host in {s}s',
       'room.people': 'In this room',
       'room.hostBadge': 'host',
       'room.you': 'you',
@@ -4026,9 +4026,9 @@ window.I18N = (function(){
       'player.mute': 'Mute for me',
       'player.unmute': 'Unmute',
       'player.muteTip': 'Mute only on this device',
-      'player.mutedToast': 'Muted for you only — others still hear it',
+      'player.mutedToast': 'Muted for you only. Others still hear it',
       'player.unmutedToast': 'Unmuted',
-      'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync — paste a YouTube URL',
+      'player.roomYoutubeOnly': 'In a shared room, only YouTube links sync. Paste a YouTube URL',
       'player.roomYoutubeNote': 'Only YouTube is available in a shared room.',
 
       'player.title': 'Music player', 'player.paste': 'Paste a link…',
@@ -4067,9 +4067,9 @@ window.I18N = (function(){
       'plan.cleared': 'Planner cleared',
       'plan.clear': 'Clear this week', 'plan.clearMonth': 'Clear this month',
 
-      'msg.pomodoroDone': 'Pomodoro complete — take a break',
-      'msg.breakOver': 'Break over — back to focus',
-      'msg.roundDone': 'Round complete — starting over',
+      'msg.pomodoroDone': 'Pomodoro complete. Take a break',
+      'msg.breakOver': 'Break over. Back to focus',
+      'msg.roundDone': 'Round complete. Starting over',
       'msg.restored': 'Session restored', 'msg.settings': 'Settings applied',
     },
 
@@ -4084,14 +4084,14 @@ window.I18N = (function(){
       'stats.bySubject': 'Par matière', 'stats.week': 'Semaine',
       'stats.month': 'Mois', 'stats.all': 'Tout',
       'stats.total': 'Total {time}',
-      'stats.empty': 'Aucune session sur cette période — termine une session et elle apparaîtra ici.',
+      'stats.empty': 'Aucune session sur cette période. Termine une session et elle apparaîtra ici.',
       'tip.study': "Temps d'étude", 'tip.board': 'Classement', 'tip.room': 'Salle partagée',
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
       'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',
 
       'timer.pomodoro': 'Pomodoro', 'timer.chrono': 'Chrono',
-      'timer.chronoTip': "Chronomètre d'étude — compte à l'endroit",
+      'timer.chronoTip': "Chronomètre d'étude: compte à l'endroit",
       'timer.focus': 'Focus', 'timer.break': 'Pause', 'timer.long': 'Longue pause',
       'timer.start': 'Démarrer', 'timer.pause': 'Pause', 'timer.resume': 'Reprendre',
       'timer.reset': 'Réinitialiser', 'timer.skip': 'Passer',
@@ -4103,11 +4103,11 @@ window.I18N = (function(){
 
       'goals.title': "Objectifs du jour", 'goals.add': 'Ajouter un objectif…',
       'goals.addBtn': 'Ajouter', 'goals.est': 'Pomodoros estimés',
-      'goals.hint': 'Touche un objectif pour le cibler — les boutons modifier/supprimer restent visibles sur téléphone.',
-      'goals.empty': 'Rien pour le moment — ajoute ce que tu veux finir aujourd’hui',
+      'goals.hint': 'Touche un objectif pour le cibler, les boutons modifier/supprimer restent visibles sur téléphone.',
+      'goals.empty': 'Rien pour le moment. Ajoute ce que tu veux finir aujourd’hui',
       'goals.complete': 'Objectif atteint : {title}',
       'goals.added': 'Ajouté aux objectifs du jour',
-      'goals.newDay': 'Nouveau jour — {n} objectif(s) effacé(s)',
+      'goals.newDay': 'Nouveau jour. {n} objectif(s) effacé(s)',
       'goals.edit': 'Modifier', 'goals.save': 'Enregistrer', 'goals.cancel': 'Annuler',
       'goals.drag': 'Glisser pour réordonner', 'goals.editTitle': 'Nom de l’objectif',
       'goals.updated': 'Objectif mis à jour', 'goals.needTitle': 'Donne un nom à l’objectif',
@@ -4115,7 +4115,7 @@ window.I18N = (function(){
       'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
       'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
-      'study.guest': "Tu es invité — ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",
+      'study.guest': "Tu es invité. Ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",
       'study.boardLocked': 'Connecte-toi pour voir le classement',
       'study.boardGateTitle': 'Classement réservé aux membres',
       'study.boardGateMsg': 'Connecte-toi ou crée un compte pour voir le classement de la semaine et ta place.',
@@ -4124,10 +4124,10 @@ window.I18N = (function(){
       'study.signout': 'Se déconnecter', 'study.rename': 'Renommer',
       'study.email': 'E-mail', 'study.password': 'Mot de passe', 'study.name': "Nom affiché",
       'study.loading': 'Chargement…',
-      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi — classé par temps total',
+      'study.resetsMonday': 'Le classement se remet à zéro chaque lundi, classé par temps total',
       'study.rankEmpty': 'Enregistre une session pour obtenir ton rang',
       'study.percentile': 'Tu as étudié plus que <b>{pct}%</b> des candidats cette semaine',
-      'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine — sois le premier",
+      'study.of': 'sur', 'study.nobody': "Personne n'a encore enregistré de temps cette semaine. Sois le premier",
       'study.unavailable': 'Classement indisponible',
       'study.needBoth': 'Saisis un e-mail et un mot de passe.',
       'study.working': 'En cours…', 'study.signedOut': 'Déconnecté. Ton temps d’étude reste sur cet appareil.',
@@ -4135,7 +4135,7 @@ window.I18N = (function(){
       'study.unavailableAuth': 'La connexion est indisponible pour le moment.',
 
       'path.gateTitle': 'Qu’est-ce que tu étudies ?',
-      'path.gateMsg': 'Choisis ton niveau — obligatoire une fois après connexion.',
+      'path.gateMsg': 'Choisis ton niveau. Obligatoire une fois après connexion.',
       'path.pickLevel': 'Niveau scolaire',
       'path.pickGrade': 'Quelle année ?',
       'path.pickTrack': 'Quelle filière ?',
@@ -4169,14 +4169,14 @@ window.I18N = (function(){
       'room.code': 'Code de la salle', 'room.leave': 'Quitter la salle',
       'room.hint': 'Partage le lien ou le code. La musique et le minuteur restent synchronisés dans la salle.',
       'room.online': 'en ligne', 'room.connecting': 'Connexion…',
-      'room.failed': 'Échec de la connexion — réessaie',
+      'room.failed': 'Échec de la connexion. Réessaie',
       'room.created': 'Salle créée',
       'room.reclaimed': 'De retour en tant qu’hôte',
       'room.youHost': 'tu es hôte',
       'room.youAreNowHost': 'Tu es maintenant l’hôte',
-      'room.hostMissing': 'Hôte déconnecté — transfert du rôle dans un instant…',
-      'room.hostMissingToast': 'L’hôte a quitté — prochain hôte dans 35 secondes',
-      'room.hostMissingCountdown': 'Hôte déconnecté — prochain hôte dans {s}s',
+      'room.hostMissing': 'Hôte déconnecté. transfert du rôle dans un instant…',
+      'room.hostMissingToast': 'L’hôte a quitté. Prochain hôte dans 35 secondes',
+      'room.hostMissingCountdown': 'Hôte déconnecté. Prochain hôte dans {s}s',
       'room.people': 'Dans la salle',
       'room.hostBadge': 'hôte',
       'room.you': 'toi',
@@ -4195,9 +4195,9 @@ window.I18N = (function(){
       'player.mute': 'Couper le son pour moi',
       'player.unmute': 'Remettre le son',
       'player.muteTip': 'Coupe le son seulement sur cet appareil',
-      'player.mutedToast': 'Son coupé pour toi — les autres entendent toujours',
+      'player.mutedToast': 'Son coupé pour toi. Les autres entendent toujours',
       'player.unmutedToast': 'Son rétabli',
-      'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise — colle un lien YouTube',
+      'player.roomYoutubeOnly': 'Dans une salle partagée, seul YouTube se synchronise. Colle un lien YouTube',
       'player.roomYoutubeNote': 'Seul YouTube est disponible dans une salle partagée.',
 
       'player.title': 'Lecteur de musique', 'player.paste': 'Colle un lien…',
@@ -4237,9 +4237,9 @@ window.I18N = (function(){
       'plan.cleared': 'Planning effacé',
       'plan.clear': 'Effacer la semaine', 'plan.clearMonth': 'Effacer le mois',
 
-      'msg.pomodoroDone': 'Pomodoro terminé — fais une pause',
-      'msg.breakOver': 'Pause terminée — retour au travail',
-      'msg.roundDone': 'Série terminée — on recommence',
+      'msg.pomodoroDone': 'Pomodoro terminé. Fais une pause',
+      'msg.breakOver': 'Pause terminée. Retour au travail',
+      'msg.roundDone': 'Série terminée. On recommence',
       'msg.restored': 'Session restaurée', 'msg.settings': 'Paramètres appliqués',
     }
   };
@@ -4315,7 +4315,7 @@ window.I18N = (function(){
 // ── PLANNER (weekly + monthly) ────────────────────────────────
 // Its own view rather than another card on the timer screen: a weekly grid
 // needs real space, and the focus screen is deliberately one no-scroll page.
-// Local-first — everything is keyed by ISO week / month in localStorage.
+// Local-first. everything is keyed by ISO week / month in localStorage.
 window.Planner = (function(){
   const K_WEEK = 'sf_plan_week', K_MONTH = 'sf_plan_month', K_RANGE = 'sf_plan_range';
   const K_TAB = 'sf_plan_tab';
@@ -4956,7 +4956,7 @@ async function checkSupabase(){
   const cl = window.SB && window.SB.get();
 
   if (!cl){
-    console.error('Supabase library did not load — check the CDN <script> tag in index.html.');
+    console.error('Supabase library did not load - check the CDN <script> tag in index.html.');
     return { client: 'FAILED to load' };
   }
   out.client = 'OK loaded';
@@ -4979,7 +4979,7 @@ async function checkSupabase(){
     const s = await cl.auth.getSession();
     out.step2_signed_in = (s.data && s.data.session)
       ? ('OK as ' + s.data.session.user.email)
-      : 'not signed in (fine — sign in to test the board)';
+      : 'not signed in (fine - sign in to test the board)';
   } catch(e){ out.step2_signed_in = 'FAILED: ' + e.message; }
 
   const bad = Object.keys(out).filter(k => String(out[k]).indexOf('FAILED') === 0);
@@ -4994,7 +4994,7 @@ async function checkSupabase(){
 // ── CLICK-AWAY DISMISS ────────────────────────────────────────
 // One handler for every popover. Study and Room own a panelOpen flag of
 // their own, so they are closed through close() rather than by stripping
-// the class — otherwise their state would drift from the DOM and the next
+// the class. otherwise their state would drift from the DOM and the next
 // click on their button would need pressing twice.
 function closeAllPanels(){
   if (typeof closeDockPopovers === 'function') closeDockPopovers();
@@ -5002,7 +5002,7 @@ function closeAllPanels(){
 
 // Where the click started has to be recorded in the CAPTURE phase, before
 // any inline onclick runs. A control inside a panel often re-renders that
-// panel's innerHTML, which detaches the clicked node — and closest() on a
+// panel's innerHTML, which detaches the clicked node. and closest() on a
 // detached node returns null, so a bubble-phase check would conclude the
 // click came from outside and close the very panel being used.
 let clickOrigin = null;
@@ -5017,7 +5017,7 @@ document.addEventListener('click', function(e){
 }, true);
 
 document.addEventListener('click', function(){
-  // Inside a popover, or on the control that opens one — those manage
+  // Inside a popover, or on the control that opens one. those manage
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
   if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang || clickOrigin.opensPanel)) return;
@@ -5033,7 +5033,7 @@ document.addEventListener('keydown', function(e){
 // ── SHEET CLOSE AFFORDANCE ────────────────────────────────────
 // On phones a popover becomes a bottom sheet that covers the dock, so the
 // icon that opened it is no longer tappable. Tapping outside works, but
-// nothing says so — every panel gets an explicit close control instead.
+// nothing says so. every panel gets an explicit close control instead.
 // Injected once here rather than repeated six times in the markup.
 (function addPopoverCloseButtons(){
   document.querySelectorAll('.popover').forEach(function(panel){
@@ -5055,7 +5055,7 @@ document.addEventListener('keydown', function(e){
 // ── STATS ─────────────────────────────────────────────────────
 // The local log already holds ~120 days; until now only today and this
 // week were ever shown. Single series (minutes), so one accent hue rather
-// than a categorical palette — which also means it re-tints per theme
+// than a categorical palette. which also means it re-tints per theme
 // instead of fighting four of them.
 window.Stats = (function(){
   const K_TAB = 'sf_stats_tab';
@@ -5198,7 +5198,7 @@ window.Stats = (function(){
 
   // Bars: thin marks, rounded data-end at the top, flat on the baseline,
   // 2px gap between them. Weekends and today are marked in the axis, not by
-  // recolouring the bar — colour stays magnitude-only.
+  // recolouring the bar. colour stays magnitude-only.
   function dailyChart(){
     const data = daily(14);
     const max = Math.max.apply(null, data.map(function(x){ return x.minutes; }).concat([1]));
