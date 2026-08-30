@@ -5104,6 +5104,13 @@ document.addEventListener('keydown', function(e){
 // Injected once here rather than repeated six times in the markup.
 (function addPopoverCloseButtons(){
   document.querySelectorAll('.popover').forEach(function(panel){
+    if (!panel.querySelector('.popover-sheet-handle')) {
+      const handle = document.createElement('div');
+      handle.className = 'popover-sheet-handle';
+      handle.setAttribute('role', 'presentation');
+      handle.innerHTML = '<span class="popover-sheet-grab" aria-hidden="true"></span>';
+      panel.insertBefore(handle, panel.firstChild);
+    }
     if (panel.querySelector('.popover-close')) return;
     const btn = document.createElement('button');
     btn.className = 'popover-close';
@@ -5114,8 +5121,88 @@ document.addEventListener('keydown', function(e){
       e.stopPropagation();
       closeAllPanels();
     });
-    panel.insertBefore(btn, panel.firstChild);
+    const handle = panel.querySelector('.popover-sheet-handle');
+    if (handle && handle.nextSibling) panel.insertBefore(btn, handle.nextSibling);
+    else panel.insertBefore(btn, panel.firstChild);
   });
+})();
+
+// Drag the sheet handle down to dismiss (mobile bottom sheets only).
+(function initSheetDragDismiss(){
+  const SHEET_MQ = window.matchMedia('(max-width: 960px)');
+  let drag = null;
+  let dragDismissed = false;
+
+  function sheetMode(){ return SHEET_MQ.matches; }
+
+  function clearPanelDragStyle(panel){
+    if (!panel) return;
+    panel.classList.remove('sheet-dragging');
+    panel.style.transition = '';
+    panel.style.transform = '';
+  }
+
+  function finishDrag(panel, dy){
+    const threshold = Math.min(130, panel.offsetHeight * 0.2);
+    if (dy > threshold) {
+      dragDismissed = true;
+      panel.style.transition = 'transform .24s cubic-bezier(.4, 0, .2, 1)';
+      panel.style.transform = 'translateY(100%)';
+      window.setTimeout(function(){
+        closeAllPanels();
+        clearPanelDragStyle(panel);
+        dragDismissed = false;
+      }, 240);
+      return;
+    }
+    panel.style.transition = 'transform .22s cubic-bezier(.4, 0, .2, 1)';
+    panel.style.transform = '';
+    window.setTimeout(function(){ clearPanelDragStyle(panel); }, 220);
+  }
+
+  document.addEventListener('pointerdown', function(e){
+    if (!sheetMode()) return;
+    const handle = e.target.closest('.popover-sheet-handle');
+    if (!handle) return;
+    const panel = handle.closest('.popover');
+    if (!panel || !panel.classList.contains('open')) return;
+
+    drag = {
+      panel: panel,
+      startY: e.clientY,
+      pointerId: e.pointerId,
+      handle: handle
+    };
+    panel.classList.add('sheet-dragging');
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('pointermove', function(e){
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dy = Math.max(0, e.clientY - drag.startY);
+    drag.panel.style.transform = 'translateY(' + dy + 'px)';
+  });
+
+  function endDrag(e){
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const panel = drag.panel;
+    const handle = drag.handle;
+    const dy = Math.max(0, e.clientY - drag.startY);
+    drag = null;
+    try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+    finishDrag(panel, dy);
+  }
+
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+
+  // Ignore the click that follows a drag-dismiss so we do not double-close.
+  document.addEventListener('click', function(e){
+    if (!dragDismissed) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
 })();
 
 

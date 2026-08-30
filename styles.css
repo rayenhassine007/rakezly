@@ -2084,12 +2084,27 @@ body.view-planner .stage {
 
   .popover { position: fixed; }
   .popover-close { display: block; }
-  .popover::before {
-    content: ''; display: block;
-    width: 40px; height: 4px; margin: 0 auto 14px;
-    border-radius: 2px; background: var(--text-faint);
+  .popover::before { display: none; }
+  .popover-sheet-handle {
+    position: relative;
+    padding: 8px 0 10px;
+    margin: -4px 0 4px;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .popover-sheet-grab {
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 0 auto;
+    border-radius: 2px;
+    background: var(--text-faint);
     opacity: .55;
   }
+  .popover.sheet-dragging { transition: none !important; }
+  .popover.sheet-dragging .popover-sheet-handle { cursor: grabbing; }
   .popover-title { padding-right: 38px; }
 }
 
@@ -2130,6 +2145,8 @@ body.view-planner .stage {
   .timer-block { gap: 10px; padding: 14px 18px; }
   .stage { padding-top: 64px; }
 }
+
+.popover-sheet-handle { display: none; }
 
 /* Explicit dismiss for the bottom sheets. Hidden on desktop, where the
    popover floats beside its trigger and clicking that trigger closes it. */
