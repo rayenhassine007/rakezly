@@ -108,14 +108,13 @@ function toggleSettingsPanel() {
 function toggleFS() {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(()=>{});
-    document.getElementById('fsBtn').textContent = '✕';
   } else {
     document.exitFullscreen();
-    document.getElementById('fsBtn').textContent = '⛶';
   }
 }
 document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement) document.getElementById('fsBtn').textContent = '⛶';
+  const btn = document.getElementById('fsBtn');
+  if (btn) btn.classList.toggle('fs-active', !!document.fullscreenElement);
   forceVideoResume();
 });
 
