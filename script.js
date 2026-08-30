@@ -9,12 +9,29 @@ function closeSettingsPanel(){
   if (b) b.classList.remove('active');
 }
 
-function closeThemeBgSection(){
+function showThemeListView(){
   themeBgOpen = false;
-  const section = document.getElementById('themeBgSection');
-  if (section) section.hidden = true;
+  const list = document.getElementById('themeListView');
+  const bg = document.getElementById('themeBgView');
   const panel = document.getElementById('themePanel');
-  if (panel) panel.classList.remove('bg-open');
+  if (list) list.hidden = false;
+  if (bg) bg.hidden = true;
+  if (panel) panel.classList.remove('bg-view');
+}
+
+function showThemeBgView(){
+  themeBgOpen = true;
+  const list = document.getElementById('themeListView');
+  const bg = document.getElementById('themeBgView');
+  const panel = document.getElementById('themePanel');
+  if (list) list.hidden = true;
+  if (bg) bg.hidden = false;
+  if (panel) panel.classList.add('bg-view');
+  updateRemoveDefaultBtnVisibility();
+}
+
+function closeThemeBgSection(){
+  showThemeListView();
 }
 
 function closeThemePanel(){
@@ -249,20 +266,10 @@ function applyBgFromRecord(rec, theme) {
   document.getElementById('mediaUpload').value = '';
 }
 
-function toggleThemeBgSection(force){
-  const section = document.getElementById('themeBgSection');
-  const panel = document.getElementById('themePanel');
-  if (!section) return;
-  const willOpen = typeof force === 'boolean' ? force : !themeBgOpen;
-  themeBgOpen = willOpen;
-  section.hidden = !willOpen;
-  if (panel) panel.classList.toggle('bg-open', willOpen);
-  if (willOpen) updateRemoveDefaultBtnVisibility();
-}
-
 function onThemeOptionActivate(theme){
-  if (theme === currentTheme) toggleThemeBgSection();
-  else setTheme(theme);
+  if (theme !== currentTheme) setTheme(theme);
+  else updateRemoveDefaultBtnVisibility();
+  showThemeBgView();
 }
 
 function initThemeOptions(){
@@ -4064,6 +4071,7 @@ window.I18N = (function(){
       'player.empty': 'Paste a YouTube, Spotify or SoundCloud link to play.',
 
       'theme.title': 'Theme',
+      'theme.back': 'Back to themes',
       'theme.lofiDesc': 'soft pink · warm · cosy',
       'theme.greensDesc': 'emerald · nature · calm',
       'theme.cherryDesc': 'deep blue · cherry · elegant',
@@ -4233,6 +4241,7 @@ window.I18N = (function(){
       'player.empty': 'Colle un lien YouTube, Spotify ou SoundCloud pour lancer la lecture.',
 
       'theme.title': 'Thème',
+      'theme.back': 'Retour aux thèmes',
       'theme.lofiDesc': 'rose doux · chaleureux · cosy',
       'theme.greensDesc': 'émeraude · nature · calme',
       'theme.cherryDesc': 'bleu profond · cerise · élégant',

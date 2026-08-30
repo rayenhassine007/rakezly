@@ -308,42 +308,45 @@
 </div>
 
 <div class="popover theme-panel" id="themePanel">
-  <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
-  <div class="theme-option selected" id="theme-lofi" data-theme="lofi" role="button" tabindex="0">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Lofi</span>
-      <span class="theme-option-desc" data-i18n="theme.lofiDesc">soft pink</span>
-    </span>
-    <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
-  </div>
-  <div class="theme-option" id="theme-greens" data-theme="greens" role="button" tabindex="0">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0d1a10,#123524 55%,#6ee7a8)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Greens</span>
-      <span class="theme-option-desc" data-i18n="theme.greensDesc">emerald</span>
-    </span>
-    <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
-  </div>
-  <div class="theme-option" id="theme-cherry-blues" data-theme="cherry-blues" role="button" tabindex="0">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0b1222,#16294d 55%,#ff8fb0)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Cherry Blues</span>
-      <span class="theme-option-desc" data-i18n="theme.cherryDesc">deep blue</span>
-    </span>
-    <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
-  </div>
-  <div class="theme-option" id="theme-moonlight" data-theme="moonlight" role="button" tabindex="0">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0a0a0a,#1c1c1c 55%,#dcdcdc)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Moonlight</span>
-      <span class="theme-option-desc" data-i18n="theme.moonDesc">silver</span>
-    </span>
-    <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+  <div class="theme-list-view" id="themeListView">
+    <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
+    <div class="theme-option selected" id="theme-lofi" data-theme="lofi" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Lofi</span>
+        <span class="theme-option-desc" data-i18n="theme.lofiDesc">soft pink</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-greens" data-theme="greens" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0d1a10,#123524 55%,#6ee7a8)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Greens</span>
+        <span class="theme-option-desc" data-i18n="theme.greensDesc">emerald</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-cherry-blues" data-theme="cherry-blues" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0b1222,#16294d 55%,#ff8fb0)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Cherry Blues</span>
+        <span class="theme-option-desc" data-i18n="theme.cherryDesc">deep blue</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-moonlight" data-theme="moonlight" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0a0a0a,#1c1c1c 55%,#dcdcdc)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Moonlight</span>
+        <span class="theme-option-desc" data-i18n="theme.moonDesc">silver</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
   </div>
 
-  <div class="theme-bg-section" id="themeBgSection" hidden>
-    <div class="theme-bg-heading" data-i18n="bg.title">Background</div>
+  <div class="theme-bg-view" id="themeBgView" hidden>
+    <button type="button" class="theme-bg-back" onclick="showThemeListView()" data-i18n="theme.back">Back to themes</button>
+    <div class="popover-title theme-bg-heading" data-i18n="bg.title">Background</div>
     <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
     <label class="bg-upload-area" id="uploadArea">
       <input type="file" id="mediaUpload" accept="video/*,image/*,text/html,.html" onchange="loadMedia(event)">
