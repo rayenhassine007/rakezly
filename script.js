@@ -1396,7 +1396,7 @@ function applyDefaultThemeBg(t) {
   video.load();
   video.play().catch(() => {});
   video.oncanplay = () => video.classList.add('ready');
-  // If the video 404s or is blocked, say so instead of failing silently —
+  // If the video 404s or is blocked, say so instead of failing silently.
   // the themed gradient behind #bgWrap stays visible either way.
   video.onerror = () => {
     video.classList.remove('ready');
