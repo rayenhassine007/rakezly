@@ -3111,6 +3111,11 @@ window.Study = (function(){
     if (btn) btn.classList.toggle('active', panelOpen);
     const panel = document.getElementById('studyPanel');
     if (panel) panel.classList.toggle('open', panelOpen);
+    const title = document.getElementById('studyPanelTitle');
+    if (title) {
+      const signedIn = window.Auth && window.Auth.signedIn();
+      title.textContent = t(signedIn ? 'study.account' : 'tip.study');
+    }
     const body = document.getElementById('studyBody');
     if (!body || !panelOpen) return;
 
@@ -3916,7 +3921,7 @@ window.I18N = (function(){
       'stats.month': 'Month', 'stats.all': 'All time',
       'stats.total': 'Total {time}',
       'stats.empty': 'No sessions in this range yet. Finish a focus session and it shows up here.',
-      'tip.study': 'Study time', 'tip.board': 'Leaderboard', 'tip.room': 'Shared room',
+      'tip.study': 'Sign in', 'tip.board': 'Leaderboard', 'tip.room': 'Shared room',
       'tip.player': 'Music player', 'tip.theme': 'Theme',
       'tip.background': 'Background', 'tip.settings': 'Settings',
       'tip.fullscreen': 'Fullscreen', 'tip.language': 'Language',
@@ -3943,7 +3948,7 @@ window.I18N = (function(){
       'goals.drag': 'Drag to reorder', 'goals.editTitle': 'Goal name',
       'goals.updated': 'Goal updated', 'goals.needTitle': 'Give the goal a name',
 
-      'study.title': 'Study time', 'study.today': 'Today', 'study.week': 'This week',
+      'study.title': 'Study time', 'study.account': 'Account', 'study.today': 'Today', 'study.week': 'This week',
       'study.board': 'Leaderboard', 'study.noSessions': 'No sessions yet this week',
       'study.myWeek': 'my week', 'study.thisWeeksBoard': "this week's board",
       'study.guest': "You're a guest. Your time is saved on this device. Sign in to unlock the leaderboard.",
@@ -4085,7 +4090,7 @@ window.I18N = (function(){
       'stats.month': 'Mois', 'stats.all': 'Tout',
       'stats.total': 'Total {time}',
       'stats.empty': 'Aucune session sur cette période. Termine une session et elle apparaîtra ici.',
-      'tip.study': "Temps d'étude", 'tip.board': 'Classement', 'tip.room': 'Salle partagée',
+      'tip.study': 'Se connecter', 'tip.board': 'Classement', 'tip.room': 'Salle partagée',
       'tip.player': 'Lecteur de musique', 'tip.theme': 'Thème',
       'tip.background': 'Arrière-plan', 'tip.settings': 'Paramètres',
       'tip.fullscreen': 'Plein écran', 'tip.language': 'Langue',
@@ -4112,7 +4117,7 @@ window.I18N = (function(){
       'goals.drag': 'Glisser pour réordonner', 'goals.editTitle': 'Nom de l’objectif',
       'goals.updated': 'Objectif mis à jour', 'goals.needTitle': 'Donne un nom à l’objectif',
 
-      'study.title': "Temps d'étude", 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
+      'study.title': "Temps d'étude", 'study.account': 'Compte', 'study.today': "Aujourd'hui", 'study.week': 'Cette semaine',
       'study.board': 'Classement', 'study.noSessions': 'Aucune session cette semaine',
       'study.myWeek': 'ma semaine', 'study.thisWeeksBoard': 'classement de la semaine',
       'study.guest': "Tu es invité. Ton temps est enregistré sur cet appareil. Connecte-toi pour débloquer le classement.",

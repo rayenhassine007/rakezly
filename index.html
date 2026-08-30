@@ -44,7 +44,7 @@
   </nav>
 
   <nav class="dock" aria-label="Tools">
-    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Study time" aria-label="Study time">
+    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Sign in" aria-label="Sign in">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><path d="M10 8l5 5-5 5"/><path d="M15 12H3"/></svg>
     </button>
     <button class="dock-btn" onclick="Room.togglePanel()" id="roomFixedBtn" data-i18n-title="tip.room" title="Shared room" aria-label="Shared room">
@@ -267,7 +267,7 @@
 <!-- ─────────────────────────── POPOVERS ─────────────────────────── -->
 
 <div id="studyPanel" class="popover study-panel">
-  <div class="popover-title study-panel-title" data-i18n="study.title">Study time</div>
+  <div class="popover-title study-panel-title" id="studyPanelTitle">Sign in</div>
   <div id="studyBody"></div>
 </div>
 
