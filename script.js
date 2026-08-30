@@ -18,13 +18,16 @@ function showThemeListView(instant){
   if (bg) bg.setAttribute('aria-hidden', 'true');
   if (panel) {
     if (instant) panel.classList.add('theme-no-transition');
-    panel.classList.remove('bg-view');
+    else panel.classList.add('theme-animate-back');
+    panel.classList.remove('bg-view', 'theme-animate-forward');
     if (instant) {
       requestAnimationFrame(function(){
         requestAnimationFrame(function(){
           panel.classList.remove('theme-no-transition');
         });
       });
+    } else {
+      setTimeout(function(){ panel.classList.remove('theme-animate-back'); }, 260);
     }
   }
 }
@@ -36,7 +39,11 @@ function showThemeBgView(){
   const panel = document.getElementById('themePanel');
   if (list) list.setAttribute('aria-hidden', 'true');
   if (bg) bg.setAttribute('aria-hidden', 'false');
-  if (panel) panel.classList.add('bg-view');
+  if (panel) {
+    panel.classList.remove('theme-animate-back');
+    panel.classList.add('bg-view', 'theme-animate-forward');
+    setTimeout(function(){ panel.classList.remove('theme-animate-forward'); }, 260);
+  }
   updateRemoveDefaultBtnVisibility();
 }
 
@@ -5068,6 +5075,13 @@ document.addEventListener('click', function(){
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
   if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang || clickOrigin.opensPanel)) return;
+
+  const themePanel = document.getElementById('themePanel');
+  if (themePanel && themePanel.classList.contains('open') && themeBgOpen) {
+    showThemeListView();
+    return;
+  }
+
   closeAllPanels();
 });
 
