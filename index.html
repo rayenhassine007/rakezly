@@ -308,8 +308,9 @@
 </div>
 
 <div class="popover theme-panel" id="themePanel">
-  <div class="theme-list-view" id="themeListView">
-    <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
+  <div class="theme-panel-stack">
+    <div class="theme-list-view" id="themeListView">
+      <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
     <div class="theme-option selected" id="theme-lofi" data-theme="lofi" role="button" tabindex="0">
       <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
       <span class="theme-option-info">
@@ -342,10 +343,13 @@
       </span>
       <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
     </div>
-  </div>
+    </div>
 
-  <div class="theme-bg-view" id="themeBgView" hidden>
-    <button type="button" class="theme-bg-back" onclick="showThemeListView()" data-i18n="theme.back">Back to themes</button>
+    <div class="theme-bg-view" id="themeBgView" aria-hidden="true">
+      <button type="button" class="theme-bg-back" onclick="showThemeListView()">
+        <span class="theme-bg-back-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+        <span data-i18n="theme.back">Back to themes</span>
+      </button>
     <div class="popover-title theme-bg-heading" data-i18n="bg.title">Background</div>
     <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
     <label class="bg-upload-area" id="uploadArea">
@@ -385,6 +389,7 @@
     <button class="bg-clear-btn" onclick="clearMedia()" data-i18n="bg.clear">Clear background</button>
     <button class="bg-clear-btn" id="removeDefaultBgBtn" onclick="removeDefaultBg()" data-i18n="bg.remove">Remove default</button>
     <button class="bg-clear-btn" id="restoreDefaultBgBtn" onclick="restoreDefaultBg()" data-i18n="bg.restore" style="display:none;">Restore default</button>
+    </div>
   </div>
 </div>
 

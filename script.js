@@ -9,14 +9,24 @@ function closeSettingsPanel(){
   if (b) b.classList.remove('active');
 }
 
-function showThemeListView(){
+function showThemeListView(instant){
   themeBgOpen = false;
   const list = document.getElementById('themeListView');
   const bg = document.getElementById('themeBgView');
   const panel = document.getElementById('themePanel');
-  if (list) list.hidden = false;
-  if (bg) bg.hidden = true;
-  if (panel) panel.classList.remove('bg-view');
+  if (list) list.setAttribute('aria-hidden', 'false');
+  if (bg) bg.setAttribute('aria-hidden', 'true');
+  if (panel) {
+    if (instant) panel.classList.add('theme-no-transition');
+    panel.classList.remove('bg-view');
+    if (instant) {
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          panel.classList.remove('theme-no-transition');
+        });
+      });
+    }
+  }
 }
 
 function showThemeBgView(){
@@ -24,14 +34,14 @@ function showThemeBgView(){
   const list = document.getElementById('themeListView');
   const bg = document.getElementById('themeBgView');
   const panel = document.getElementById('themePanel');
-  if (list) list.hidden = true;
-  if (bg) bg.hidden = false;
+  if (list) list.setAttribute('aria-hidden', 'true');
+  if (bg) bg.setAttribute('aria-hidden', 'false');
   if (panel) panel.classList.add('bg-view');
   updateRemoveDefaultBtnVisibility();
 }
 
 function closeThemeBgSection(){
-  showThemeListView();
+  showThemeListView(true);
 }
 
 function closeThemePanel(){
@@ -5063,7 +5073,13 @@ document.addEventListener('click', function(){
 
 // Escape is the other half of the same expectation.
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') closeAllPanels();
+  if (e.key !== 'Escape') return;
+  const themePanel = document.getElementById('themePanel');
+  if (themePanel && themePanel.classList.contains('open') && themeBgOpen) {
+    showThemeListView();
+    return;
+  }
+  closeAllPanels();
 });
 
 

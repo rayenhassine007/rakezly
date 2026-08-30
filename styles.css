@@ -1182,20 +1182,87 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   color: var(--accent);
 }
 
-.theme-list-view[hidden],
-.theme-bg-view[hidden] { display: none !important; }
+.theme-panel-stack {
+  display: grid;
+  grid-template: 1fr / 1fr;
+  overflow: hidden;
+}
+.theme-list-view,
+.theme-bg-view {
+  grid-area: 1 / 1;
+  min-width: 0;
+  transition: opacity .24s var(--ease), transform .24s var(--ease), visibility .24s var(--ease);
+}
+.theme-panel:not(.bg-view) .theme-list-view {
+  opacity: 1;
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+.theme-panel:not(.bg-view) .theme-bg-view {
+  opacity: 0;
+  transform: translateX(18px);
+  visibility: hidden;
+  pointer-events: none;
+}
+.theme-panel.bg-view .theme-list-view {
+  opacity: 0;
+  transform: translateX(-18px);
+  visibility: hidden;
+  pointer-events: none;
+}
+.theme-panel.bg-view .theme-bg-view {
+  opacity: 1;
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+.theme-panel.theme-no-transition .theme-list-view,
+.theme-panel.theme-no-transition .theme-bg-view {
+  transition: none;
+}
 
 .theme-bg-back {
-  display: inline-flex; align-items: center; gap: 4px;
-  margin: -2px 0 12px;
-  padding: 0;
-  font-size: 12px; font-weight: 500;
-  color: var(--text-dim);
-  transition: color .18s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: color .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
 }
-.theme-bg-back:hover { color: var(--accent); }
+.theme-bg-back:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.theme-bg-back:active { transform: scale(.98); }
+.theme-bg-back-icon {
+  width: 16px; height: 16px; flex: none;
+}
+.theme-bg-back-icon svg {
+  width: 100%; height: 100%;
+  fill: none; stroke: currentColor;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
 
 .theme-bg-view .theme-bg-heading { margin-bottom: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-list-view,
+  .theme-bg-view {
+    transition: opacity .12s ease, visibility .12s ease;
+    transform: none !important;
+  }
+}
 
 
 /* ── 14. Background settings (nested in theme panel) ────────────────────── */
