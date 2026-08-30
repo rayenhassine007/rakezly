@@ -5075,25 +5075,12 @@ document.addEventListener('click', function(){
   // themselves. The language pills are exempt so switching language does
   // not shut the panel you are reading.
   if (clickOrigin && (clickOrigin.inPanel || clickOrigin.onDock || clickOrigin.onLang || clickOrigin.opensPanel)) return;
-
-  const themePanel = document.getElementById('themePanel');
-  if (themePanel && themePanel.classList.contains('open') && themeBgOpen) {
-    showThemeListView();
-    return;
-  }
-
   closeAllPanels();
 });
 
 // Escape is the other half of the same expectation.
 document.addEventListener('keydown', function(e){
-  if (e.key !== 'Escape') return;
-  const themePanel = document.getElementById('themePanel');
-  if (themePanel && themePanel.classList.contains('open') && themeBgOpen) {
-    showThemeListView();
-    return;
-  }
-  closeAllPanels();
+  if (e.key === 'Escape') closeAllPanels();
 });
 
 
