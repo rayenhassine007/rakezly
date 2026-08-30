@@ -1434,17 +1434,18 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   .timer-block .focus-row      { order: 8; }
 
   .cycles-row {
-    display: flex;
-    width: 100%;
+    display: inline-flex;
+    width: fit-content;
     max-width: 100%;
     gap: 4px;
-    padding: 5px 8px;
-    margin: 0;
-    border-radius: 12px;
+    padding: 5px 10px;
+    margin: 0 auto;
+    border-radius: 999px;
     background: var(--surface-2);
     border: 1px solid var(--border-soft);
     flex-wrap: nowrap;
     justify-content: flex-start;
+    align-self: center;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -1465,13 +1466,14 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   .cycle-dot.active { transform: scale(1.06); }
 
   .cycle-info {
-    margin-left: auto;
-    padding-left: 8px;
+    margin-left: 4px;
+    padding-left: 6px;
+    border-left: 1px solid var(--border-soft);
     flex-shrink: 0;
     font-size: 10px;
     flex-direction: row;
     align-items: baseline;
-    gap: 6px;
+    gap: 5px;
     white-space: nowrap;
   }
   .cycle-info strong { font-size: 11px; }
