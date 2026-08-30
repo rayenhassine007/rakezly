@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="google-site-verification" content="pROm9li1Swu3KFEX_KdQjbNA8KvtEBbxRanenVgUUa4" />
-<meta name="description" content="Rakezly — a calm pomodoro timer for students. Track your study time, set daily goals, and see how you compare on the weekly leaderboard.">
+<meta name="description" content="Rakezly, a calm pomodoro timer for students. Track your study time, set daily goals, and see how you compare on the weekly leaderboard.">
 <meta name="theme-color" content="#1a1520">
 <title>Rakezly</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231a1520'/%3E%3Ccircle cx='16' cy='17' r='8' fill='none' stroke='%23f2a8c4' stroke-width='2'/%3E%3Cpath d='M16 13v4.5' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12.5 7h7' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -44,28 +44,29 @@
   </nav>
 
   <nav class="dock" aria-label="Tools">
-    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Study time" aria-label="Study time">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2.5h6"/></svg>
+    <button class="dock-btn" onclick="Study.togglePanel()" id="studyFixedBtn" data-i18n-title="tip.study" title="Sign in" aria-label="Sign in">
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><path d="M10 8l5 5-5 5"/><path d="M15 12H3"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.study">Sign in</span>
     </button>
     <button class="dock-btn" onclick="Room.togglePanel()" id="roomFixedBtn" data-i18n-title="tip.room" title="Shared room" aria-label="Shared room">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0112 0"/><path d="M16 5.5a3 3 0 010 5"/><path d="M18 20a6 6 0 00-2-4.5"/></svg>
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="7.5" r="2.75"/><path d="M4 19v-1.25a3.75 3.75 0 013.75-3.75"/><circle cx="16" cy="7.5" r="2.75"/><path d="M12.25 19v-1.25a3.75 3.75 0 013.75-3.75"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.room">Room</span>
     </button>
     <button class="dock-btn" onclick="togglePlayerPanel()" id="playerFixedBtn" data-i18n-title="tip.player" title="Music player" aria-label="Music player">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 18V5l12-2v13"/></svg>
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 18V5l12-2v13"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.player">Music</span>
     </button>
     <button class="dock-btn" onclick="toggleThemePanel()" id="themeFixedBtn" data-i18n-title="tip.theme" title="Theme" aria-label="Theme">
-      <!-- Half-filled circle: the conventional "appearance / colour scheme" mark -->
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18Z" fill="currentColor" stroke="none"/></svg>
-    </button>
-    <button class="dock-btn btn-bg-toggle" onclick="toggleBgPanel()" data-i18n-title="tip.background" title="Background" aria-label="Background">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></svg>
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18Z" fill="currentColor" stroke="none"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.theme">Theme</span>
     </button>
     <button class="dock-btn" onclick="toggleSettingsPanel()" id="settingsFixedBtn" data-i18n-title="tip.settings" title="Settings" aria-label="Settings">
-      <!-- Sliders, not a gear: the old rays-around-a-circle read as brightness -->
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7M17 7h3M4 17h3M13 17h7"/><circle cx="14" cy="7" r="2.4"/><circle cx="10" cy="17" r="2.4"/></svg>
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.settings">Settings</span>
     </button>
-    <button class="dock-btn" onclick="toggleFS()" id="fsBtn" data-i18n-title="tip.fullscreen" title="Fullscreen" aria-label="Fullscreen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    <button class="dock-btn dock-btn-fs" onclick="toggleFS()" id="fsBtn" data-i18n-title="tip.fullscreen" title="Fullscreen" aria-label="Fullscreen">
+      <span class="dock-btn-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></span>
+      <span class="dock-btn-label" data-i18n="dock.fullscreen">Full</span>
     </button>
   </nav>
 </header>
@@ -268,7 +269,7 @@
 <!-- ─────────────────────────── POPOVERS ─────────────────────────── -->
 
 <div id="studyPanel" class="popover study-panel">
-  <div class="popover-title study-panel-title" data-i18n="study.title">Study time</div>
+  <div class="popover-title study-panel-title" id="studyPanelTitle">Sign in</div>
   <div id="studyBody"></div>
 </div>
 
@@ -306,83 +307,95 @@
   </button>
   <div class="player-empty" id="playerEmpty">
     <div class="player-empty-icon">♫</div>
-    Paste a YouTube link to share in a room — or Spotify / SoundCloud when alone.
+    Paste a YouTube link to share in a room, or Spotify / SoundCloud when alone.
   </div>
   <button class="player-clear-btn" id="playerClearBtn" onclick="clearPlayer()" data-i18n="player.clear">Clear player</button>
 </div>
 
 <div class="popover theme-panel" id="themePanel">
-  <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
-  <div class="theme-option selected" id="theme-lofi" onclick="setTheme('lofi')">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Lofi</span>
-      <span class="theme-option-desc" data-i18n="theme.lofiDesc">soft pink</span>
-    </span>
-  </div>
-  <div class="theme-option" id="theme-greens" onclick="setTheme('greens')">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0d1a10,#123524 55%,#6ee7a8)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Greens</span>
-      <span class="theme-option-desc" data-i18n="theme.greensDesc">emerald</span>
-    </span>
-  </div>
-  <div class="theme-option" id="theme-cherry-blues" onclick="setTheme('cherry-blues')">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0b1222,#16294d 55%,#ff8fb0)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Cherry Blues</span>
-      <span class="theme-option-desc" data-i18n="theme.cherryDesc">deep blue</span>
-    </span>
-  </div>
-  <div class="theme-option" id="theme-moonlight" onclick="setTheme('moonlight')">
-    <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0a0a0a,#1c1c1c 55%,#dcdcdc)"></span>
-    <span class="theme-option-info">
-      <span class="theme-option-name">Moonlight</span>
-      <span class="theme-option-desc" data-i18n="theme.moonDesc">silver</span>
-    </span>
-  </div>
-</div>
+  <div class="theme-panel-stack">
+    <div class="theme-list-view" id="themeListView">
+      <div class="popover-title theme-panel-title" data-i18n="theme.title">Theme</div>
+    <div class="theme-option selected" id="theme-lofi" data-theme="lofi" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#1a1520,#2d1040 55%,#f2a8c4)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Lofi</span>
+        <span class="theme-option-desc" data-i18n="theme.lofiDesc">soft pink</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-greens" data-theme="greens" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0d1a10,#123524 55%,#6ee7a8)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Greens</span>
+        <span class="theme-option-desc" data-i18n="theme.greensDesc">emerald</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-cherry-blues" data-theme="cherry-blues" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0b1222,#16294d 55%,#ff8fb0)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Cherry Blues</span>
+        <span class="theme-option-desc" data-i18n="theme.cherryDesc">deep blue</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    <div class="theme-option" id="theme-moonlight" data-theme="moonlight" role="button" tabindex="0">
+      <span class="theme-option-swatch" style="background:linear-gradient(135deg,#0a0a0a,#1c1c1c 55%,#dcdcdc)"></span>
+      <span class="theme-option-info">
+        <span class="theme-option-name">Moonlight</span>
+        <span class="theme-option-desc" data-i18n="theme.moonDesc">silver</span>
+      </span>
+      <span class="theme-option-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+    </div>
 
-<div class="popover bg-panel" id="bgPanel">
-  <div class="popover-title bg-panel-title" data-i18n="bg.title">Background</div>
-  <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
-  <label class="bg-upload-area" id="uploadArea">
-    <input type="file" id="mediaUpload" accept="video/*,image/*,text/html,.html" onchange="loadMedia(event)">
-    <span class="upload-icon">＋</span>
-    <span class="upload-text" id="uploadText" data-i18n="bg.upload">Upload a video, image or HTML</span>
-  </label>
-  <div class="bg-slider-group">
-    <div class="bg-slider-row">
-      <span class="bg-slider-label" data-i18n="bg.dim">Dim</span>
-      <input type="range" class="bg-slider" id="dimSlider" min="0" max="95" value="60" oninput="setDim(this.value)">
-      <span class="bg-slider-val" id="dimVal">60%</span>
+    <div class="theme-bg-view" id="themeBgView" aria-hidden="true">
+      <button type="button" class="theme-bg-back" onclick="showThemeListView()">
+        <span class="theme-bg-back-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>
+        <span data-i18n="theme.back">Back to themes</span>
+      </button>
+    <div class="popover-title theme-bg-heading" data-i18n="bg.title">Background</div>
+    <div class="bg-theme-badge" id="bgThemeBadge">Lofi background</div>
+    <label class="bg-upload-area" id="uploadArea">
+      <input type="file" id="mediaUpload" accept="video/*,image/*,text/html,.html" onchange="loadMedia(event)">
+      <span class="upload-icon">＋</span>
+      <span class="upload-text" id="uploadText" data-i18n="bg.upload">Upload a video, image or HTML</span>
+    </label>
+    <div class="bg-slider-group">
+      <div class="bg-slider-row">
+        <span class="bg-slider-label" data-i18n="bg.dim">Dim</span>
+        <input type="range" class="bg-slider" id="dimSlider" min="0" max="95" value="60" oninput="setDim(this.value)">
+        <span class="bg-slider-val" id="dimVal">60%</span>
+      </div>
+      <div class="bg-slider-row">
+        <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
+        <input type="range" class="bg-slider" id="blurSlider" min="0" max="20" value="0" oninput="setBlur(this.value)">
+        <span class="bg-slider-val" id="blurVal">0px</span>
+      </div>
+      <div class="bg-panel-divider"></div>
+      <div class="bg-panel-section" data-i18n="bg.glass">Card glass</div>
+      <div class="bg-slider-row">
+        <span class="bg-slider-label" data-i18n="bg.opacity">Opacity</span>
+        <input type="range" class="bg-slider" id="glassOpacSlider" min="0" max="80" value="28" oninput="setGlassOpac(this.value)">
+        <span class="bg-slider-val" id="glassOpacVal">28%</span>
+      </div>
+      <div class="bg-slider-row">
+        <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
+        <input type="range" class="bg-slider" id="glassBlurSlider" min="0" max="40" value="18" oninput="setGlassBlur(this.value)">
+        <span class="bg-slider-val" id="glassBlurVal">18px</span>
+      </div>
+      <div class="bg-slider-row">
+        <span class="bg-slider-label" data-i18n="bg.border">Border</span>
+        <input type="range" class="bg-slider" id="glassBordSlider" min="0" max="60" value="18" oninput="setGlassBorder(this.value)">
+        <span class="bg-slider-val" id="glassBordVal">18%</span>
+      </div>
     </div>
-    <div class="bg-slider-row">
-      <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
-      <input type="range" class="bg-slider" id="blurSlider" min="0" max="20" value="0" oninput="setBlur(this.value)">
-      <span class="bg-slider-val" id="blurVal">0px</span>
-    </div>
-    <div class="bg-panel-divider"></div>
-    <div class="bg-panel-section" data-i18n="bg.glass">Card glass</div>
-    <div class="bg-slider-row">
-      <span class="bg-slider-label" data-i18n="bg.opacity">Opacity</span>
-      <input type="range" class="bg-slider" id="glassOpacSlider" min="0" max="80" value="28" oninput="setGlassOpac(this.value)">
-      <span class="bg-slider-val" id="glassOpacVal">28%</span>
-    </div>
-    <div class="bg-slider-row">
-      <span class="bg-slider-label" data-i18n="bg.blur">Blur</span>
-      <input type="range" class="bg-slider" id="glassBlurSlider" min="0" max="40" value="18" oninput="setGlassBlur(this.value)">
-      <span class="bg-slider-val" id="glassBlurVal">18px</span>
-    </div>
-    <div class="bg-slider-row">
-      <span class="bg-slider-label" data-i18n="bg.border">Border</span>
-      <input type="range" class="bg-slider" id="glassBordSlider" min="0" max="60" value="18" oninput="setGlassBorder(this.value)">
-      <span class="bg-slider-val" id="glassBordVal">18%</span>
+    <button class="bg-clear-btn" onclick="clearMedia()" data-i18n="bg.clear">Clear background</button>
+    <button class="bg-clear-btn" id="removeDefaultBgBtn" onclick="removeDefaultBg()" data-i18n="bg.remove">Remove default</button>
+    <button class="bg-clear-btn" id="restoreDefaultBgBtn" onclick="restoreDefaultBg()" data-i18n="bg.restore" style="display:none;">Restore default</button>
     </div>
   </div>
-  <button class="bg-clear-btn" onclick="clearMedia()" data-i18n="bg.clear">Clear background</button>
-  <button class="bg-clear-btn" id="removeDefaultBgBtn" onclick="removeDefaultBg()" data-i18n="bg.remove">Remove default</button>
-  <button class="bg-clear-btn" id="restoreDefaultBgBtn" onclick="restoreDefaultBg()" data-i18n="bg.restore" style="display:none;">Restore default</button>
 </div>
 
 <div class="popover settings-slide-panel" id="settingsSlidePanel">
