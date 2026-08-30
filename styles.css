@@ -2088,19 +2088,12 @@ body.view-planner .stage {
   .popover-sheet-handle {
     display: block;
     position: relative;
-    padding: 4px 0 14px;
-    margin: 0 0 2px;
-    touch-action: none;
-    cursor: grab;
-    user-select: none;
-    -webkit-user-select: none;
+    z-index: 1;
+    padding: 4px 0 10px;
+    margin: 0;
+    pointer-events: none;
   }
-  .popover-sheet-handle::after {
-    content: '';
-    position: absolute;
-    left: 0; right: 0;
-    top: 0; bottom: 0;
-  }
+  .popover-sheet-handle::after { display: none; }
   .popover-sheet-grab {
     display: block;
     width: 40px;
@@ -2109,9 +2102,25 @@ body.view-planner .stage {
     border-radius: 2px;
     background: var(--text-dim);
     opacity: .75;
+    pointer-events: none;
   }
-  .popover.sheet-dragging { transition: none !important; }
-  .popover.sheet-dragging .popover-sheet-handle { cursor: grabbing; }
+  .popover-sheet-head {
+    position: relative;
+    z-index: 1;
+    margin: -6px -18px 0;
+    padding: 6px 18px 0;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .popover-sheet-head .popover-title {
+    margin-bottom: 14px;
+    padding-right: 38px;
+    cursor: grab;
+  }
+  .popover.sheet-dragging { transition: none !important; cursor: grabbing; }
+  .popover.sheet-dragging .popover-sheet-head { cursor: grabbing; }
   .popover-title { padding-right: 38px; }
 }
 

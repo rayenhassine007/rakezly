@@ -5111,21 +5111,37 @@ document.addEventListener('keydown', function(e){
       handle.innerHTML = '<span class="popover-sheet-grab" aria-hidden="true"></span>';
       panel.insertBefore(handle, panel.firstChild);
     }
-    if (panel.querySelector('.popover-close')) return;
-    const btn = document.createElement('button');
-    btn.className = 'popover-close';
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Close');
-    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      closeAllPanels();
-    });
-    const handle = panel.querySelector('.popover-sheet-handle');
-    if (handle && handle.nextSibling) panel.insertBefore(btn, handle.nextSibling);
-    else panel.insertBefore(btn, panel.firstChild);
+    wrapPopoverSheetHead(panel);
+    if (!panel.querySelector('.popover-close')) {
+      const btn = document.createElement('button');
+      btn.className = 'popover-close';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Close');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        closeAllPanels();
+      });
+      const head = panel.querySelector('.popover-sheet-head');
+      if (head) panel.insertBefore(btn, head.nextSibling);
+      else panel.insertBefore(btn, panel.firstChild);
+    }
   });
 })();
+
+function wrapPopoverSheetHead(panel){
+  if (panel.querySelector('.popover-sheet-head')) return;
+  const handle = panel.querySelector('.popover-sheet-handle');
+  if (!handle) return;
+
+  const head = document.createElement('div');
+  head.className = 'popover-sheet-head';
+  panel.insertBefore(head, handle);
+  head.appendChild(handle);
+
+  const directTitle = panel.querySelector(':scope > .popover-title');
+  if (directTitle) head.appendChild(directTitle);
+}
 
 // Drag the sheet handle down to dismiss (mobile bottom sheets only).
 (function initSheetDragDismiss(){
@@ -5162,19 +5178,28 @@ document.addEventListener('keydown', function(e){
 
   document.addEventListener('pointerdown', function(e){
     if (!sheetMode()) return;
-    const handle = e.target.closest('.popover-sheet-handle');
-    if (!handle) return;
-    const panel = handle.closest('.popover');
+    if (e.target.closest('.popover-close, button, input, select, textarea, a, label')) return;
+
+    const head = e.target.closest('.popover-sheet-head');
+    const panel = head
+      ? head.closest('.popover')
+      : e.target.closest('.popover.open');
+
     if (!panel || !panel.classList.contains('open')) return;
+
+    if (!head) {
+      const rect = panel.getBoundingClientRect();
+      if (e.clientY - rect.top > 88) return;
+    }
 
     drag = {
       panel: panel,
       startY: e.clientY,
       pointerId: e.pointerId,
-      handle: handle
+      captureEl: head || panel
     };
     panel.classList.add('sheet-dragging');
-    handle.setPointerCapture(e.pointerId);
+    drag.captureEl.setPointerCapture(e.pointerId);
     e.preventDefault();
   }, { passive: false });
 
@@ -5187,10 +5212,10 @@ document.addEventListener('keydown', function(e){
   function endDrag(e){
     if (!drag || e.pointerId !== drag.pointerId) return;
     const panel = drag.panel;
-    const handle = drag.handle;
+    const captureEl = drag.captureEl;
     const dy = Math.max(0, e.clientY - drag.startY);
     drag = null;
-    try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+    try { captureEl.releasePointerCapture(e.pointerId); } catch(err){}
     finishDrag(panel, dy);
   }
 
