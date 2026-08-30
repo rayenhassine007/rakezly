@@ -47,15 +47,28 @@ function showThemeBgView(){
   updateRemoveDefaultBtnVisibility();
 }
 
-function closeThemeBgSection(){
-  showThemeListView(true);
+function resetThemePanelView(){
+  themeBgOpen = false;
+  const list = document.getElementById('themeListView');
+  const bg = document.getElementById('themeBgView');
+  const panel = document.getElementById('themePanel');
+  if (list) list.setAttribute('aria-hidden', 'false');
+  if (bg) bg.setAttribute('aria-hidden', 'true');
+  if (panel) {
+    panel.classList.add('theme-no-transition');
+    panel.classList.remove('bg-view', 'theme-animate-forward', 'theme-animate-back');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        panel.classList.remove('theme-no-transition');
+      });
+    });
+  }
 }
 
 function closeThemePanel(){
-  closeThemeBgSection();
   const p = document.getElementById('themePanel');
-  if (p) p.classList.remove('open');
   const b = document.getElementById('themeFixedBtn');
+  if (p) p.classList.remove('open');
   if (b) b.classList.remove('active');
 }
 
@@ -1490,7 +1503,7 @@ function toggleThemePanel() {
   const btn = document.getElementById('themeFixedBtn');
   const willOpen = !(panel && panel.classList.contains('open'));
   closeDockPopovers(willOpen ? 'theme' : null);
-  if (!willOpen) closeThemeBgSection();
+  if (willOpen) resetThemePanelView();
   if (panel) panel.classList.toggle('open', willOpen);
   if (btn) btn.classList.toggle('active', willOpen);
 }
