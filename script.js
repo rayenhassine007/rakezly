@@ -1,14 +1,6 @@
 // ── SETTINGS PANEL ───────────────────────────────────────────
 let settingsPanelOpen = false;
 
-function closeBgPanel(){
-  bgPanelOpen = false;
-  const p = document.getElementById('bgPanel');
-  if (p) p.classList.remove('open');
-  const b = document.querySelector('.btn-bg-toggle');
-  if (b) b.classList.remove('active');
-}
-
 function closeSettingsPanel(){
   settingsPanelOpen = false;
   const p = document.getElementById('settingsSlidePanel');
@@ -17,7 +9,16 @@ function closeSettingsPanel(){
   if (b) b.classList.remove('active');
 }
 
+function closeThemeBgSection(){
+  themeBgOpen = false;
+  const section = document.getElementById('themeBgSection');
+  if (section) section.hidden = true;
+  const panel = document.getElementById('themePanel');
+  if (panel) panel.classList.remove('bg-open');
+}
+
 function closeThemePanel(){
+  closeThemeBgSection();
   const p = document.getElementById('themePanel');
   if (p) p.classList.remove('open');
   const b = document.getElementById('themeFixedBtn');
@@ -40,7 +41,6 @@ function closeRoomPanel(){
 }
 
 function closeDockPopovers(except){
-  if (except !== 'bg') closeBgPanel();
   if (except !== 'settings') closeSettingsPanel();
   if (except !== 'theme') closeThemePanel();
   if (except !== 'player') closePlayerPanel();
@@ -112,8 +112,8 @@ function forceVideoResume() {
   }, 150);
 }
 
-// ── BACKGROUND PANEL ─────────────────────────────────────────
-let bgPanelOpen = false;
+// ── BACKGROUND (inside theme panel) ──────────────────────────
+let themeBgOpen = false;
 let currentObjectURL = null;
 
 // ── PER-THEME BG STORAGE (IndexedDB) ─────────────────────────
@@ -249,15 +249,36 @@ function applyBgFromRecord(rec, theme) {
   document.getElementById('mediaUpload').value = '';
 }
 
-function toggleBgPanel() {
-  const panel = document.getElementById('bgPanel');
-  const btn = document.querySelector('.btn-bg-toggle');
-  const willOpen = !(panel && panel.classList.contains('open'));
-  closeDockPopovers(willOpen ? 'bg' : null);
-  bgPanelOpen = willOpen;
-  if (panel) panel.classList.toggle('open', willOpen);
-  if (btn) btn.classList.toggle('active', willOpen);
+function toggleThemeBgSection(force){
+  const section = document.getElementById('themeBgSection');
+  const panel = document.getElementById('themePanel');
+  if (!section) return;
+  const willOpen = typeof force === 'boolean' ? force : !themeBgOpen;
+  themeBgOpen = willOpen;
+  section.hidden = !willOpen;
+  if (panel) panel.classList.toggle('bg-open', willOpen);
   if (willOpen) updateRemoveDefaultBtnVisibility();
+}
+
+function onThemeOptionActivate(theme){
+  if (theme === currentTheme) toggleThemeBgSection();
+  else setTheme(theme);
+}
+
+function initThemeOptions(){
+  document.querySelectorAll('.theme-option[data-theme]').forEach(function(el){
+    if (el.dataset.themeBound) return;
+    el.dataset.themeBound = '1';
+    el.addEventListener('click', function(){
+      onThemeOptionActivate(el.getAttribute('data-theme'));
+    });
+    el.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onThemeOptionActivate(el.getAttribute('data-theme'));
+      }
+    });
+  });
 }
 
 
@@ -1278,6 +1299,7 @@ function init(){
   if (_gblur !== null) { const v = parseInt(_gblur); document.getElementById('glassBlurSlider').value = v; setGlassBlur(v); }
   if (_gbord !== null) { const v = parseInt(_gbord); document.getElementById('glassBordSlider').value = v; setGlassBorder(v); }
 
+  initThemeOptions();
   loadQuote();
   startQuoteRotation();
 }
@@ -1444,6 +1466,7 @@ function toggleThemePanel() {
   const btn = document.getElementById('themeFixedBtn');
   const willOpen = !(panel && panel.classList.contains('open'));
   closeDockPopovers(willOpen ? 'theme' : null);
+  if (!willOpen) closeThemeBgSection();
   if (panel) panel.classList.toggle('open', willOpen);
   if (btn) btn.classList.toggle('active', willOpen);
 }
@@ -2290,7 +2313,7 @@ window.Room = (function(){
     if (typeof closeDockPopovers === 'function') closeDockPopovers('room');
   }
   function togglePanel(){ panelOpen = !panelOpen; if(panelOpen) closeOtherPanels(); updateUI(); }
-  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+  ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#studyFixedBtn'].forEach(function(sel){
     const b=document.querySelector(sel); if(b) b.addEventListener('click', function(){ panelOpen=false; updateUI(); });
   });
 
@@ -3233,7 +3256,7 @@ window.Study = (function(){
       loadBoard();
       render();
     });
-    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn','.btn-bg-toggle'].forEach(function(sel){
+    ['#settingsFixedBtn','#themeFixedBtn','#playerFixedBtn','#roomFixedBtn'].forEach(function(sel){
       const b = document.querySelector(sel);
       if (b) b.addEventListener('click', function(){
         if (panelOpen){ panelOpen = false; render(); }

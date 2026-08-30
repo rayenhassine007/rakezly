@@ -1153,6 +1153,7 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   border: 1px solid transparent;
   cursor: pointer;
   transition: all .18s var(--ease);
+  user-select: none;
 }
 .theme-option:hover    { background: var(--surface-2); }
 .theme-option.selected { border-color: var(--accent-soft); background: var(--accent-soft); }
@@ -1161,12 +1162,44 @@ body.goal-dragging { cursor: grabbing; user-select: none; -webkit-user-select: n
   width: 34px; height: 34px; flex: none;
   border-radius: 10px; border: 1px solid var(--border-soft);
 }
-.theme-option-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.theme-option-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .theme-option-name { font-size: 13px; font-weight: 600; }
 .theme-option-desc { font-size: 11px; color: var(--text-faint); }
 
+.theme-option-chevron {
+  width: 18px; height: 18px; flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transform: rotate(0deg);
+  transition: opacity .18s var(--ease), transform .18s var(--ease), color .18s var(--ease);
+}
+.theme-option-chevron svg {
+  width: 100%; height: 100%;
+  fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.theme-option.selected .theme-option-chevron {
+  opacity: 1;
+  color: var(--accent);
+}
+.theme-panel.bg-open .theme-option.selected .theme-option-chevron {
+  transform: rotate(90deg);
+}
 
-/* ── 14. Background popover ──────────────────────────────────────────────── */
+.theme-bg-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.theme-bg-section[hidden] { display: none !important; }
+.theme-bg-heading {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+
+/* ── 14. Background settings (nested in theme panel) ────────────────────── */
 
 .bg-theme-badge {
   font-size: 11px; color: var(--text-faint);
