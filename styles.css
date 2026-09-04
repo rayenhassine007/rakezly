@@ -2701,7 +2701,6 @@ body.path-gate-open { overflow: hidden; }
    answer engines to read and quote, tucked behind the footer link above
    instead of sitting in the main page flow. ──────────────────────────────── */
 .about-panel {
-  width: 380px;
   display: flex; flex-direction: column; gap: 20px;
 }
 .about-panel h2 {
@@ -2729,9 +2728,6 @@ body.path-gate-open { overflow: hidden; }
   margin-top: 8px;
 }
 
-@media (max-width: 960px) {
-  .about-panel { width: 100%; }
-}
 @media (max-width: 700px) {
   .site-footer-slim { padding-bottom: 90px; }
 }
