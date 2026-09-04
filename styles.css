@@ -315,6 +315,16 @@ body.theme-moonlight .timer-display { letter-spacing: 0.06em; }
   box-shadow: var(--shadow);
 }
 
+/* Popovers are fixed overlays, and on desktop the two-column layout can run
+   underneath the space they occupy. A see-through glass fill lets whatever
+   is behind bleed through at the edge instead of reading as covered, so
+   popovers get an opaque backing (same technique already used for the
+   mobile sheet) with the glass tint layered on top for looks only. */
+.popover {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+}
+
 
 /* ── 6. Timer ────────────────────────────────────────────────────────────── */
 
