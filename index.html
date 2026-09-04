@@ -4,9 +4,32 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="google-site-verification" content="pROm9li1Swu3KFEX_KdQjbNA8KvtEBbxRanenVgUUa4" />
-<meta name="description" content="Rakezly, a calm pomodoro timer for students. Track your study time, set daily goals, and see how you compare on the weekly leaderboard.">
+<meta name="description" content="Rakezly is a free Pomodoro timer and study tracker for Tunisian students — lycée, prépa (MP/PC/PT/BG/MPI/CBA) and university. Study stopwatch, daily goals, planner and a weekly leaderboard.">
+<meta name="keywords" content="pomodoro timer, study timer, minuteur pomodoro, prépa tunisie, bac tunisie, lycée tunisie, study tracker, focus timer, chronomètre d'étude, MP PC PT BG MPI CBA, study planner">
+<meta name="robots" content="index, follow">
+<meta name="author" content="Rakezly">
+<link rel="canonical" href="https://rakezly.vercel.app/">
 <meta name="theme-color" content="#1a1520">
-<title>Rakezly</title>
+<title>Rakezly — Pomodoro Timer & Study Tracker for Tunisian Students</title>
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rakezly">
+<meta property="og:url" content="https://rakezly.vercel.app/">
+<meta property="og:title" content="Rakezly — Pomodoro Timer & Study Tracker for Tunisian Students">
+<meta property="og:description" content="A calm, free Pomodoro timer for Tunisian students — lycée, prépa and university. Track study time, set daily goals, plan your week and compare on the weekly leaderboard.">
+<meta property="og:image" content="https://rakezly.vercel.app/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="fr_FR">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Rakezly — Pomodoro Timer & Study Tracker for Tunisian Students">
+<meta name="twitter:description" content="A calm, free Pomodoro timer for Tunisian students — lycée, prépa and university. Track study time, set daily goals, plan your week and compare on the weekly leaderboard.">
+<meta name="twitter:image" content="https://rakezly.vercel.app/og-image.png">
+
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231a1520'/%3E%3Ccircle cx='16' cy='17' r='8' fill='none' stroke='%23f2a8c4' stroke-width='2'/%3E%3Cpath d='M16 13v4.5' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12.5 7h7' stroke='%23f2a8c4' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,8 +37,66 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Cinzel:wght@400;500;600&family=Josefin+Sans:wght@200;300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Rakezly",
+  "url": "https://rakezly.vercel.app/",
+  "description": "A free Pomodoro timer and study tracker for Tunisian students — lycée, classic and integrated prépa (MP, PC, PT, BG, MPI, CBA) and university — with a study stopwatch, daily goals, weekly/monthly planner and a weekly study-time leaderboard.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Any (web browser)",
+  "browserRequirements": "Requires a modern web browser",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "inLanguage": ["en", "fr"],
+  "audience": {
+    "@type": "EducationalAudience",
+    "educationalRole": "student"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is the Pomodoro technique?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The Pomodoro technique breaks study time into focused intervals — usually 25 minutes — separated by short breaks. Rakezly times these automatically and switches to a break for you." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Rakezly free to use?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The timer, stopwatch, goals, planner and study log are entirely free with no account needed. Creating a free account only adds the weekly leaderboard." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Rakezly work for lycée, prépa and university students?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Set your study path once — high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree — and it appears on your profile while you track your study time." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to sign in to use the timer?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Everything works as a guest and is saved on your device. Sign in with email or Google only if you want to appear on the weekly leaderboard." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my study data private?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Your session history stays on your device unless you sign in. Signed-in accounts only ever share a total study time and a display name on the leaderboard — never individual sessions." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use Rakezly on my phone?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Rakezly is a responsive web app that works in any modern mobile browser — no app store download needed." }
+    }
+  ]
+}
+</script>
 </head>
 <body class="theme-lofi">
+
+<h1 class="sr-only">Rakezly — Pomodoro Timer and Study Tracker for Tunisian Students (Lycée, Prépa and University)</h1>
 
 <!-- Ambient background (video / image / html, per theme) -->
 <div id="bgWrap">
@@ -263,6 +344,40 @@
     <span class="quote-text" id="quoteText">Loading…</span>
     <span class="quote-author" id="quoteAuthor"></span>
   </p>
+
+  <footer class="site-footer">
+    <section class="footer-about">
+      <h2 data-i18n="about.title">About Rakezly</h2>
+      <p data-i18n="about.body">Rakezly is a free Pomodoro timer and study tracker for Tunisian students, from lycée through prépa and university. Set your study path once, run 25-minute focus sessions or an open stopwatch, log daily goals, plan your week and month, and see how your study time compares with other students on the weekly leaderboard. No installation, no account required to start — it runs straight in your browser and remembers your progress on your device.</p>
+    </section>
+    <section class="footer-faq">
+      <h2 data-i18n="faq.title">Frequently asked questions</h2>
+      <details class="faq-item">
+        <summary data-i18n="faq.q1">What is the Pomodoro technique?</summary>
+        <p data-i18n="faq.a1">The Pomodoro technique breaks study time into focused intervals — usually 25 minutes — separated by short breaks. Rakezly times these automatically and switches to a break for you.</p>
+      </details>
+      <details class="faq-item">
+        <summary data-i18n="faq.q2">Is Rakezly free to use?</summary>
+        <p data-i18n="faq.a2">Yes. The timer, stopwatch, goals, planner and study log are entirely free with no account needed. Creating a free account only adds the weekly leaderboard, which asks you to set your study path once.</p>
+      </details>
+      <details class="faq-item">
+        <summary data-i18n="faq.q3">Does Rakezly work for lycée, prépa and university students?</summary>
+        <p data-i18n="faq.a3">Yes. Set your study path once — high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree — and it appears on your profile while you track your study time.</p>
+      </details>
+      <details class="faq-item">
+        <summary data-i18n="faq.q4">Do I need to sign in to use the timer?</summary>
+        <p data-i18n="faq.a4">No. Everything works as a guest and is saved on your device. Sign in with email or Google only if you want to appear on the weekly leaderboard.</p>
+      </details>
+      <details class="faq-item">
+        <summary data-i18n="faq.q5">Is my study data private?</summary>
+        <p data-i18n="faq.a5">Your session history stays on your device unless you sign in. Signed-in accounts only ever share a total study time and a display name on the leaderboard — never individual sessions.</p>
+      </details>
+      <details class="faq-item">
+        <summary data-i18n="faq.q6">Can I use Rakezly on my phone?</summary>
+        <p data-i18n="faq.a6">Yes. Rakezly is a responsive web app that works in any modern mobile browser — no app store download needed.</p>
+      </details>
+    </section>
+  </footer>
 
 </main>
 

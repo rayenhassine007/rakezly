@@ -2673,3 +2673,50 @@ body.path-gate-open { overflow: hidden; }
   font-size: 10.5px; color: var(--text-faint);
   line-height: 1.45; margin-top: 7px;
 }
+
+/* ── Site footer: About + FAQ. Real static text for search engines and
+   AI answer engines to read and quote — not rendered by JS. ─────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.site-footer {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow);
+  padding: 22px 24px 26px;
+  display: flex; flex-direction: column; gap: 22px;
+  margin-top: 4px;
+}
+.site-footer h2 {
+  font-size: 13px; font-weight: 600; color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.footer-about p {
+  font-size: 12.5px; line-height: 1.7; color: var(--text-faint);
+}
+.footer-faq { display: flex; flex-direction: column; gap: 6px; }
+.faq-item {
+  border-top: 1px solid var(--border-soft);
+  padding: 10px 0;
+}
+.faq-item:last-child { padding-bottom: 0; }
+.faq-item summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 500;
+  color: var(--text); list-style: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::before { content: '+ '; color: var(--accent); font-weight: 700; }
+.faq-item[open] summary::before { content: '− '; }
+.faq-item p {
+  font-size: 12px; line-height: 1.65; color: var(--text-faint);
+  margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+  .site-footer { padding: 18px 16px 20px; margin-bottom: 84px; }
+}

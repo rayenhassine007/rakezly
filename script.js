@@ -4163,6 +4163,22 @@ window.I18N = (function(){
       'msg.breakOver': 'Break over. Back to focus',
       'msg.roundDone': 'Round complete. Starting over',
       'msg.restored': 'Session restored', 'msg.settings': 'Settings applied',
+
+      'about.title': 'About Rakezly',
+      'about.body': 'Rakezly is a free Pomodoro timer and study tracker for Tunisian students, from lycée through prépa and university. Set your study path once, run 25-minute focus sessions or an open stopwatch, log daily goals, plan your week and month, and see how your study time compares with other students on the weekly leaderboard. No installation, no account required to start — it runs straight in your browser and remembers your progress on your device.',
+      'faq.title': 'Frequently asked questions',
+      'faq.q1': 'What is the Pomodoro technique?',
+      'faq.a1': 'The Pomodoro technique breaks study time into focused intervals — usually 25 minutes — separated by short breaks. Rakezly times these automatically and switches to a break for you.',
+      'faq.q2': 'Is Rakezly free to use?',
+      'faq.a2': 'Yes. The timer, stopwatch, goals, planner and study log are entirely free with no account needed. Creating a free account only adds the weekly leaderboard, which asks you to set your study path once.',
+      'faq.q3': 'Does Rakezly work for lycée, prépa and university students?',
+      'faq.a3': 'Yes. Set your study path once — high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree — and it appears on your profile while you track your study time.',
+      'faq.q4': 'Do I need to sign in to use the timer?',
+      'faq.a4': 'No. Everything works as a guest and is saved on your device. Sign in with email or Google only if you want to appear on the weekly leaderboard.',
+      'faq.q5': 'Is my study data private?',
+      'faq.a5': 'Your session history stays on your device unless you sign in. Signed-in accounts only ever share a total study time and a display name on the leaderboard — never individual sessions.',
+      'faq.q6': 'Can I use Rakezly on my phone?',
+      'faq.a6': 'Yes. Rakezly is a responsive web app that works in any modern mobile browser — no app store download needed.',
     },
 
     fr: {
@@ -4336,6 +4352,22 @@ window.I18N = (function(){
       'msg.breakOver': 'Pause terminée. Retour au travail',
       'msg.roundDone': 'Série terminée. On recommence',
       'msg.restored': 'Session restaurée', 'msg.settings': 'Paramètres appliqués',
+
+      'about.title': 'À propos de Rakezly',
+      'about.body': "Rakezly est un minuteur Pomodoro et un suivi d'étude gratuit pour les étudiants tunisiens, du lycée à la prépa et à l'université. Configure ton parcours d'études une fois, lance des sessions de 25 minutes ou un chronomètre libre, note tes objectifs du jour, planifie ta semaine et ton mois, et compare ton temps d'étude à celui des autres étudiants sur le classement hebdomadaire. Aucune installation, aucun compte requis pour commencer — tout fonctionne directement dans le navigateur et ta progression reste sur ton appareil.",
+      'faq.title': 'Questions fréquentes',
+      'faq.q1': "Qu'est-ce que la technique Pomodoro ?",
+      'faq.a1': "La technique Pomodoro découpe le temps d'étude en intervalles concentrés — généralement 25 minutes — séparés par de courtes pauses. Rakezly chronomètre tout automatiquement et lance la pause pour toi.",
+      'faq.q2': 'Rakezly est-il gratuit ?',
+      'faq.a2': "Oui. Le minuteur, le chronomètre, les objectifs, le planning et le suivi d'étude sont entièrement gratuits, sans compte. Créer un compte gratuit ajoute seulement le classement hebdomadaire, qui te demande de configurer ton parcours d'études une fois.",
+      'faq.q3': 'Rakezly convient-il aux lycéens, aux étudiants de prépa et d’université ?',
+      'faq.a3': "Oui. Configure ton parcours d'études une fois — niveau et filière au lycée, prépa classique (MP, PT, PC, BG), prépa intégrée (MPI, CBA) ou un diplôme universitaire — il apparaît sur ton profil pendant que tu suis ton temps d'étude.",
+      'faq.q4': 'Faut-il se connecter pour utiliser le minuteur ?',
+      'faq.a4': "Non. Tout fonctionne en invité et reste enregistré sur ton appareil. Connecte-toi par email ou Google seulement pour apparaître sur le classement hebdomadaire.",
+      'faq.q5': 'Mes données d’étude sont-elles privées ?',
+      'faq.a5': "Ton historique de sessions reste sur ton appareil tant que tu n'es pas connecté. Un compte connecté ne partage jamais que le temps total et un nom d'affichage sur le classement — jamais les sessions individuelles.",
+      'faq.q6': 'Puis-je utiliser Rakezly sur mon téléphone ?',
+      'faq.a6': "Oui. Rakezly est une application web responsive qui fonctionne dans tout navigateur mobile récent — aucun téléchargement nécessaire.",
     }
   };
 
