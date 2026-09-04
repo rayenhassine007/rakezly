@@ -1,19 +1,19 @@
 # Rakezly
 
-> Rakezly is a free, browser-based Pomodoro timer and study tracker for Tunisian students — from lycée through classic and integrated prépa to university. No install and no account are required to use the timer.
+> Rakezly is a free, browser-based Pomodoro timer and study tracker for Tunisian students, from lycée through classic and integrated prépa to university. No install and no account are required to use the timer.
 
 ## What it is
 
 - A Pomodoro-technique focus timer (customizable work/break/long-break lengths and cycle count) plus an open-ended study stopwatch ("Chronomètre d'étude").
 - A one-time study-path setup: high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree. It's shown on the student's profile.
 - Daily goals, a weekly and monthly study planner, and a personal study-time log, all stored on the student's device.
-- An optional free account (email or Google) that adds a weekly study-time leaderboard ranking total study time — not split by study path. Only aggregate totals and a display name are ever shared; individual sessions stay private.
+- An optional free account (email or Google) that adds a weekly study-time leaderboard ranking total study time, not split by study path. Only aggregate totals and a display name are ever shared; individual sessions stay private.
 - A shared study room with a synced YouTube-only player for studying alongside others.
 - Interface available in English and French.
 
 ## Who it is for
 
-Tunisian students at any level — lycée, classes préparatoires (classique or intégrée), or university — who want a distraction-light, no-signup timer for focused study sessions.
+Tunisian students at any level (lycée, classes préparatoires classique or intégrée, or university) who want a distraction-light, no-signup timer for focused study sessions.
 
 ## Key facts for citation
 
