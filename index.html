@@ -345,41 +345,49 @@
     <span class="quote-author" id="quoteAuthor"></span>
   </p>
 
-  <footer class="site-footer">
-    <section class="footer-about">
-      <h2 data-i18n="about.title">About Rakezly</h2>
-      <p data-i18n="about.body">Rakezly is a free Pomodoro timer and study tracker for Tunisian students, from lycée through prépa and university. Set your study path once, run 25-minute focus sessions or an open stopwatch, log daily goals, plan your week and month, and see how your study time compares with other students on the weekly leaderboard. No installation, no account required to start — it runs straight in your browser and remembers your progress on your device.</p>
-    </section>
-    <section class="footer-faq">
-      <h2 data-i18n="faq.title">Frequently asked questions</h2>
-      <details class="faq-item">
-        <summary data-i18n="faq.q1">What is the Pomodoro technique?</summary>
-        <p data-i18n="faq.a1">The Pomodoro technique breaks study time into focused intervals — usually 25 minutes — separated by short breaks. Rakezly times these automatically and switches to a break for you.</p>
-      </details>
-      <details class="faq-item">
-        <summary data-i18n="faq.q2">Is Rakezly free to use?</summary>
-        <p data-i18n="faq.a2">Yes. The timer, stopwatch, goals, planner and study log are entirely free with no account needed. Creating a free account only adds the weekly leaderboard, which asks you to set your study path once.</p>
-      </details>
-      <details class="faq-item">
-        <summary data-i18n="faq.q3">Does Rakezly work for lycée, prépa and university students?</summary>
-        <p data-i18n="faq.a3">Yes. Set your study path once — high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree — and it appears on your profile while you track your study time.</p>
-      </details>
-      <details class="faq-item">
-        <summary data-i18n="faq.q4">Do I need to sign in to use the timer?</summary>
-        <p data-i18n="faq.a4">No. Everything works as a guest and is saved on your device. Sign in with email or Google only if you want to appear on the weekly leaderboard.</p>
-      </details>
-      <details class="faq-item">
-        <summary data-i18n="faq.q5">Is my study data private?</summary>
-        <p data-i18n="faq.a5">Your session history stays on your device unless you sign in. Signed-in accounts only ever share a total study time and a display name on the leaderboard — never individual sessions.</p>
-      </details>
-      <details class="faq-item">
-        <summary data-i18n="faq.q6">Can I use Rakezly on my phone?</summary>
-        <p data-i18n="faq.a6">Yes. Rakezly is a responsive web app that works in any modern mobile browser — no app store download needed.</p>
-      </details>
-    </section>
+  <footer class="site-footer-slim">
+    <button type="button" class="footer-about-btn" id="aboutFooterBtn" onclick="toggleAboutPanel()">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10.5v6"/><circle cx="12" cy="7.4" r="1" fill="currentColor" stroke="none"/></svg>
+      <span data-i18n="footer.about">About &amp; FAQ</span>
+    </button>
   </footer>
 
 </main>
+
+<div class="popover about-panel" id="aboutPanel">
+  <div class="popover-title" data-i18n="footer.about">About &amp; FAQ</div>
+  <section class="footer-about">
+    <h2 data-i18n="about.title">About Rakezly</h2>
+    <p data-i18n="about.body">Rakezly is a free Pomodoro timer and study tracker for Tunisian students, from lycée through prépa and university. Set your study path once, run 25-minute focus sessions or an open stopwatch, log daily goals, plan your week and month, and see how your study time compares with other students on the weekly leaderboard. No installation, no account required to start — it runs straight in your browser and remembers your progress on your device.</p>
+  </section>
+  <section class="footer-faq">
+    <h2 data-i18n="faq.title">Frequently asked questions</h2>
+    <details class="faq-item">
+      <summary data-i18n="faq.q1">What is the Pomodoro technique?</summary>
+      <p data-i18n="faq.a1">The Pomodoro technique breaks study time into focused intervals — usually 25 minutes — separated by short breaks. Rakezly times these automatically and switches to a break for you.</p>
+    </details>
+    <details class="faq-item">
+      <summary data-i18n="faq.q2">Is Rakezly free to use?</summary>
+      <p data-i18n="faq.a2">Yes. The timer, stopwatch, goals, planner and study log are entirely free with no account needed. Creating a free account only adds the weekly leaderboard, which asks you to set your study path once.</p>
+    </details>
+    <details class="faq-item">
+      <summary data-i18n="faq.q3">Does Rakezly work for lycée, prépa and university students?</summary>
+      <p data-i18n="faq.a3">Yes. Set your study path once — high school grade and track, classic prépa (MP, PT, PC, BG), integrated prépa (MPI, CBA), or a university degree — and it appears on your profile while you track your study time.</p>
+    </details>
+    <details class="faq-item">
+      <summary data-i18n="faq.q4">Do I need to sign in to use the timer?</summary>
+      <p data-i18n="faq.a4">No. Everything works as a guest and is saved on your device. Sign in with email or Google only if you want to appear on the weekly leaderboard.</p>
+    </details>
+    <details class="faq-item">
+      <summary data-i18n="faq.q5">Is my study data private?</summary>
+      <p data-i18n="faq.a5">Your session history stays on your device unless you sign in. Signed-in accounts only ever share a total study time and a display name on the leaderboard — never individual sessions.</p>
+    </details>
+    <details class="faq-item">
+      <summary data-i18n="faq.q6">Can I use Rakezly on my phone?</summary>
+      <p data-i18n="faq.a6">Yes. Rakezly is a responsive web app that works in any modern mobile browser — no app store download needed.</p>
+    </details>
+  </section>
+</div>
 
 <!-- ─────────────────────────── POPOVERS ─────────────────────────── -->
 

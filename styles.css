@@ -2674,25 +2674,37 @@ body.path-gate-open { overflow: hidden; }
   line-height: 1.45; margin-top: 7px;
 }
 
-/* ── Site footer: About + FAQ. Real static text for search engines and
-   AI answer engines to read and quote — not rendered by JS. ─────────────── */
 .sr-only {
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-.site-footer {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--shadow);
-  padding: 22px 24px 26px;
-  display: flex; flex-direction: column; gap: 22px;
-  margin-top: 4px;
+/* ── Slim footer trigger: a single quiet link, not a wall of text. ───────── */
+.site-footer-slim { display: flex; justify-content: center; padding: 2px 0 4px; }
+.footer-about-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500; color: var(--text-faint);
+  border: 1px solid var(--border-soft);
+  transition: all .18s var(--ease);
 }
-.site-footer h2 {
+.footer-about-btn svg {
+  width: 13px; height: 13px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+}
+.footer-about-btn:hover, .footer-about-btn.active {
+  color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft);
+}
+
+/* ── About + FAQ popover. Real static text for search engines and AI
+   answer engines to read and quote, tucked behind the footer link above
+   instead of sitting in the main page flow. ──────────────────────────────── */
+.about-panel {
+  width: 380px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.about-panel h2 {
   font-size: 13px; font-weight: 600; color: var(--text-dim);
   margin-bottom: 10px;
 }
@@ -2717,6 +2729,9 @@ body.path-gate-open { overflow: hidden; }
   margin-top: 8px;
 }
 
+@media (max-width: 960px) {
+  .about-panel { width: 100%; }
+}
 @media (max-width: 700px) {
-  .site-footer { padding: 18px 16px 20px; margin-bottom: 84px; }
+  .site-footer-slim { padding-bottom: 90px; }
 }

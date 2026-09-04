@@ -87,12 +87,29 @@ function closeRoomPanel(){
   if (window.Room && Room.close) Room.close();
 }
 
+function closeAboutPanel(){
+  const p = document.getElementById('aboutPanel');
+  if (p) p.classList.remove('open');
+  const b = document.getElementById('aboutFooterBtn');
+  if (b) b.classList.remove('active');
+}
+
 function closeDockPopovers(except){
   if (except !== 'settings') closeSettingsPanel();
   if (except !== 'theme') closeThemePanel();
   if (except !== 'player') closePlayerPanel();
   if (except !== 'study') closeStudyPanel();
   if (except !== 'room') closeRoomPanel();
+  if (except !== 'about') closeAboutPanel();
+}
+
+function toggleAboutPanel(){
+  const panel = document.getElementById('aboutPanel');
+  const btn = document.getElementById('aboutFooterBtn');
+  const willOpen = !(panel && panel.classList.contains('open'));
+  closeDockPopovers(willOpen ? 'about' : null);
+  if (panel) panel.classList.toggle('open', willOpen);
+  if (btn) btn.classList.toggle('active', willOpen);
 }
 
 function toggleSettingsPanel() {
@@ -4164,6 +4181,7 @@ window.I18N = (function(){
       'msg.roundDone': 'Round complete. Starting over',
       'msg.restored': 'Session restored', 'msg.settings': 'Settings applied',
 
+      'footer.about': 'About & FAQ',
       'about.title': 'About Rakezly',
       'about.body': 'Rakezly is a free Pomodoro timer and study tracker for Tunisian students, from lycée through prépa and university. Set your study path once, run 25-minute focus sessions or an open stopwatch, log daily goals, plan your week and month, and see how your study time compares with other students on the weekly leaderboard. No installation, no account required to start — it runs straight in your browser and remembers your progress on your device.',
       'faq.title': 'Frequently asked questions',
@@ -4353,6 +4371,7 @@ window.I18N = (function(){
       'msg.roundDone': 'Série terminée. On recommence',
       'msg.restored': 'Session restaurée', 'msg.settings': 'Paramètres appliqués',
 
+      'footer.about': 'À propos & FAQ',
       'about.title': 'À propos de Rakezly',
       'about.body': "Rakezly est un minuteur Pomodoro et un suivi d'étude gratuit pour les étudiants tunisiens, du lycée à la prépa et à l'université. Configure ton parcours d'études une fois, lance des sessions de 25 minutes ou un chronomètre libre, note tes objectifs du jour, planifie ta semaine et ton mois, et compare ton temps d'étude à celui des autres étudiants sur le classement hebdomadaire. Aucune installation, aucun compte requis pour commencer — tout fonctionne directement dans le navigateur et ta progression reste sur ton appareil.",
       'faq.title': 'Questions fréquentes',
@@ -5139,7 +5158,7 @@ document.addEventListener('click', function(e){
     inPanel: !!(el.closest('.popover') || el.closest('.study-path-gate')),
     onDock:  !!el.closest('.dock-btn'),
     onLang:  !!el.closest('.lang-toggle'),
-    opensPanel: !!el.closest('.study-mini-btn')
+    opensPanel: !!el.closest('.study-mini-btn') || !!el.closest('.footer-about-btn')
   } : null;
 }, true);
 
